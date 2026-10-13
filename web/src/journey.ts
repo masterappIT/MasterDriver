@@ -18,7 +18,6 @@ export interface JourneyLeg {
   pickupAt: string;
   origin: string;
   destination: string;
-  handoffNote: string | null;
   /** Only for the dispatcher. */
   id?: string;
   /** Only for the dispatcher and this leg's driver. */
@@ -29,22 +28,22 @@ export interface JourneyLeg {
 export interface Journey {
   legIndex: number;
   legCount: number;
+  /** 接駁位置: where this order's car meets the car of the leg before or after it. */
+  transferPlaces: string[];
   legs: JourneyLeg[];
 }
 
-/** Where legs usually meet: one tap fills the next leg's starting point. */
-export const HANDOFF_PLACES = [
-  '港珠澳大橋澳門口岸',
-  '港珠澳大橋香港口岸',
-  '港珠澳大橋珠海口岸',
-  '關閘（拱北口岸）',
-  '橫琴口岸',
-  '深圳灣口岸',
-  '落馬洲口岸',
-  '皇崗口岸',
-  '蓮塘口岸',
-  '羅湖口岸',
-];
+/** "第 2／2 段", or "第 1 段" while the trip's other legs are still to be added. */
+export const legLabel = (journey: { legIndex: number; legCount: number }) =>
+  journey.legCount > 1 ? `第 ${journey.legIndex}／${journey.legCount} 段` : `第 ${journey.legIndex} 段`;
 
-/** How the passenger gets from one leg to the next. */
-export const HANDOFF_NOTES = ['乘客自行過關（穿梭巴士）', '乘客自行過關', '同一地點直接換車'];
+/** Same as PLATE_REGIONS in shared/src/schemas.ts. */
+export type PlateRegion = 'HK' | 'MACAU' | 'MAINLAND';
+export const PLATE_NAMES: Record<PlateRegion, string> = { HK: '香港', MACAU: '澳門', MAINLAND: '內地' };
+
+/** "需澳門車" or "需香港＋澳門車牌", as in the group text; empty when the order asks for no plate. */
+export function plateRequirement(plates: PlateRegion[] | undefined): string {
+  if (!plates || plates.length === 0) return '';
+  const names = plates.map((plate) => PLATE_NAMES[plate]);
+  return names.length === 1 ? `需${names[0]}車` : `需${names.join('＋')}車牌`;
+}

@@ -9,7 +9,7 @@ import StatusBadge from '../components/StatusBadge.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import { money, pickup, shortTime, type Money } from '../format';
 import { t } from '../i18n';
-import { MAX_JOURNEY_LEGS, type Journey } from '../journey';
+import { MAX_JOURNEY_LEGS, legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
 
 interface Driver {
@@ -34,7 +34,7 @@ interface Detail {
   luggage: number;
   vehicleType: string | null;
   notes: string | null;
-  handoffNote: string | null;
+  requiredPlates: PlateRegion[];
   journey: Journey | null;
   dispatcherName: string | null;
   claimedAt: string | null;
@@ -178,18 +178,22 @@ watch(id, () => {
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="order">
-      <div v-if="justSent && isDispatcher" class="notice">✅ {{ t('單已發出。複製下面的文字貼到群裡，司機點連結就能搶。') }}</div>
+      <div v-if="justSent && isDispatcher" class="notice">
+        ✅ {{ t('單已發出。複製下面的文字貼到群裡，司機點連結就能搶。') }}
+        <template v-if="order.journey?.legCount === 1">{{ t('這是接駁單的第 1 段，接著按「加接駁段」發下一段。') }}</template>
+      </div>
 
       <section class="card">
         <div class="detail__top">
           <strong>
             {{ pickup(order.pickupAt) }}
-            <span v-if="order.journey" class="leg-tag">{{ t(`接駁 第 ${order.journey.legIndex}／${order.journey.legCount} 段`) }}</span>
+            <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
           </strong>
           <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
         </div>
         <div class="detail__route">{{ t(order.origin) }} → {{ t(order.destination) }}</div>
-        <p v-if="order.journey && order.handoffNote" class="muted">{{ t(`交接：${order.handoffNote}`) }}</p>
+        <p v-if="order.journey" class="muted">{{ t(`接駁位置：${order.journey.transferPlaces.join('、')}`) }}</p>
+        <p v-if="order.requiredPlates.length" class="muted">{{ t(plateRequirement(order.requiredPlates)) }}</p>
         <p v-if="order.waypoints.length" class="muted">{{ t(`途經：${order.waypoints.join('、')}`) }}</p>
         <p class="muted">
           {{ t(`${order.passengers}人・${order.luggage}件行李`) }}<template v-if="order.vehicleType">・{{ t(order.vehicleType) }}</template>
@@ -208,7 +212,7 @@ watch(id, () => {
         <RouterLink v-if="canAddLeg" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`">＋ {{ t('加接駁段') }}</RouterLink>
       </section>
       <section v-else-if="canAddLeg" class="card">
-        <p class="hint detail__leg-hint">{{ t('乘客中途要換車（例如香港口岸過關後由澳門車接）？加一段接駁，另外派給下一段的司機。') }}</p>
+        <p class="hint detail__leg-hint">{{ t('乘客中途要換車？加一段接駁，另外派給下一段的司機。乘客自行過關不算接駁，下一程請另外發單。') }}</p>
         <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`">＋ {{ t('加接駁段') }}</RouterLink>
       </section>
 

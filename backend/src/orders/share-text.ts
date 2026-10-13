@@ -1,6 +1,8 @@
 import { formatPickup } from '../common/hong-kong-time';
 
 const CURRENCY_PREFIX = { HKD: 'HK$', CNY: 'RMB¥', MOP: 'MOP$' } as const;
+const PLATE_NAME = { HK: '香港', MACAU: '澳門', MAINLAND: '內地' } as const;
+export type PlateRegion = keyof typeof PLATE_NAME;
 
 export interface ShareOrder {
   pickupAt: Date;
@@ -19,7 +21,7 @@ export interface ShareOrder {
   /** 接駁: this order's place in its trip; absent or null for a single order. */
   legIndex?: number | null;
   legCount?: number;
-  handoffNote?: string | null;
+  requiredPlates?: PlateRegion[];
 }
 
 export interface ShareDriver {
@@ -38,12 +40,39 @@ function route(order: ShareOrder) {
   return `${order.origin} → ${order.destination}`;
 }
 
+/**
+ * 接駁: where this leg meets its neighbours. A leg after the first starts at
+ * one; a leg with another after it ends at one, and so does a first leg whose
+ * next leg has not been added yet.
+ */
+export function transferPlacesOf(leg: { legIndex: number; legCount: number; origin: string; destination: string }): string[] {
+  const places = [
+    leg.legIndex > 1 ? leg.origin : null,
+    leg.legIndex < leg.legCount || leg.legCount === 1 ? leg.destination : null,
+  ];
+  return places.filter((place): place is string => place !== null);
+}
+
+/** "第 2／2 段", or "第 1 段" while the trip's other legs are still to be added. */
+export function legLabel(legIndex: number, legCount: number): string {
+  return legCount > 1 ? `第 ${legIndex}／${legCount} 段` : `第 ${legIndex} 段`;
+}
+
+/** "需澳門車" or "需香港＋澳門車牌"; null when the order asks for no plate. */
+export function plateRequirement(plates: PlateRegion[] | undefined): string | null {
+  if (!plates || plates.length === 0) return null;
+  const names = plates.map((plate) => PLATE_NAME[plate]);
+  return names.length === 1 ? `需${names[0]}車` : `需${names.join('＋')}車牌`;
+}
+
 function dispatchLines(order: ShareOrder): string[] {
   const load = [`${order.passengers}人`, `${order.luggage}件行李`, order.vehicleType].filter(Boolean).join('｜');
+  const leg = order.legIndex ? { ...order, legIndex: order.legIndex, legCount: order.legCount ?? order.legIndex } : null;
   return [
     route(order),
-    order.legIndex ? `接駁：第 ${order.legIndex}／${order.legCount ?? order.legIndex} 段` : null,
-    order.legIndex && order.handoffNote ? `交接：${order.handoffNote}` : null,
+    leg ? `接駁：${legLabel(leg.legIndex, leg.legCount)}` : null,
+    leg ? `接駁位置：${transferPlacesOf(leg).join('、')}` : null,
+    plateRequirement(order.requiredPlates),
     order.waypoints.length > 0 ? `途經：${order.waypoints.join('、')}` : null,
     load,
     order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,

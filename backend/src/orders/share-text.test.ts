@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { formatPickup, monthPeriod } from '../common/hong-kong-time';
-import { claimedShareText, dispatchShareText, formatPrice, passengerShareText, type ShareOrder } from './share-text';
+import {
+  claimedShareText,
+  dispatchShareText,
+  formatPrice,
+  passengerShareText,
+  plateRequirement,
+  transferPlacesOf,
+  type ShareOrder,
+} from './share-text';
 
 const order: ShareOrder = {
   // 14:30 Hong Kong time on Thursday 15 October 2026
@@ -80,12 +88,23 @@ test('passenger message never carries the driver price, and the passenger price 
   assert.ok(!shown.includes('HK$850'));
 });
 
-test('a following leg says where it sits in the trip and how the passenger gets there', () => {
-  const leg = { ...order, legIndex: 2, legCount: 2, handoffNote: '乘客自行過關（穿梭巴士）' };
+test('a leg says where it sits in the trip, where the cars meet and which plate it needs', () => {
+  const leg = { ...order, legIndex: 2, legCount: 2, requiredPlates: ['MACAU' as const] };
   const text = dispatchShareText(leg, 'https://x.test/o/abc').wechat;
   assert.ok(text.includes('接駁：第 2／2 段'));
-  assert.ok(text.includes('交接：乘客自行過關（穿梭巴士）'));
-  assert.ok(!dispatchShareText(order, 'https://x.test/o/abc').wechat.includes('接駁'));
+  assert.ok(text.includes('接駁位置：深圳灣口岸\n'), 'the last leg starts at the transfer place');
+  assert.ok(text.includes('需澳門車'));
+  const plain = dispatchShareText(order, 'https://x.test/o/abc').wechat;
+  assert.ok(!plain.includes('接駁') && !plain.includes('車牌') && !plain.includes('澳門車'));
+});
+
+test('a first leg ends at the transfer place, also before the next leg is added', () => {
+  const alone = dispatchShareText({ ...order, legIndex: 1, legCount: 1 }, 'https://x.test/o/abc').wechat;
+  assert.ok(alone.includes('接駁：第 1 段\n'));
+  assert.ok(alone.includes('接駁位置：香港國際機場'));
+  assert.deepEqual(transferPlacesOf({ ...order, legIndex: 2, legCount: 3 }), ['深圳灣口岸', '香港國際機場']);
+  assert.equal(plateRequirement(['HK', 'MACAU']), '需香港＋澳門車牌');
+  assert.equal(plateRequirement([]), null);
 });
 
 test('the passenger message for a trip covers every leg and adds up prices shown in one currency', () => {

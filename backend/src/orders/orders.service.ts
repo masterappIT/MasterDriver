@@ -39,10 +39,7 @@ export class OrdersService {
         // credits nothing is created and no quota is used.
         const order = await this.prisma.$transaction(async (tx) => {
           const pickupAt = new Date(input.pickupAt);
-          const leg = input.afterOrderId ? await this.nextLeg(tx, userId, input.afterOrderId, pickupAt) : null;
-          if (!leg && input.handoffNote) {
-            throw apiError(HttpStatus.BAD_REQUEST, 'HANDOFF_WITHOUT_LEG', 'A handoff only belongs to a following leg');
-          }
+          const leg = input.afterOrderId ? await this.nextLeg(tx, userId, input.afterOrderId, pickupAt, input.origin) : null;
           if (input.selfDrive) await this.requireProfile(tx, userId);
           // 接駁: a trip uses the quota and pays the service fee once, with its first leg.
           if (!leg) await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
@@ -51,7 +48,7 @@ export class OrdersService {
             input.contactRevealMinutes === undefined
               ? (await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { contactRevealMinutes: true } })).contactRevealMinutes
               : input.contactRevealMinutes;
-          const created = await tx.order.create({
+          const placed = await tx.order.create({
             data: {
               code: randomCode(ORDER_CODE_LENGTH),
               confirmCode: randomCode(CONFIRM_CODE_LENGTH),
@@ -74,12 +71,18 @@ export class OrdersService {
               passengerName: input.passengerName,
               passengerContact: input.passengerContact,
               contactRevealMinutes: preference,
-              ...(leg ? { journeyId: leg.journeyId, legIndex: leg.legIndex, handoffNote: input.handoffNote } : {}),
+              requiredPlates: input.requiredPlates,
+              ...(leg ? { journeyId: leg.journeyId, legIndex: leg.legIndex } : {}),
               // 這段我自己做: taken by the dispatcher at once, never offered for claiming.
               ...(input.selfDrive ? { status: 'ASSIGNED' as const, claimedById: userId, claimedAt: now } : {}),
             },
             include: orderInclude,
           });
+          // 接駁 chosen when dispatching: the order is leg 1 of a new trip from the start.
+          const created =
+            !leg && input.transfer
+              ? await tx.order.update({ where: { id: placed.id }, data: { journeyId: placed.id, legIndex: 1 }, include: orderInclude })
+              : placed;
           if (fee > 0) await this.credits.charge(tx, userId, created.id, fee);
           return created;
         });
@@ -235,8 +238,12 @@ export class OrdersService {
    * Where a new leg goes: after the last leg of the trip that `afterOrderId`
    * belongs to, which must be that leg. An order on its own becomes leg 1 of a
    * new trip. Runs under the trip's lock, like cancelling a leg.
+   *
+   * The new leg starts at the 接駁位置, where the previous leg ends: a different
+   * `origin` moves the previous leg's destination there, unless another driver
+   * has already claimed that leg as it was.
    */
-  private async nextLeg(tx: Prisma.TransactionClient, userId: string, afterOrderId: string, pickupAt: Date) {
+  private async nextLeg(tx: Prisma.TransactionClient, userId: string, afterOrderId: string, pickupAt: Date, origin: string) {
     const previous = await tx.order.findFirst({ where: { id: afterOrderId, dispatcherId: userId }, select: { journeyId: true } });
     if (!previous) throw this.notFound();
     const journeyId = previous.journeyId ?? afterOrderId;
@@ -245,7 +252,7 @@ export class OrdersService {
     const legs = await tx.order.findMany({
       where: { journeyId },
       orderBy: { legIndex: 'asc' },
-      select: { id: true, legIndex: true, status: true, pickupAt: true },
+      select: { id: true, legIndex: true, status: true, pickupAt: true, destination: true },
     });
     const last = legs[legs.length - 1];
     if (last.id !== afterOrderId) {
@@ -257,6 +264,16 @@ export class OrdersService {
     }
     if (pickupAt < last.pickupAt) {
       throw apiError(HttpStatus.BAD_REQUEST, 'LEG_BEFORE_PREVIOUS', 'A leg cannot start before the previous leg');
+    }
+    if (origin !== last.destination) {
+      // The condition also closes the race with a claim landing in between.
+      const moved = await tx.order.updateMany({
+        where: { id: last.id, OR: [{ status: 'OPEN' }, { status: 'ASSIGNED', claimedById: userId }] },
+        data: { destination: origin },
+      });
+      if (moved.count === 0) {
+        throw apiError(HttpStatus.CONFLICT, 'TRANSFER_PLACE_LOCKED', 'The previous leg is claimed; its destination cannot change');
+      }
     }
     return { journeyId, legIndex: (last.legIndex ?? 1) + 1 };
   }

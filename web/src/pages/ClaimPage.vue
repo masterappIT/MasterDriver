@@ -13,7 +13,7 @@ import StatusBadge from '../components/StatusBadge.vue';
 import { copyText } from '../device';
 import { money, pickup, plates, shortTime } from '../format';
 import { t } from '../i18n';
-import type { Journey } from '../journey';
+import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
 
 interface ClaimView {
@@ -29,7 +29,7 @@ interface ClaimView {
   vehicleType: string | null;
   driverPrice: { amount: number; currency: string } | null;
   notes: string | null;
-  handoffNote: string | null;
+  requiredPlates: PlateRegion[];
   journey: Journey | null;
   dispatcherName: string | null;
   passengerConfirmedAt: string | null;
@@ -144,9 +144,12 @@ onBeforeUnmount(() => clearInterval(poller));
           <span v-if="order.driverPrice" class="claim-page__price">{{ money(order.driverPrice) }}</span>
         </div>
         <div class="claim-page__time">{{ pickup(order.pickupAt) }}</div>
-        <p v-if="order.journey" class="claim-page__leg">
-          <span class="leg-tag">{{ t(`接駁 第 ${order.journey.legIndex}／${order.journey.legCount} 段`) }}</span>
-          <span v-if="order.handoffNote" class="muted">{{ t(`交接：${order.handoffNote}`) }}</span>
+        <p v-if="order.journey || order.requiredPlates.length" class="claim-page__leg">
+          <template v-if="order.journey">
+            <span class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
+            <span class="muted">{{ t(`接駁位置：${order.journey.transferPlaces.join('、')}`) }}</span>
+          </template>
+          <span v-if="order.requiredPlates.length" class="leg-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
         </p>
         <div class="claim-page__route">
           <div>{{ t(order.origin) }}</div>
@@ -165,7 +168,7 @@ onBeforeUnmount(() => clearInterval(poller));
 
       <section v-if="order.journey" class="card">
         <h2>{{ t('整個行程') }}</h2>
-        <p v-if="order.viewer === 'driver'" class="hint">{{ t('其他段的司機搶到後會顯示在這裡；電話與乘客電話同時顯示，方便交接時聯絡。') }}</p>
+        <p v-if="order.viewer === 'driver'" class="hint">{{ t('其他段的司機搶到後會顯示在這裡；電話與乘客電話同時顯示，方便接駁時聯絡。') }}</p>
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
       </section>
 

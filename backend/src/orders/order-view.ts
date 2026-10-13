@@ -1,4 +1,5 @@
 import type { Prisma } from '../../generated/prisma';
+import { transferPlacesOf } from './share-text';
 
 const claimerSelect = { select: { countryCode: true, phone: true, profile: true } } as const;
 
@@ -78,7 +79,7 @@ export function linksOf(order: Pick<OrderWithPeople, 'code' | 'confirmCode'>, ba
  * 接駁: the trip around this order. Anyone sees where and when each leg runs;
  * the dispatcher sees every leg's driver, and the driver of this leg sees the
  * drivers of the other legs, their phones from the time they may see the
- * passenger's contact, so they can tell each other about delays at the handoff.
+ * passenger's contact, so they can tell each other about delays at the 接駁位置.
  */
 function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boolean) {
   const legs = legsOf(order);
@@ -86,6 +87,7 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
   return {
     legIndex: order.legIndex,
     legCount: legs.length,
+    transferPlaces: transferPlacesOf({ ...order, legIndex: order.legIndex, legCount: legs.length }),
     legs: legs.map((leg) => {
       const driver = viewer !== 'other' && leg.status !== 'CANCELLED' ? driverOf(leg) : null;
       return {
@@ -94,7 +96,6 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         pickupAt: leg.pickupAt.toISOString(),
         origin: leg.origin,
         destination: leg.destination,
-        handoffNote: leg.handoffNote,
         ...(viewer === 'dispatcher' ? { id: leg.id } : {}),
         ...(viewer !== 'other'
           ? { driver: driver && { ...driver, phone: contactVisible ? driver.phone : null } }
@@ -127,7 +128,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     vehicleType: order.vehicleType,
     driverPrice: driverPriceOf(order),
     notes: order.notes,
-    handoffNote: order.handoffNote,
+    requiredPlates: order.requiredPlates,
     journey: journeyOf(order, viewer, contactVisible),
     dispatcherName: order.dispatcher.profile?.name ?? null,
     claimedAt: order.claimedAt?.toISOString() ?? null,
@@ -170,7 +171,6 @@ function passengerLeg(leg: JourneyLeg) {
     destination: leg.destination,
     waypoints: leg.waypoints,
     vehicleType: leg.vehicleType,
-    handoffNote: leg.handoffNote,
     price: leg.showPassengerPrice ? passengerPriceOf(leg) : null,
     passengerConfirmedAt: leg.passengerConfirmedAt?.toISOString() ?? null,
     driver: driver && {

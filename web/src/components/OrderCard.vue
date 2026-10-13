@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { money, pickup } from '../format';
 import { t } from '../i18n';
+import { legLabel } from '../journey';
 import StatusBadge from './StatusBadge.vue';
 
 export interface OrderSummary {
@@ -30,7 +31,7 @@ defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' }>();
     <div class="order-card__top">
       <strong>
         {{ pickup(order.pickupAt) }}
-        <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${order.journey.legIndex}／${order.journey.legCount}`) }}</span>
+        <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
       </strong>
       <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
     </div>

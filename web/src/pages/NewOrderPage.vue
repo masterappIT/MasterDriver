@@ -6,7 +6,7 @@ import { api, errorText, session } from '../api';
 import RevealSelect from '../components/RevealSelect.vue';
 import { fromLocalInput, pickup, toLocalInput } from '../format';
 import { t } from '../i18n';
-import { HANDOFF_NOTES, HANDOFF_PLACES } from '../journey';
+import { PLATE_NAMES, type PlateRegion } from '../journey';
 
 interface PastOrder {
   id: string;
@@ -62,7 +62,9 @@ const form = reactive({
   passengerName: '',
   passengerContact: '',
   contactRevealMinutes: 60 as number | null,
-  handoffNote: '',
+  /** 直達 (false) or 接駁 (true): with 接駁 this order ends at the 接駁位置. */
+  transfer: false,
+  requiredPlates: [] as PlateRegion[],
   selfDrive: false,
 });
 
@@ -167,7 +169,8 @@ async function submit() {
       passengerContact: form.passengerContact,
       contactRevealMinutes: form.contactRevealMinutes,
       afterOrderId: afterId || undefined,
-      handoffNote: afterId ? form.handoffNote : undefined,
+      transfer: !afterId && form.transfer,
+      requiredPlates: afterId || form.transfer ? form.requiredPlates : [],
       selfDrive: form.selfDrive,
     });
     await router.replace(`/app/orders/${created.id}?sent=1`);
@@ -178,20 +181,20 @@ async function submit() {
   }
 }
 
-/** The next leg carries the same passenger; its time starts after the previous leg. */
+/** The next leg carries the same passenger and starts where and after the previous leg ends. */
 async function loadPrevious() {
   try {
     const leg = await api<PreviousLeg>('GET', `/orders/${afterId}`);
     previous.value = leg;
     Object.assign(form, {
       pickupAt: toLocalInput(new Date(new Date(leg.pickupAt).getTime() + 60 * 60 * 1000)),
+      origin: leg.destination,
       passengers: String(leg.passengers),
       luggage: String(leg.luggage),
       passengerName: leg.passengerName ?? '',
       passengerContact: leg.passengerContact ?? '',
       contactRevealMinutes: leg.contactRevealMinutes ?? null,
       currency: leg.driverPrice?.currency ?? form.currency,
-      handoffNote: HANDOFF_NOTES[0],
     });
   } catch (e) {
     error.value = errorText(e);
@@ -221,14 +224,7 @@ onMounted(async () => {
       <p class="hint new-order__previous-label">{{ t(`接在第 ${legNumber - 1} 段後面`) }}</p>
       <strong>{{ pickup(previous.pickupAt) }}</strong>
       <div>{{ t(previous.origin) }} → {{ t(previous.destination) }}</div>
-      <p class="hint">{{ t('同一位乘客，已帶入人數、行李和乘客資料。這一段另外貼到群裡搶，平台服務費整個行程只收一次。') }}</p>
-      <label class="field new-order__handoff">
-        {{ t('交接方式') }}
-        <input v-model="form.handoffNote" class="input" maxlength="120" />
-      </label>
-      <div class="chips">
-        <button v-for="note in HANDOFF_NOTES" :key="note" class="chip" type="button" @click="form.handoffNote = note">{{ t(note) }}</button>
-      </div>
+      <p class="hint">{{ t('同一位乘客，已帶入接駁位置、人數、行李和乘客資料。這一段另外貼到群裡搶，平台服務費整個行程只收一次。') }}</p>
     </div>
 
     <div v-if="!afterId" class="card quick-line">
@@ -248,12 +244,19 @@ onMounted(async () => {
     </div>
 
     <div class="card">
-      <label class="field">{{ t('出發時間（香港時間）') }}<input v-model="form.pickupAt" class="input" type="datetime-local" required /></label>
-      <label class="field">{{ afterId ? t('接駁點（這一段的出發地）') : t('出發地') }}<input v-model="form.origin" class="input" maxlength="120" :placeholder="t('例如：深圳灣口岸')" required /></label>
-      <div v-if="afterId" class="chips new-order__add">
-        <span class="hint">{{ t('常用接駁點：') }}</span>
-        <button v-for="place in HANDOFF_PLACES" :key="place" class="chip" type="button" @click="form.origin = place">{{ t(place) }}</button>
+      <div v-if="!afterId" class="row new-order__mode">
+        <label class="row"><input v-model="form.transfer" type="radio" name="mode" :value="false" /> {{ t('直達（一部車到底）') }}</label>
+        <label class="row"><input v-model="form.transfer" type="radio" name="mode" :value="true" /> {{ t('接駁（中途換車）') }}</label>
       </div>
+      <p v-if="form.transfer && !afterId" class="hint new-order__add">
+        {{ t('這張單是第 1 段，目的地填接駁位置。發出後按「加接駁段」發下一段。乘客自行過關不算接駁。') }}
+      </p>
+      <label class="field">{{ t('出發時間（香港時間）') }}<input v-model="form.pickupAt" class="input" type="datetime-local" required /></label>
+      <label class="field">
+        {{ afterId ? t('接駁位置（這一段的出發地）') : t('出發地') }}
+        <input v-model="form.origin" class="input" maxlength="120" :placeholder="afterId ? '' : t('例如：深圳灣口岸')" required />
+        <span v-if="previous && form.origin.trim() !== previous.destination" class="hint">{{ t('上一段的目的地會一起改成這個接駁位置。') }}</span>
+      </label>
       <div v-for="(_, index) in form.waypoints" :key="index" class="field">
         {{ t(`途經點 ${index + 1}`) }}
         <div class="row new-order__waypoint">
@@ -262,7 +265,10 @@ onMounted(async () => {
         </div>
       </div>
       <button v-if="form.waypoints.length < 5" class="chip new-order__add" type="button" @click="form.waypoints.push('')">＋ {{ t('加途經點') }}</button>
-      <label class="field">{{ t('目的地') }}<input v-model="form.destination" class="input" maxlength="120" :placeholder="t('例如：香港國際機場')" required /></label>
+      <label class="field">
+        {{ form.transfer && !afterId ? t('接駁位置（這一段的目的地）') : t('目的地') }}
+        <input v-model="form.destination" class="input" maxlength="120" :placeholder="form.transfer && !afterId ? t('自己輸入換車的地點') : t('例如：香港國際機場')" required />
+      </label>
       <div v-if="places.length" class="chips">
         <span class="hint">{{ t('常用：') }}</span>
         <button v-for="place in places" :key="place" class="chip" type="button" @click="fillPlace(place)">{{ t(place) }}</button>
@@ -274,6 +280,15 @@ onMounted(async () => {
         <label class="field new-order__third">{{ t('人數') }}<input v-model="form.passengers" class="input" type="number" min="1" max="60" inputmode="numeric" required /></label>
         <label class="field new-order__third">{{ t('行李') }}<input v-model="form.luggage" class="input" type="number" min="0" max="60" inputmode="numeric" /></label>
         <label class="field new-order__third">{{ t('車型') }}<input v-model="form.vehicleType" class="input" maxlength="30" :placeholder="t('7座')" /></label>
+      </div>
+      <div v-if="afterId || form.transfer" class="field">
+        {{ t('這一段需要的車牌（選填）') }}
+        <div class="row">
+          <label v-for="(name, region) in PLATE_NAMES" :key="region" class="row">
+            <input v-model="form.requiredPlates" type="checkbox" :value="region" /> {{ t(name) }}
+          </label>
+        </div>
+        <span class="hint">{{ t('只在群文字和搶單頁標明，平台不審核車牌，任何司機都可以搶。') }}</span>
       </div>
       <label class="field">{{ t('備註') }}<textarea v-model="form.notes" class="textarea" maxlength="500" :placeholder="t('例如：需要兒童座椅')" /></label>
     </div>
@@ -344,8 +359,9 @@ onMounted(async () => {
 .new-order__previous-label {
   margin: 0 0 var(--space-xs);
 }
-.new-order__handoff {
-  margin: var(--space-md) 0 var(--space-sm);
+.new-order__mode {
+  gap: var(--space-lg);
+  margin-bottom: var(--space-md);
 }
 .new-order__third {
   flex: 1;

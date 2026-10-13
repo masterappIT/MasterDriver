@@ -54,6 +54,10 @@ const priceSchema = z.object({
 /** 接駁: a trip has at most this many legs, each its own order. */
 export const MAX_JOURNEY_LEGS = 4;
 
+/** Where a car is registered; an order may ask for one or more of these plates. */
+export const PLATE_REGIONS = ['HK', 'MACAU', 'MAINLAND'] as const;
+export type PlateRegion = (typeof PLATE_REGIONS)[number];
+
 /** Up to 24 hours before pickup, or null for "as soon as the order is claimed". */
 export const contactReveal = z.number().int().min(0).max(1440).nullable();
 
@@ -79,10 +83,22 @@ export const createOrderSchema = z.object({
   rawText: optionalText(300),
   /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */
   contactRevealMinutes: contactReveal.optional(),
-  /** 接駁: add this order as the next leg after the last leg of the dispatcher's trip. */
+  /**
+   * 接駁: add this order as the next leg after the last leg of the dispatcher's
+   * trip. Its origin is the 接駁位置, which is also the previous leg's destination.
+   */
   afterOrderId: z.string().trim().min(1).max(40).optional(),
-  /** How the passenger gets to this leg from the previous one; only for a following leg. */
-  handoffNote: optionalText(120),
+  /**
+   * 接駁 instead of 直達: this order is the first leg of a trip and ends at the
+   * 接駁位置, where the next leg's car takes over. Ignored with afterOrderId.
+   */
+  transfer: z.boolean().default(false),
+  /** Plates the car needs, e.g. ['MACAU']; only stated to drivers, never enforced. */
+  requiredPlates: z
+    .array(z.enum(PLATE_REGIONS))
+    .max(PLATE_REGIONS.length)
+    .default([])
+    .transform((plates) => PLATE_REGIONS.filter((plate) => plates.includes(plate))),
   /** 這段我自己做: the dispatcher drives this order, so it is not offered for claiming. */
   selfDrive: z.boolean().default(false),
 });

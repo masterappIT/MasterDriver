@@ -71,7 +71,7 @@ const ERROR_TEXT: Record<string, string> = {
   NOT_LAST_LEG: '只能接在行程的最後一段後面，請重新整理',
   JOURNEY_LEG_LIMIT: '一個行程最多 4 段',
   LEG_BEFORE_PREVIOUS: '這一段的時間不能早於上一段',
-  HANDOFF_WITHOUT_LEG: '交接方式只用於接駁段'
+  TRANSFER_PLACE_LOCKED: '上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段'
 };
 
 const INVALID_PHONE = 'INVALID_PHONE';

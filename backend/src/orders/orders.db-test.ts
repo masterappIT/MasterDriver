@@ -182,7 +182,7 @@ const macauLeg = {
   pickupAt: '2026-10-15T16:00:00+08:00',
   origin: '港珠澳大橋澳門口岸',
   destination: '澳門威尼斯人',
-  handoffNote: '乘客自行過關（穿梭巴士）',
+  requiredPlates: ['MACAU' as const],
 };
 
 const balanceOf = async (userId: string) =>
@@ -205,7 +205,9 @@ test('a following leg joins the trip and uses neither quota nor service fee agai
   assert.equal(second.journey?.legCount, 2);
   assert.deepEqual(second.journey?.legs.map((leg) => leg.origin), ['深圳灣口岸', '港珠澳大橋澳門口岸']);
   assert.ok(second.share.dispatch.wechat.includes('接駁：第 2／2 段'));
-  assert.ok(second.share.dispatch.wechat.includes('交接：乘客自行過關（穿梭巴士）'));
+  assert.ok(second.share.dispatch.wechat.includes('接駁位置：港珠澳大橋澳門口岸'));
+  assert.ok(second.share.dispatch.wechat.includes('需澳門車'));
+  assert.deepEqual(second.requiredPlates, ['MACAU']);
   const firstConfirm = first.links.passengerConfirm;
   assert.ok(second.share.passenger.includes(firstConfirm), 'the passenger gets the first leg link');
   assert.ok(second.share.passenger.includes('深圳灣口岸 → 澳門威尼斯人（2 段接駁）'));
@@ -222,7 +224,6 @@ test('a leg only follows the last leg, not before it, and a trip has at most fou
     ctx.orders.create(dispatcher, { ...macauLeg, pickupAt: '2026-10-15T13:00:00+08:00', afterOrderId: first.id }),
     'LEG_BEFORE_PREVIOUS',
   );
-  await rejectsWith(ctx.orders.create(dispatcher, { ...sampleOrder, handoffNote: '過關' }), 'HANDOFF_WITHOUT_LEG');
 
   let last = await ctx.orders.create(dispatcher, { ...macauLeg, afterOrderId: first.id });
   await rejectsWith(ctx.orders.create(dispatcher, { ...macauLeg, afterOrderId: first.id }), 'NOT_LAST_LEG');
@@ -277,7 +278,7 @@ test('the passenger sees every leg with its driver and confirms the whole trip o
   assert.equal(trip.status, 'OPEN', 'the Macau leg has no driver yet');
   assert.equal(trip.destination, '澳門威尼斯人');
   assert.deepEqual(trip.legs?.map((leg) => leg.driver?.name ?? null), ['香港師傅', null]);
-  assert.equal(trip.legs?.[1].handoffNote, '乘客自行過關（穿梭巴士）');
+  assert.equal(trip.legs?.[1].origin, '港珠澳大橋澳門口岸');
 
   await ctx.orders.claim(second.code, macauDriver);
   trip = await ctx.orders.confirmByPassenger(confirmCode);
@@ -296,6 +297,48 @@ test('the passenger sees every leg with its driver and confirms the whole trip o
   const outsiderView = await ctx.orders.getByCode(second.code, outsider);
   assert.equal(outsiderView.journey?.legs[0].origin, '深圳灣口岸');
   assert.equal('driver' in (outsiderView.journey?.legs[0] ?? {}), false);
+});
+
+test('接駁 chosen when dispatching: the order is leg 1 of a trip before the next leg exists', async () => {
+  const dispatcher = await createDriver(ctx);
+  const first = await ctx.orders.create(dispatcher, { ...sampleOrder, destination: '港珠澳大橋香港口岸', transfer: true });
+
+  assert.equal(first.journey?.legIndex, 1);
+  assert.equal(first.journey?.legCount, 1);
+  assert.deepEqual(first.journey?.transferPlaces, ['港珠澳大橋香港口岸']);
+  assert.ok(first.share.dispatch.wechat.includes('接駁：第 1 段'));
+  assert.ok(first.share.dispatch.wechat.includes('接駁位置：港珠澳大橋香港口岸'));
+  assert.ok(!first.share.passenger.includes('段接駁'), 'one leg reads like a single order to the passenger');
+  const direct = await ctx.orders.create(dispatcher, sampleOrder);
+  assert.equal(direct.journey, null);
+
+  const second = await ctx.orders.create(dispatcher, { ...macauLeg, afterOrderId: first.id });
+  assert.equal(second.journey?.legCount, 2);
+  assert.equal(await ctx.prisma.order.count({ where: { journeyId: first.id } }), 2);
+});
+
+test('the transfer place is shared: a new leg moves the previous destination unless another driver holds that leg', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  await ctx.prisma.billingPolicy.create({ data: { name: '上線全站免費期', planKey: 'company', startsAt: new Date(0) } });
+  const destinationOf = async (id: string) => (await ctx.prisma.order.findUniqueOrThrow({ where: { id } })).destination;
+
+  const open = await ctx.orders.create(dispatcher, { ...sampleOrder, transfer: true });
+  const next = await ctx.orders.create(dispatcher, { ...macauLeg, afterOrderId: open.id });
+  assert.equal(await destinationOf(open.id), '港珠澳大橋澳門口岸');
+  assert.deepEqual(next.journey?.legs.map((leg) => leg.destination), ['港珠澳大橋澳門口岸', '澳門威尼斯人']);
+
+  const own = await ctx.orders.create(dispatcher, { ...sampleOrder, transfer: true, selfDrive: true });
+  await ctx.orders.create(dispatcher, { ...macauLeg, afterOrderId: own.id });
+  assert.equal(await destinationOf(own.id), '港珠澳大橋澳門口岸', 'the dispatcher drives it, so nobody else agreed to the old place');
+
+  const claimed = await ctx.orders.create(dispatcher, { ...sampleOrder, transfer: true });
+  await ctx.orders.claim(claimed.code, driver);
+  await rejectsWith(ctx.orders.create(dispatcher, { ...macauLeg, afterOrderId: claimed.id }), 'TRANSFER_PLACE_LOCKED');
+  assert.equal(await destinationOf(claimed.id), '香港國際機場');
+  assert.equal(await ctx.prisma.order.count({ where: { journeyId: claimed.id } }), 1, 'the rejected leg left nothing behind');
+  const same = await ctx.orders.create(dispatcher, { ...macauLeg, origin: '香港國際機場', afterOrderId: claimed.id });
+  assert.equal(same.journey?.legCount, 2);
 });
 
 test("the other leg's driver phone waits for this leg's reveal time", async () => {

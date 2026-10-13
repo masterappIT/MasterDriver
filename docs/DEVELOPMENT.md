@@ -47,7 +47,7 @@ npm run dev:web
 - 介面文字只寫繁體；簡體由沿用 Master Travel 的 OpenCC 對照表轉出，只有選用簡體時才下載。+86 帳號預設簡體，可在「我的」切換。
 - 只用系統字型、不依賴 Google 服務；在微信內不顯示「分享到 WhatsApp」（微信會攔截跳轉），改用複製。
 - 搶單頁在單仍是「待搶」時每 5 秒更新一次狀態，讓各群打開同一條連結都能看到「已被接走」。
-- 接駁單：單詳情按「加接駁段」打開 `/app/new?after=<上一段 id>`，帶入乘客資料，填接駁點（常用口岸一鍵填入）與交接方式。各段的 `journeyId` 指向第一段（第一段指向自己），`legIndex` 從 1 起，最多 4 段。新增段與取消段都先鎖住第一段的資料列，所以服務費只在全部段都取消時退回一次。乘客只用第一段的確認連結。
+- 接駁單：發單頁選「接駁」（`transfer: true`）的單發出時就是行程第 1 段，目的地是接駁位置。單詳情按「加接駁段」打開 `/app/new?after=<上一段 id>`，帶入接駁位置（上一段的目的地）與乘客資料；改了接駁位置會同步改上一段的目的地，上一段已被其他司機接走時回 `TRANSFER_PLACE_LOCKED`。接駁的單可選填 `requiredPlates`（`HK`、`MACAU`、`MAINLAND`），只顯示、不限制誰能搶。各段的 `journeyId` 指向第一段（第一段指向自己），`legIndex` 從 1 起，最多 4 段。新增段與取消段都先鎖住第一段的資料列，所以服務費只在全部段都取消時退回一次。乘客只用第一段的確認連結。
 
 ## 平台後台
 
@@ -86,7 +86,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/auth/logout` | 要 | 登出 |
 | `GET /api/me` | 要 | 目前用戶與司機資料 |
 | `GET/PUT /api/me/profile` | 要 | 司機資料（第一次搶單前要填） |
-| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`afterOrderId` + `handoffNote`：加接駁段（接在行程最後一段後面，不再扣額度和服務費）；`selfDrive: true`：這段我自己做（直接算自己接，要先有司機資料） |
+| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer: true`：接駁單的第 1 段；`afterOrderId`：加接駁段（接在行程最後一段後面，出發地即接駁位置，不再扣額度和服務費）；`requiredPlates`：需要的車牌（只標明）；`selfDrive: true`：這段我自己做（直接算自己接，要先有司機資料） |
 | `GET /api/orders?role=dispatched\|claimed` | 要 | 我的派單／我的接單 |
 | `GET /api/orders/:id` | 要 | 單的詳情（發單者或接單司機） |
 | `PATCH /api/orders/:id/prices` | 要 | 改司機價、乘客價、是否讓乘客看到乘客價（發單者；司機價在有人接單後鎖定） |
@@ -126,6 +126,6 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
 | `npm run verify:admin` | 後台型別檢查與建置 |
 | `npm run verify:web` | 網頁測試（繁簡轉換）、型別檢查與建置 |
-| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
+| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看、接駁位置兩段共用）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。

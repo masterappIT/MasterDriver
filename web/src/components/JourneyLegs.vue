@@ -6,7 +6,7 @@ import PlateTag from './PlateTag.vue';
 import StatusBadge from './StatusBadge.vue';
 
 /**
- * 接駁: every leg of the trip in order, with the handoff between them. The
+ * 接駁: every leg of the trip in order, with the 接駁位置 between them. The
  * dispatcher can open each leg; drivers see the other legs' drivers.
  */
 defineProps<{ legs: JourneyLeg[]; current: number }>();
@@ -15,7 +15,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
 <template>
   <ol class="journey-legs">
     <li v-for="leg in legs" :key="leg.legIndex" class="journey-legs__item">
-      <p v-if="leg.legIndex > 1 && leg.handoffNote" class="journey-legs__handoff">↓ {{ t(`交接：${leg.handoffNote}`) }}</p>
+      <p v-if="leg.legIndex > 1" class="journey-legs__handoff">↓ {{ t(`接駁位置：${leg.origin}`) }}</p>
       <component
         :is="leg.id && leg.legIndex !== current ? 'RouterLink' : 'div'"
         :to="leg.id ? `/app/orders/${leg.id}` : undefined"

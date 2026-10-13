@@ -129,6 +129,13 @@ enum Currency {
   MOP
 }
 
+/// Where a car is registered, matching the three plates of a driver profile.
+enum PlateRegion {
+  HK
+  MACAU
+  MAINLAND
+}
+
 model Order {
   id                   String      @id @default(cuid())
   /// Unguessable code used in the dispatch link (/o/{code}).
@@ -170,8 +177,9 @@ model Order {
   journeyId            String?
   /// Position of this leg in its trip, from 1; null outside a trip.
   legIndex             Int?
-  /// How the passenger gets here from the previous leg, e.g. 乘客自行過關（穿梭巴士）.
-  handoffNote          String?
+  /// Plates the car for this order needs (e.g. a Macau car for the leg after a
+  /// 接駁). Shown in the group text and on the claim page; never enforced.
+  requiredPlates       PlateRegion[] @default([])
   claimedById          String?
   claimedAt            DateTime?
   passengerConfirmedAt DateTime?

@@ -25,7 +25,6 @@ interface TripLeg {
   destination: string;
   waypoints: string[];
   vehicleType: string | null;
-  handoffNote: string | null;
   price: { amount: number; currency: string } | null;
   driver: TripDriver | null;
 }
@@ -93,7 +92,7 @@ onMounted(load);
         </section>
         <template v-for="leg in trip.legs" :key="leg.legIndex">
           <p v-if="leg.legIndex > 1" class="confirm-page__handoff">
-            ↓ {{ t('在這裡換車') }}<template v-if="leg.handoffNote">：{{ t(leg.handoffNote) }}</template>
+            ↓ {{ t(`接駁位置：${leg.origin}（在這裡換車）`) }}
           </p>
           <section class="card">
             <span class="leg-tag">{{ t(`第 ${leg.legIndex} 段`) }}</span>
