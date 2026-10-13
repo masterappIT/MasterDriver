@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { SUPPORT_IMAGE_MAX_BYTES } from '@masterdriver/shared';
 import { UnavailableMediaStorage } from './media-storage';
+import { readLimits } from '../common/limits';
 import { SUPPORT_LIMITS, SupportService, type Participant } from './support.service';
 import { createDriver, rejectsWith, setupDatabase, type TestContext } from '../test/database';
 
@@ -149,7 +150,8 @@ test('a guest talks through a token; guests send pictures but no video, and only
 
   await rejectsWith(ctx.support.sendMedia(guest, mp4, cid()), 'SUPPORT_VIDEO_SIGN_IN');
   const day = Date.now();
-  for (let i = 0; i < SUPPORT_LIMITS.guestMediaPerDay; i += 1) {
+  const { supportGuestMediaPerDay } = await readLimits(ctx.prisma);
+  for (let i = 0; i < supportGuestMediaPerDay; i += 1) {
     await ctx.support.sendMedia(guest, jpeg(), cid(), new Date(day - (i + 2) * 5 * 60_000));
   }
   await rejectsWith(ctx.support.sendMedia(guest, jpeg(), cid()), 'SUPPORT_MEDIA_LIMIT');
@@ -159,13 +161,38 @@ test('a guest talks through a token; guests send pictures but no video, and only
 });
 
 test('one address opens only a few guest conversations a day, and nobody floods a conversation', async () => {
-  for (let i = 0; i < SUPPORT_LIMITS.guestConversationsPerIpPerDay; i += 1) await ctx.support.openGuest('7.7.7.7');
+  const limits = await readLimits(ctx.prisma);
+  for (let i = 0; i < limits.supportGuestConversationsPerIpPerDay; i += 1) await ctx.support.openGuest('7.7.7.7');
   await rejectsWith(ctx.support.openGuest('7.7.7.7'), 'SUPPORT_GUEST_LIMIT');
   await ctx.support.openGuest('8.8.8.8');
 
   const user = asUser(await createDriver(ctx));
-  for (let i = 0; i < SUPPORT_LIMITS.messagesPerMinute; i += 1) await ctx.support.sendText(user, text(`${i}`));
+  for (let i = 0; i < limits.supportMessagesPerMinute; i += 1) await ctx.support.sendText(user, text(`${i}`));
   await rejectsWith(ctx.support.sendText(user, text('太快')), 'SUPPORT_TOO_FAST');
+});
+
+test('the limits set in the admin apply at once, and zero switches a thing off', async () => {
+  const defaults = await ctx.site.limits();
+  assert.deepEqual(
+    [defaults.supportGuestMediaPerDay, defaults.supportUserMediaPerDay, defaults.supportMessagesPerMinute, defaults.supportGuestConversationsPerIpPerDay],
+    [10, 30, 20, 5],
+  );
+
+  await ctx.site.updateLimits({ supportMessagesPerMinute: 2, supportUserMediaPerDay: 1, supportGuestConversationsPerIpPerDay: 1 }, 'test');
+  const user = asUser(await createDriver(ctx));
+  await ctx.support.sendMedia(user, jpeg(), cid());
+  await rejectsWith(ctx.support.sendMedia(user, jpeg(), cid()), 'SUPPORT_MEDIA_LIMIT');
+  await ctx.support.sendText(user, text('第二則'));
+  await rejectsWith(ctx.support.sendText(user, text('第三則')), 'SUPPORT_TOO_FAST');
+  await ctx.support.openGuest('6.6.6.6');
+  await rejectsWith(ctx.support.openGuest('6.6.6.6'), 'SUPPORT_GUEST_LIMIT');
+
+  await ctx.site.updateLimits({ supportMessagesPerMinute: 20, supportGuestMediaPerDay: 0, supportGuestConversationsPerIpPerDay: 0 }, 'test');
+  await ctx.support.sendText(user, text('放寬後可以再傳'));
+  await rejectsWith(ctx.support.openGuest('5.5.5.5'), 'SUPPORT_GUEST_LIMIT');
+  const guest = (await ctx.support.guestParticipant((await ctx.prisma.supportConversation.findFirstOrThrow({ where: { guestIp: '6.6.6.6' } })).guestTokenHash ?? ''));
+  assert.equal(guest, null, 'a hash is not a token');
+  assert.equal((await ctx.site.limits()).updatedBy, 'test');
 });
 
 test('主動聯繫: staff opens the conversation of an existing user, and only of one that exists', async () => {

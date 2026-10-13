@@ -54,6 +54,7 @@ const ISSUE_TEXT: Record<string, string> = {
   PLAIN_TOKEN_REQUIRED: '驗證碼和統計 ID 只能填代碼本身，不要貼整段程式碼',
   NO_TRAILING_SLASH: '正式網域結尾不要加 /',
   LINK_REQUIRED: '請填寫連結',
+  NOTHING_TO_UPDATE: '沒有要更新的內容',
   TEMPLATE_NEEDS_CODE: '簡訊範本必須包含 {code}',
   DIGITS_ONLY: '測試號碼只能填數字',
 };

@@ -33,6 +33,18 @@ export type AppSettingUpdate = z.infer<typeof appSettingUpdateSchema>;
 export const siteLogoUpdateSchema = z.object({ image: z.string().max(600_000) });
 export type SiteLogoUpdate = z.infer<typeof siteLogoUpdateSchema>;
 
+/** 防濫用設定. Zero switches the thing off: for example no pictures from guests. */
+export const limitSettingUpdateSchema = z
+  .object({
+    supportGuestMediaPerDay: z.number().int().min(0).max(200),
+    supportUserMediaPerDay: z.number().int().min(0).max(500),
+    supportMessagesPerMinute: z.number().int().min(1).max(120),
+    supportGuestConversationsPerIpPerDay: z.number().int().min(0).max(100),
+  })
+  .partial()
+  .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });
+export type LimitSettingUpdate = z.infer<typeof limitSettingUpdateSchema>;
+
 export const seoSiteUpdateSchema = z
   .object({
     canonicalOrigin: httpsUrl.refine((value) => value === '' || !/\/$/.test(value), { message: 'NO_TRAILING_SLASH' }),

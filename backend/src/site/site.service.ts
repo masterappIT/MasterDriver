@@ -8,9 +8,11 @@ import type {
   LeadsQuery,
   SeoPageKey,
   SeoPageUpdate,
+  LimitSettingUpdate,
   SeoSiteUpdate,
 } from '@masterdriver/shared';
 import { apiError } from '../common/errors';
+import { readLimits } from '../common/limits';
 import { decodeQrImage } from '../groups/qr-image';
 import { PrismaService } from '../prisma.service';
 import { robotsMeta, robotsTxt } from './seo-rules';
@@ -43,6 +45,17 @@ export class SiteService {
   async updateAppSetting(input: AppSettingUpdate, actor: string) {
     await this.appSetting();
     return this.prisma.appSetting.update({ where: { id: DEFAULT_ID }, data: { ...input, updatedBy: actor } });
+  }
+
+  // ------------------------------------------------------------ 防濫用設定
+
+  limits() {
+    return readLimits(this.prisma);
+  }
+
+  async updateLimits(input: LimitSettingUpdate, actor: string) {
+    await this.limits();
+    return this.prisma.limitSetting.update({ where: { id: DEFAULT_ID }, data: { ...input, updatedBy: actor } });
   }
 
   /** Where the public pages load the logo from; the version changes when the logo does, so browsers refetch it. */

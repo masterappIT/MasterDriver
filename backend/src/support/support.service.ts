@@ -5,6 +5,7 @@ import { Prisma } from '../../generated/prisma';
 import { AuditService, PAGE_SIZE } from '../admin/audit.service';
 import { randomCode, randomToken, sha256 } from '../common/crypto';
 import { apiError } from '../common/errors';
+import { readLimits } from '../common/limits';
 import { PrismaService } from '../prisma.service';
 import { sniffMedia } from './media-file';
 import { MEDIA_STORAGE, type MediaStorage } from './media-storage';
@@ -12,13 +13,12 @@ import { MEDIA_STORAGE, type MediaStorage } from './media-storage';
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
 
-/** Abuse limits; generous for a real conversation. */
+/**
+ * How many messages, files and guest conversations are allowed is set in the
+ * platform admin (防濫用設定, see common/limits.ts). Guests are anonymous, so
+ * they have their own, lower file limit and send no video.
+ */
 export const SUPPORT_LIMITS = {
-  messagesPerMinute: 20,
-  userMediaPerDay: 30,
-  /** Guests are anonymous, so they send fewer files and no video. */
-  guestMediaPerDay: 10,
-  guestConversationsPerIpPerDay: 5,
   /** Pictures and videos are removed from storage after this long; the messages stay. */
   mediaRetentionDays: 180,
 };
@@ -74,7 +74,7 @@ export class SupportService {
       const recent = await this.prisma.supportConversation.count({
         where: { guestIp: ip, createdAt: { gte: new Date(now.getTime() - DAY_MS) } },
       });
-      if (recent >= SUPPORT_LIMITS.guestConversationsPerIpPerDay) {
+      if (recent >= (await readLimits(this.prisma)).supportGuestConversationsPerIpPerDay) {
         throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'SUPPORT_GUEST_LIMIT', 'Too many guest conversations from this address');
       }
     }
@@ -124,7 +124,8 @@ export class SupportService {
     const sentToday = await this.prisma.supportMessage.count({
       where: { conversationId, fromStaff: false, kind: { not: 'TEXT' }, createdAt: { gte: new Date(now.getTime() - DAY_MS) } },
     });
-    const allowed = participant.type === 'USER' ? SUPPORT_LIMITS.userMediaPerDay : SUPPORT_LIMITS.guestMediaPerDay;
+    const limits = await readLimits(this.prisma);
+    const allowed = participant.type === 'USER' ? limits.supportUserMediaPerDay : limits.supportGuestMediaPerDay;
     if (sentToday >= allowed) {
       throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'SUPPORT_MEDIA_LIMIT', 'Too many pictures and videos today');
     }
@@ -285,7 +286,7 @@ export class SupportService {
     const recent = await this.prisma.supportMessage.count({
       where: { conversationId, fromStaff: false, createdAt: { gte: new Date(now.getTime() - MINUTE_MS) } },
     });
-    if (recent >= SUPPORT_LIMITS.messagesPerMinute) {
+    if (recent >= (await readLimits(this.prisma)).supportMessagesPerMinute) {
       throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'SUPPORT_TOO_FAST', 'Too many messages; wait a moment');
     }
   }

@@ -31,6 +31,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/ads', component: () => import('./pages/AdsPage.vue'), meta: { title: '廣告欄位', roles: WRITE } },
   { path: '/seo', component: () => import('./pages/SeoPage.vue'), meta: { title: 'SEO', roles: WRITE } },
   { path: '/settings/general', component: () => import('./pages/GeneralSettingsPage.vue'), meta: { title: '一般設定', roles: WRITE } },
+  { path: '/settings/limits', component: () => import('./pages/LimitsPage.vue'), meta: { title: '防濫用設定', roles: WRITE } },
   { path: '/payment-channels', component: () => import('./pages/PaymentChannelsPage.vue'), meta: { title: '付款通道', roles: WRITE } },
   { path: '/sms-channels', component: () => import('./pages/SmsChannelsPage.vue'), meta: { title: '簡訊通道', roles: WRITE } },
   { path: '/accounts', component: () => import('./pages/AccountsPage.vue'), meta: { title: '後台帳號', roles: ['SUPER_ADMIN'] } },

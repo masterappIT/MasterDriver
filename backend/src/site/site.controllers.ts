@@ -6,6 +6,7 @@ import {
   appSettingUpdateSchema,
   leadUpdateSchema,
   leadsQuerySchema,
+  limitSettingUpdateSchema,
   SEO_PAGES,
   seoPageUpdateSchema,
   seoSiteUpdateSchema,
@@ -15,6 +16,7 @@ import {
   type AppSettingUpdate,
   type LeadUpdate,
   type LeadsQuery,
+  type LimitSettingUpdate,
   type SeoPageKey,
   type SeoPageUpdate,
   type SeoSiteUpdate,
@@ -133,6 +135,27 @@ export class AdminSiteController {
     const result = await this.site.updateAppSetting(body, `admin:${admin.username}`);
     // Record which fields changed; long texts are not copied into the log.
     await this.log(admin, 'settings.general', request, { fields: Object.keys(body) });
+    return result;
+  }
+
+  // ---- 防濫用設定
+
+  @Get('settings/limits')
+  @AdminRoles(...WRITE_ROLES)
+  limits() {
+    return this.site.limits();
+  }
+
+  @Put('settings/limits')
+  @AdminRoles(...WRITE_ROLES)
+  async updateLimits(
+    @Body(new ZodPipe(limitSettingUpdateSchema)) body: LimitSettingUpdate,
+    @CurrentAdmin() admin: AdminUser,
+    @Req() request: Request,
+  ) {
+    const result = await this.site.updateLimits(body, `admin:${admin.username}`);
+    // The new numbers are kept, so the log shows what each limit was changed to.
+    await this.log(admin, 'settings.limits', request, { ...body });
     return result;
   }
 

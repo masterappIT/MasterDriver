@@ -485,6 +485,22 @@ model SiteLogo {
   updatedBy String?
 }
 
+/// Limits against abuse (防濫用設定), changed in the platform admin and applied at
+/// once. The defaults here are the values the code used before they moved here.
+model LimitSetting {
+  id                                  String   @id @default("default")
+  /// 客服: pictures a guest conversation may send in 24 hours (guests send no video).
+  supportGuestMediaPerDay             Int      @default(10)
+  /// 客服: pictures and videos a signed-in user may send in 24 hours.
+  supportUserMediaPerDay              Int      @default(30)
+  /// 客服: messages a user or guest may send in one conversation per minute.
+  supportMessagesPerMinute            Int      @default(20)
+  /// 客服: guest conversations one address may open in 24 hours.
+  supportGuestConversationsPerIpPerDay Int     @default(5)
+  updatedAt                           DateTime @updatedAt
+  updatedBy                           String?
+}
+
 /// Site-wide SEO. The claim page (/o/), passenger page (/c/), driver app and admin
 /// are always noindex in code; nothing here can change that.
 model SeoSiteSetting {
