@@ -19,6 +19,8 @@ async function bootstrap() {
   // Cloud Run sits behind Google's front end; trust it for the client IP used in rate limits.
   app.set('trust proxy', true);
   app.disable('x-powered-by');
+  // Room for a QR image upload (at most 400 KB, about 540 KB as base64).
+  app.useBodyParser('json', { limit: '1mb' });
   app.setGlobalPrefix('api');
   app.enableShutdownHooks();
   await app.listen(config.port);

@@ -2,7 +2,9 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Query, Use
 import {
   createOrderSchema,
   orderListQuerySchema,
+  contactRevealUpdateSchema,
   updateOrderPricesSchema,
+  type ContactRevealUpdate,
   type CreateOrderInput,
   type OrderListQuery,
   type UpdateOrderPricesInput,
@@ -40,6 +42,15 @@ export class OrdersController {
     @Body(new ZodPipe(updateOrderPricesSchema)) body: UpdateOrderPricesInput,
   ) {
     return this.orders.updatePrices(user.id, id, body);
+  }
+
+  @Patch(':id/contact-reveal')
+  setContactReveal(
+    @CurrentUser() user: SessionUser,
+    @Param('id') id: string,
+    @Body(new ZodPipe(contactRevealUpdateSchema)) body: ContactRevealUpdate,
+  ) {
+    return this.orders.setContactReveal(user.id, id, body);
   }
 
   @Post(':id/cancel')

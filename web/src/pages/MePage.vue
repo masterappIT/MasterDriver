@@ -3,7 +3,9 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, session, signOut } from '../api';
 import BottomSheet from '../components/BottomSheet.vue';
+import GroupInvites from '../components/GroupInvites.vue';
 import PlateTag from '../components/PlateTag.vue';
+import RevealSelect from '../components/RevealSelect.vue';
 import ProfileForm from '../components/ProfileForm.vue';
 import { money } from '../format';
 import { language, setLanguage, t } from '../i18n';
@@ -15,6 +17,16 @@ interface Settings {
 }
 
 const router = useRouter();
+const reveal = ref<number | null>(60);
+
+async function saveReveal(value: number | null) {
+  try {
+    await api('PUT', '/me/preferences', { contactRevealMinutes: value });
+    toast('已更新預設值');
+  } catch {
+    toast('更新失敗，請再試一次');
+  }
+}
 const editing = ref(false);
 const settings = ref<Settings | null>(null);
 const credits = ref<{ balance: { amount: number; currency: string }; serviceFee: { enabled: boolean; feePerOrder: { amount: number; currency: string }; exempt: boolean } } | null>(null);
@@ -25,6 +37,8 @@ async function logout() {
 }
 
 onMounted(async () => {
+  const preferences = await api<{ contactRevealMinutes: number | null }>('GET', '/me/preferences').catch(() => null);
+  if (preferences) reveal.value = preferences.contactRevealMinutes;
   [settings.value, credits.value] = await Promise.all([
     api<Settings>('GET', '/public/settings').catch(() => null),
     api<NonNullable<typeof credits.value>>('GET', '/me/credits').catch(() => null),
@@ -65,6 +79,17 @@ onMounted(async () => {
         }}
       </p>
     </section>
+
+    <section class="card">
+      <h2>{{ t('發單預設') }}</h2>
+      <label class="field">
+        {{ t('接單司機何時看到乘客電話') }}
+        <RevealSelect v-model="reveal" @update:model-value="saveReveal" />
+        <span class="hint">{{ t('每張單發出時也可以另外調整。你自己隨時都看得到。') }}</span>
+      </label>
+    </section>
+
+    <GroupInvites />
 
     <section class="card">
       <div class="me__row">

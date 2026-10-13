@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import PlateTag from '../components/PlateTag.vue';
+import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import { money, pickup, shortTime, type Money } from '../format';
@@ -36,7 +37,9 @@ interface Detail {
   passengerConfirmedAt: string | null;
   viewer: 'dispatcher' | 'driver';
   passengerName: string | null;
-  passengerContact: string;
+  passengerContact: string | null;
+  contactRevealAt: string | null;
+  contactRevealMinutes?: number | null;
   driver: Driver | null;
   driverPrice: Money;
   passengerPrice?: Money;
@@ -74,6 +77,27 @@ async function act(path: string, done: string, confirmText?: string) {
   try {
     order.value = await api<Detail>('POST', `/orders/${id}/${path}`);
     toast(done);
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+const reveal = ref<number | null>(null);
+const editingReveal = ref(false);
+
+function editReveal() {
+  reveal.value = order.value?.contactRevealMinutes ?? null;
+  editingReveal.value = true;
+}
+
+async function saveReveal() {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('PATCH', `/orders/${id}/contact-reveal`, { contactRevealMinutes: reveal.value });
+    editingReveal.value = false;
+    toast('已更新');
   } catch (e) {
     toast(errorText(e));
   } finally {
@@ -207,11 +231,25 @@ onMounted(load);
 
       <section class="card">
         <h2>{{ t('乘客') }}</h2>
-        <p>{{ order.passengerName ? t(order.passengerName) : t('乘客') }}：<strong>{{ order.passengerContact }}</strong></p>
+        <p v-if="order.passengerContact">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}：<strong>{{ order.passengerContact }}</strong></p>
+        <p v-else class="notice">{{ t(`乘客電話將於 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡派單者。`) }}</p>
+        <div v-if="isDispatcher" class="detail__reveal">
+          <template v-if="!editingReveal">
+            <span class="hint">{{ t(`接單司機看到乘客電話：${revealLabel(order.contactRevealMinutes ?? null)}`) }}</span>
+            <button v-if="live" class="chip" type="button" @click="editReveal">{{ t('修改') }}</button>
+          </template>
+          <template v-else>
+            <RevealSelect v-model="reveal" />
+            <div class="row">
+              <button class="button" type="button" :disabled="busy" @click="saveReveal">{{ t('儲存') }}</button>
+              <button class="button secondary" type="button" @click="editingReveal = false">{{ t('取消') }}</button>
+            </div>
+          </template>
+        </div>
         <p class="hint">
           {{ order.passengerConfirmedAt ? t(`乘客已於 ${shortTime(order.passengerConfirmedAt)} 確認行程`) : t('乘客尚未確認') }}
         </p>
-        <div class="row">
+        <div v-if="order.passengerContact" class="row">
           <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`">{{ t('致電乘客') }}</a>
           <button class="button secondary" type="button" @click="copy(order.passengerContact, '已複製')">{{ t('複製') }}</button>
         </div>
@@ -247,6 +285,13 @@ onMounted(load);
   border-radius: var(--radius-input);
   padding: var(--space-md);
   margin: 0 0 var(--space-md);
+}
+.detail__reveal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-md);
 }
 .detail__gap {
   margin-top: var(--space-sm);

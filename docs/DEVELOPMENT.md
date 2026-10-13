@@ -93,6 +93,10 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/orders/:id/complete` | 要 | 完成（發單者或接單司機） |
 | `GET /api/o/:code` | 可選 | 搶單頁；只有發單者和接單司機看得到乘客資料 |
 | `POST /api/o/:code/claim` | 要 | 搶單，先到先得；回傳 `WON` 或 `LOST` |
+| `GET/PUT /api/me/preferences` | 要 | 發單預設：接單司機何時看到乘客電話（`contactRevealMinutes`，null 為搶到即顯示） |
+| `PATCH /api/orders/:id/contact-reveal` | 要 | 逐張調整乘客電話顯示時間（發單者） |
+| `GET/POST /api/me/group-invites`、`PATCH/DELETE /api/me/group-invites/:id` | 要 | 我的派單群（微信群二維碼、個人微信二維碼、WhatsApp 連結；最多 5 個） |
+| `GET /api/public/group-invites/:id/qr` | — | 二維碼圖片（微信群二維碼過期後不再提供） |
 | `GET /api/me/credits` | 要 | 點數餘額、最近紀錄、目前每單服務費（是否免收） |
 | `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現） |
 | `POST /api/c/:confirmCode/confirm` | — | 乘客按確認 |

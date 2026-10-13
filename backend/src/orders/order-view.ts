@@ -1,7 +1,7 @@
 import type { Prisma } from '../../generated/prisma';
 
 export const orderInclude = {
-  dispatcher: { select: { profile: { select: { name: true } } } },
+  dispatcher: { select: { countryCode: true, phone: true, profile: { select: { name: true } } } },
   claimedBy: { select: { countryCode: true, phone: true, profile: true } },
 } satisfies Prisma.OrderInclude;
 
@@ -50,6 +50,14 @@ function driverOf(order: OrderWithPeople) {
   };
 }
 
+/**
+ * When the winning driver may see the passenger's contact: a set number of
+ * minutes before pickup, chosen by the dispatcher, or right away (null).
+ */
+export function contactRevealAt(order: Pick<OrderWithPeople, 'pickupAt' | 'contactRevealMinutes'>): Date | null {
+  return order.contactRevealMinutes === null ? null : new Date(order.pickupAt.getTime() - order.contactRevealMinutes * 60_000);
+}
+
 export function linksOf(order: Pick<OrderWithPeople, 'code' | 'confirmCode'>, baseUrl: string) {
   return { dispatch: `${baseUrl}/o/${order.code}`, passengerConfirm: `${baseUrl}/c/${order.confirmCode}` };
 }
@@ -60,8 +68,11 @@ export function linksOf(order: Pick<OrderWithPeople, 'code' | 'confirmCode'>, ba
  * won the claim. Drivers only ever see the driver price; the passenger price,
  * the spread and the links are only for the dispatcher.
  */
-export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: string) {
+export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: string, now = new Date()) {
   const participant = viewer !== 'other';
+  const revealAt = contactRevealAt(order);
+  // The dispatcher always sees the contact; the driver only from the reveal time on.
+  const contactVisible = viewer === 'dispatcher' || !revealAt || now >= revealAt;
   return {
     code: order.code,
     status: order.status,
@@ -83,12 +94,16 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
       ? {
           id: order.id,
           passengerName: order.passengerName,
-          passengerContact: order.passengerContact,
+          passengerContact: contactVisible ? order.passengerContact : null,
+          contactRevealAt: revealAt?.toISOString() ?? null,
           driver: driverOf(order),
+          // Dispatchers publish their number in their group nickname; the winning driver gets it here.
+          dispatcherPhone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
         }
       : {}),
     ...(viewer === 'dispatcher'
       ? {
+          contactRevealMinutes: order.contactRevealMinutes,
           passengerPrice: passengerPriceOf(order),
           serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
           showPassengerPrice: order.showPassengerPrice,

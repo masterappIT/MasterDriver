@@ -65,6 +65,9 @@ const ERROR_TEXT: Record<string, string> = {
   QUOTA_EXCEEDED: '本月發單額度已用完',
   FEATURE_NOT_AVAILABLE: '你目前的方案沒有這個功能',
   INSUFFICIENT_CREDITS: '點數不足，請先充值',
+  QR_IMAGE_INVALID: '請上傳 400 KB 以內的 PNG、JPG 或 WebP 圖片',
+  GROUP_INVITE_LIMIT: '最多只能加入 5 個群',
+  GROUP_INVITE_NOT_FOUND: '找不到這個群'
 };
 
 const INVALID_PHONE = 'INVALID_PHONE';
@@ -76,7 +79,14 @@ export class ApiError extends Error {
     readonly detail: Record<string, unknown> = {},
   ) {
     const issues = (detail.issues as { message: string }[] | undefined) ?? [];
-    const text = issues.some((issue) => issue.message === INVALID_PHONE) ? '手機號碼格式不正確' : ERROR_TEXT[code];
+    const messages = issues.map((issue) => issue.message);
+    const text = messages.includes(INVALID_PHONE)
+      ? '手機號碼格式不正確'
+      : messages.includes('WHATSAPP_INVITE_INVALID')
+        ? 'WhatsApp 群連結應該是 https://chat.whatsapp.com/ 開頭'
+        : messages.includes('QR_IMAGE_REQUIRED')
+          ? '請上傳二維碼圖片'
+          : ERROR_TEXT[code];
     super(text ?? `操作失敗（${code}）`);
   }
 }

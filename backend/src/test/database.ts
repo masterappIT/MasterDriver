@@ -7,6 +7,7 @@ import { AdminDataService } from '../admin/admin-data.service';
 import { AuditService } from '../admin/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { CommissionService } from '../billing/commission.service';
+import { GroupInvitesService } from '../groups/group-invites.service';
 import { PaymentChannelsService } from '../channels/payment-channels.service';
 import { SmsChannelsService } from '../channels/sms-channels.service';
 import { SecretBox } from '../common/secret-box';
@@ -24,6 +25,7 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'GroupInvite',
   'SmsMessage',
   'SmsChannel',
   'PaymentChannel',
@@ -100,7 +102,8 @@ export async function setupDatabase() {
     entitlements,
     commission,
     credits,
-    orders: new OrdersService(prisma, entitlements, commission, credits, config),
+    groupInvites: new GroupInvitesService(prisma),
+    orders: new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), config),
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
     adminData: new AdminDataService(prisma, audit, credits, commission, entitlements),
@@ -149,6 +152,8 @@ export const sampleOrder = {
   passengers: 4,
   luggage: 3,
   passengerContact: '+852 9876 5432',
+  // Older tests expect the winner to see the contact at once; reveal timing has its own tests.
+  contactRevealMinutes: null,
 };
 
 /** Asserts that an API call fails with the given stable error code. */

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, errorText } from '../api';
+import RevealSelect from '../components/RevealSelect.vue';
 import { fromLocalInput, toLocalInput } from '../format';
 import { t } from '../i18n';
 
@@ -39,6 +40,7 @@ const form = reactive({
   notes: '',
   passengerName: '',
   passengerContact: '',
+  contactRevealMinutes: 60 as number | null,
 });
 
 /** Places used before, most recent first: one tap fills them in. */
@@ -93,6 +95,7 @@ async function submit() {
       notes: form.notes,
       passengerName: form.passengerName,
       passengerContact: form.passengerContact,
+      contactRevealMinutes: form.contactRevealMinutes,
     });
     await router.replace(`/app/orders/${created.id}?sent=1`);
   } catch (e) {
@@ -103,11 +106,12 @@ async function submit() {
 }
 
 onMounted(async () => {
-  try {
-    past.value = await api<PastOrder[]>('GET', '/orders?role=dispatched');
-  } catch {
-    past.value = [];
-  }
+  const [orders, preferences] = await Promise.all([
+    api<PastOrder[]>('GET', '/orders?role=dispatched').catch(() => []),
+    api<{ contactRevealMinutes: number | null }>('GET', '/me/preferences').catch(() => null),
+  ]);
+  past.value = orders;
+  if (preferences) form.contactRevealMinutes = preferences.contactRevealMinutes;
 });
 </script>
 
@@ -165,9 +169,14 @@ onMounted(async () => {
     </div>
 
     <div class="card">
-      <h2>{{ t('乘客') }} <span class="hint">🔒 {{ t('搶到單的司機才看得到') }}</span></h2>
+      <h2>{{ t('乘客') }} <span class="hint">🔒 {{ t('只有搶到單的司機，在你設定的時間後才看得到') }}</span></h2>
       <label class="field">{{ t('乘客稱呼（選填）') }}<input v-model="form.passengerName" class="input" maxlength="40" /></label>
       <label class="field">{{ t('乘客電話或微信') }}<input v-model="form.passengerContact" class="input" maxlength="60" required /></label>
+      <label class="field">
+        {{ t('接單司機何時看到乘客電話') }}
+        <RevealSelect v-model="form.contactRevealMinutes" />
+        <span class="hint">{{ t('在這之前，司機只能聯絡你。預設值可在「我的」修改。') }}</span>
+      </label>
     </div>
 
     <div class="action-bar">

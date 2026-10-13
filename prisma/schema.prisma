@@ -18,6 +18,9 @@ model User {
   countryCode String
   phone       String
   locale      String   @default("zh-Hant")
+  /// Default for new orders: minutes before pickup when the winning driver may see
+  /// the passenger's contact. Null means as soon as the order is claimed.
+  contactRevealMinutes Int? @default(60)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -32,6 +35,7 @@ model User {
   creditAccount         CreditAccount?
   creditEntries         CreditEntry[]
   lead                  Lead?
+  groupInvites          GroupInvite[]
 
   @@unique([countryCode, phone])
 }
@@ -155,8 +159,10 @@ model Order {
   commissionMinor      Int?
   notes                String?
   passengerName        String?
-  /// Visible only to the dispatcher and the driver who claimed the order.
+  /// Visible to the dispatcher always; to the driver who claimed the order only
+  /// from contactRevealMinutes before pickup (null: as soon as claimed).
   passengerContact     String
+  contactRevealMinutes Int?        @default(60)
   claimedById          String?
   claimedAt            DateTime?
   passengerConfirmedAt DateTime?
@@ -612,4 +618,39 @@ model SmsMessage {
 
   @@index([createdAt])
   @@index([countryCode, phone, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Dispatchers' own WeChat / WhatsApp groups, offered on their claim pages so
+// drivers who open a link can join the group ("拉群").
+// ---------------------------------------------------------------------------
+
+/// WECHAT: a group QR (expires after 7 days, and groups over 200 members cannot be
+/// joined by QR). WECHAT_CONTACT: the dispatcher's own WeChat QR, "add me and I'll
+/// pull you in" — it does not expire, so it suits big groups. WHATSAPP: an invite link.
+enum GroupPlatform {
+  WECHAT
+  WHATSAPP
+  WECHAT_CONTACT
+}
+
+model GroupInvite {
+  id              String        @id @default(cuid())
+  ownerId         String
+  platform        GroupPlatform
+  name            String
+  /// WhatsApp invite link (https://chat.whatsapp.com/…). Not used for WeChat.
+  inviteUrl       String?
+  /// WeChat group QR image (PNG/JPEG/WebP, at most 400 KB). Moves to Cloud Storage later.
+  qrImage         Bytes?
+  qrMime          String?
+  /// WeChat group QR codes stop working 7 days after they are generated.
+  expiresAt       DateTime?
+  showOnClaimPage Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
 }

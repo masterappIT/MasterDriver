@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, Put, UseGuards } from '@nestjs/common';
-import { driverProfileSchema, type DriverProfileInput } from '@masterdriver/shared';
+import { contactRevealUpdateSchema, driverProfileSchema, type ContactRevealUpdate, type DriverProfileInput } from '@masterdriver/shared';
 import { AuthGuard, CurrentUser } from '../auth/auth.guard';
 import type { SessionUser } from '../auth/auth.service';
 import { ZodPipe } from '../common/zod-pipe';
@@ -28,5 +28,22 @@ export class ProfileController {
       color: body.color ?? null,
     };
     return this.prisma.driverProfile.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
+  }
+}
+
+/** Dispatcher defaults applied to new orders. */
+@Controller('me/preferences')
+@UseGuards(AuthGuard)
+export class PreferencesController {
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  @Get()
+  get(@CurrentUser() user: SessionUser) {
+    return this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { contactRevealMinutes: true } });
+  }
+
+  @Put()
+  save(@CurrentUser() user: SessionUser, @Body(new ZodPipe(contactRevealUpdateSchema)) body: ContactRevealUpdate) {
+    return this.prisma.user.update({ where: { id: user.id }, data: body, select: { contactRevealMinutes: true } });
   }
 }

@@ -3,13 +3,14 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
+import JoinGroups, { type OfferedGroup } from '../components/JoinGroups.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import PlateTag from '../components/PlateTag.vue';
 import ProfileForm from '../components/ProfileForm.vue';
 import SignInForm from '../components/SignInForm.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { copyText } from '../device';
-import { money, pickup, plates } from '../format';
+import { money, pickup, plates, shortTime } from '../format';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
@@ -30,7 +31,10 @@ interface ClaimView {
   passengerConfirmedAt: string | null;
   viewer: 'dispatcher' | 'driver' | 'other';
   passengerName?: string | null;
-  passengerContact?: string;
+  passengerContact?: string | null;
+  contactRevealAt?: string | null;
+  dispatcherPhone?: string;
+  groupInvites: OfferedGroup[];
 }
 
 const POLL_MS = 5000;
@@ -152,8 +156,11 @@ onBeforeUnmount(() => clearInterval(poller));
 
       <section v-if="order.viewer === 'driver'" class="card">
         <h2>{{ t('乘客資料') }}</h2>
-        <p>{{ order.passengerName ?? t('乘客') }}：<strong>{{ order.passengerContact }}</strong></p>
-        <div class="row">
+        <p v-if="!order.passengerContact" class="notice">
+          {{ t(`乘客電話將於 ${shortTime(order.contactRevealAt ?? null)} 顯示。之前如需安排，請聯絡派單者。`) }}
+        </p>
+        <p v-else>{{ order.passengerName ?? t('乘客') }}：<strong>{{ order.passengerContact }}</strong></p>
+        <div v-if="order.passengerContact" class="row">
           <a class="button" :href="`tel:${order.passengerContact?.replace(/\s/g, '')}`">{{ t('致電乘客') }}</a>
           <button class="button secondary" type="button" @click="copy(order.passengerContact ?? '', '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
@@ -162,6 +169,9 @@ onBeforeUnmount(() => clearInterval(poller));
         </button>
         <p class="hint">
           <PlateTag :hk="session.profile?.hkPlate" :macau="session.profile?.macauPlate" :mainland="session.profile?.mainlandPlate" />
+        </p>
+        <p v-if="order.dispatcherPhone" class="claim-page__dispatcher">
+          {{ t(`派單者 ${order.dispatcherName ?? ''}`) }}：<a :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`">{{ order.dispatcherPhone }}</a>
         </p>
         <RouterLink v-if="order.id" :to="`/app/orders/${order.id}`">{{ t('在「我的單」查看這張單') }}</RouterLink>
       </section>
@@ -174,6 +184,8 @@ onBeforeUnmount(() => clearInterval(poller));
       <p v-else-if="order.status !== 'OPEN'" class="notice">
         {{ order.status === 'CANCELLED' ? t('這張單已被取消。') : t('這張單已被接走。') }}
       </p>
+
+      <JoinGroups v-if="order.viewer !== 'dispatcher'" :groups="order.groupInvites" :dispatcher-name="order.dispatcherName" />
 
       <AdBanner position="CLAIM_PAGE" />
 
@@ -235,6 +247,9 @@ onBeforeUnmount(() => clearInterval(poller));
   background: var(--color-background);
   border-radius: var(--radius-input);
   padding: var(--space-sm) var(--space-md);
+}
+.claim-page__dispatcher {
+  margin: var(--space-md) 0 var(--space-sm);
 }
 .claim-page__share {
   margin-top: var(--space-md);

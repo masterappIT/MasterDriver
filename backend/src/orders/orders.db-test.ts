@@ -143,3 +143,27 @@ test('the dispatcher gets ready-to-paste texts, including the claimed message', 
   const detail = (await ctx.orders.getForParticipant(dispatcher, created.id)) as typeof created;
   assert.ok(detail.share.claimed?.includes('司機：李師傅'));
 });
+
+test('by default the winner sees the passenger contact one hour before pickup, and the dispatcher can change it', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const { contactRevealMinutes: _, ...withoutReveal } = sampleOrder;
+  const created = await ctx.orders.create(dispatcher, withoutReveal);
+  assert.equal(created.contactRevealMinutes, 60);
+
+  const won = await ctx.orders.claim(created.code, driver);
+  assert.equal(won.order.passengerContact, null, 'pickup is days away');
+  assert.ok(won.order.contactRevealAt);
+
+  await ctx.orders.setContactReveal(dispatcher, created.id, { contactRevealMinutes: null });
+  assert.equal((await ctx.orders.getByCode(created.code, driver)).passengerContact, sampleOrder.passengerContact);
+  await rejectsWith(ctx.orders.setContactReveal(driver, created.id, { contactRevealMinutes: 0 }), 'ORDER_NOT_FOUND');
+});
+
+test("the dispatcher's own default applies to new orders", async () => {
+  const dispatcher = await createDriver(ctx);
+  await ctx.prisma.user.update({ where: { id: dispatcher }, data: { contactRevealMinutes: 120 } });
+  const { contactRevealMinutes: _, ...withoutReveal } = sampleOrder;
+  assert.equal((await ctx.orders.create(dispatcher, withoutReveal)).contactRevealMinutes, 120);
+  assert.equal((await ctx.orders.create(dispatcher, { ...withoutReveal, contactRevealMinutes: 30 })).contactRevealMinutes, 30);
+});

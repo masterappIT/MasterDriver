@@ -24,6 +24,7 @@ const order = {
   notes: null,
   passengerName: '陳先生',
   passengerContact: '+852 9123 4567',
+  contactRevealMinutes: null,
   claimedById: 'driver',
   claimedAt: new Date('2026-10-14T01:00:00Z'),
   passengerConfirmedAt: null,
@@ -93,6 +94,17 @@ test('the passenger sees the driver and plates but never the driver price', () =
 
 test('the passenger sees their own price only when the dispatcher shows it', () => {
   assert.deepEqual(toPassengerView({ ...order, showPassengerPrice: true }).price, { amount: 1000, currency: 'HKD' });
+});
+
+test('the driver sees the passenger contact only from the reveal time; the dispatcher always', () => {
+  const timed = { ...order, contactRevealMinutes: 60 };
+  const before = new Date('2026-10-15T05:29:00Z'); // 13:29 Hong Kong, pickup 14:30
+  const after = new Date('2026-10-15T05:30:00Z');
+  const hidden = toOrderView(timed, 'driver', 'https://x.test', before);
+  assert.equal(hidden.passengerContact, null);
+  assert.equal(hidden.contactRevealAt, '2026-10-15T05:30:00.000Z');
+  assert.equal(toOrderView(timed, 'driver', 'https://x.test', after).passengerContact, '+852 9123 4567');
+  assert.equal(toOrderView(timed, 'dispatcher', 'https://x.test', before).passengerContact, '+852 9123 4567');
 });
 
 test('the passenger sees no driver before the order is claimed', () => {

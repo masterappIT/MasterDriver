@@ -51,6 +51,9 @@ const priceSchema = z.object({
   currency: z.enum(CURRENCIES),
 });
 
+/** Up to 24 hours before pickup, or null for "as soon as the order is claimed". */
+export const contactReveal = z.number().int().min(0).max(1440).nullable();
+
 export const createOrderSchema = z.object({
   /** ISO 8601 date-time with offset, e.g. 2026-10-15T14:30:00+08:00. */
   pickupAt: z.string().datetime({ offset: true }),
@@ -69,6 +72,8 @@ export const createOrderSchema = z.object({
   notes: optionalText(500),
   passengerName: optionalText(40),
   passengerContact: text(60),
+  /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */
+  contactRevealMinutes: contactReveal.optional(),
 });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
@@ -106,7 +111,46 @@ export const commissionUpdateSchema = z
   .refine((value) => value.enabled !== undefined || value.fee !== undefined, { message: 'NOTHING_TO_UPDATE' });
 export type CommissionUpdate = z.infer<typeof commissionUpdateSchema>;
 
+export const contactRevealUpdateSchema = z.object({ contactRevealMinutes: contactReveal });
+export type ContactRevealUpdate = z.infer<typeof contactRevealUpdateSchema>;
+
 export const orderListQuerySchema = z.object({
   role: z.enum(['dispatched', 'claimed']),
 });
 export type OrderListQuery = z.infer<typeof orderListQuerySchema>;
+
+export const GROUP_PLATFORMS = ['WECHAT', 'WHATSAPP', 'WECHAT_CONTACT'] as const;
+export type GroupPlatform = (typeof GROUP_PLATFORMS)[number];
+
+/** WhatsApp group invite links look like https://chat.whatsapp.com/AbCdEf123456. */
+export const WHATSAPP_INVITE = /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{10,40}$/;
+/** A QR image sent as a data URL: PNG, JPEG or WebP. Size is checked on the server after decoding. */
+export const QR_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
+
+export const groupInviteCreateSchema = z
+  .object({
+    platform: z.enum(GROUP_PLATFORMS),
+    name: text(40),
+    inviteUrl: z.string().trim().optional(),
+    qrImage: z.string().optional(),
+    showOnClaimPage: z.boolean().default(true),
+  })
+  .refine((value) => (value.platform === 'WHATSAPP' ? WHATSAPP_INVITE.test(value.inviteUrl ?? '') : true), {
+    message: 'WHATSAPP_INVITE_INVALID',
+    path: ['inviteUrl'],
+  })
+  .refine((value) => (value.platform !== 'WHATSAPP' ? QR_DATA_URL.test(value.qrImage ?? '') : true), {
+    message: 'QR_IMAGE_REQUIRED',
+    path: ['qrImage'],
+  });
+export type GroupInviteCreate = z.infer<typeof groupInviteCreateSchema>;
+
+export const groupInviteUpdateSchema = z
+  .object({
+    name: text(40),
+    showOnClaimPage: z.boolean(),
+    inviteUrl: z.string().trim().regex(WHATSAPP_INVITE, 'WHATSAPP_INVITE_INVALID'),
+    qrImage: z.string().regex(QR_DATA_URL, 'QR_IMAGE_REQUIRED'),
+  })
+  .partial();
+export type GroupInviteUpdate = z.infer<typeof groupInviteUpdateSchema>;

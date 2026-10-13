@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { CreateOrderInput, OrderListQuery, UpdateOrderPricesInput } from '@masterdriver/shared';
+import type { ContactRevealUpdate, CreateOrderInput, OrderListQuery, UpdateOrderPricesInput } from '@masterdriver/shared';
 import { Prisma, type OrderStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
@@ -7,6 +7,7 @@ import { apiError } from '../common/errors';
 import { CommissionService } from '../billing/commission.service';
 import { CreditsService } from '../billing/credits.service';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
+import { GroupInvitesService } from '../groups/group-invites.service';
 import { PrismaService } from '../prisma.service';
 import { orderInclude, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
 import { claimedShareText, dispatchShareText, passengerShareText } from './share-text';
@@ -27,6 +28,7 @@ export class OrdersService {
     @Inject(EntitlementsService) private readonly entitlements: EntitlementsService,
     @Inject(CommissionService) private readonly commission: CommissionService,
     @Inject(CreditsService) private readonly credits: CreditsService,
+    @Inject(GroupInvitesService) private readonly groupInvites: GroupInvitesService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -38,6 +40,10 @@ export class OrdersService {
         const order = await this.prisma.$transaction(async (tx) => {
           await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
           const fee = await this.commission.feeFor(tx, userId, now);
+          const preference =
+            input.contactRevealMinutes === undefined
+              ? (await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { contactRevealMinutes: true } })).contactRevealMinutes
+              : input.contactRevealMinutes;
           const created = await tx.order.create({
             data: {
               code: randomCode(ORDER_CODE_LENGTH),
@@ -59,6 +65,7 @@ export class OrdersService {
               notes: input.notes,
               passengerName: input.passengerName,
               passengerContact: input.passengerContact,
+              contactRevealMinutes: preference,
             },
             include: orderInclude,
           });
@@ -95,7 +102,8 @@ export class OrdersService {
   async getByCode(code: string, userId?: string) {
     const order = await this.prisma.order.findUnique({ where: { code }, include: orderInclude });
     if (!order) throw this.notFound();
-    return this.view(order, userId);
+    // The dispatcher's own groups, so drivers who opened the link can join them.
+    return { ...this.view(order, userId), groupInvites: await this.groupInvites.forClaimPage(order.dispatcherId) };
   }
 
   /**
@@ -178,6 +186,11 @@ export class OrdersService {
       throw apiError(HttpStatus.CONFLICT, 'DRIVER_PRICE_LOCKED', 'The order changed while updating; reload and try again');
     }
     return this.getForParticipant(userId, id);
+  }
+
+  /** The dispatcher moves the time the driver sees the passenger's contact; it applies at once. */
+  async setContactReveal(userId: string, id: string, input: ContactRevealUpdate) {
+    return this.transition(userId, id, ['OPEN', 'ASSIGNED'], { contactRevealMinutes: input.contactRevealMinutes }, 'dispatcher');
   }
 
   async getForPassenger(confirmCode: string) {
