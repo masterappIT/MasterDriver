@@ -4,7 +4,9 @@
 
 本文件只記錄架構與操作方式，不得寫入任何密碼、金鑰或 Secret 的內容（本倉庫公開）。
 
-**目前狀態（2026-10-13）：部署檔案已準備好並在本機驗證；雲端資源尚未建立，也還沒有實際部署過。**在「一次性設定」完成並把倉庫變數 `DEPLOY_ENABLED` 設為 `true` 之前，推送到 `main` 只會執行品質閘門，不會部署。
+**目前狀態（2026-10-13）：**「一次性設定」的第 1 到 6 步已在 `master-driver-511510` 完成（服務、映像檔倉庫、資料庫、Secret、客服 bucket、服務帳戶與權限）。**第 7、8 步（讓 GitHub 登入 Google Cloud、GitHub 環境與變數）尚未做**，所以還沒有任何服務部署上去。在第 7、8 步完成並把倉庫變數 `DEPLOY_ENABLED` 設為 `true` 之前，推送到 `main` 只會執行品質閘門，不會部署。
+
+第 7 步暫緩的原因：2026-10-13 發現 Master Travel 倉庫被植入竊取金鑰的工作流程，masterappIT 帳號可能被盜用；能推送到本倉庫的人就能經這條連結操作雲端資源，所以要先確認帳號安全。
 
 ## 分支
 
@@ -120,14 +122,14 @@ gcloud artifacts repositories create masterdriver --repository-format=docker --l
 ### 3. 資料庫
 
 ```bash
-gcloud sql instances create masterdriver-db --database-version=POSTGRES_16 --region="$REGION" \
-  --tier=db-custom-1-3840 --storage-auto-increase --backup-start-time=19:00 \
+gcloud sql instances create masterdriver-db --database-version=POSTGRES_16 --edition=enterprise --region="$REGION" \
+  --tier=db-custom-1-3840 --storage-size=10 --storage-auto-increase --backup-start-time=19:00 \
   --enable-point-in-time-recovery --deletion-protection
 gcloud sql databases create master_driver --instance=masterdriver-db
 gcloud sql users create master_driver --instance=masterdriver-db --password="<自行產生的長密碼>"
 ```
 
-規格是起步用的建議值，試點期間夠用；備份時間 19:00 UTC 是香港凌晨 3 點。
+規格是起步用的建議值，試點期間夠用；備份時間 19:00 UTC 是香港凌晨 3 點。`--edition=enterprise` 是必要的：PostgreSQL 16 預設的版本不接受自訂規格。執行個體建立後就持續計費，還沒有流量時可以先停用（`gcloud sql instances patch masterdriver-db --activation-policy=NEVER`），部署前再改回 `ALWAYS`。
 
 ### 4. Secret
 
@@ -171,7 +173,7 @@ for name in api migrate frontend deploy; do gcloud iam service-accounts create "
 sa() { printf 'masterdriver-%s@%s.iam.gserviceaccount.com' "$1" "$PROJECT_ID"; }
 
 for name in api migrate; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$(sa $name)" --role=roles/cloudsql.client
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$(sa $name)" --role=roles/cloudsql.client --condition=None
   gcloud secrets add-iam-policy-binding masterdriver-database-url --member="serviceAccount:$(sa $name)" --role=roles/secretmanager.secretAccessor
 done
 for secret in masterdriver-otp-pepper masterdriver-data-encryption-key; do
@@ -180,7 +182,7 @@ done
 gcloud storage buckets add-iam-policy-binding "gs://${PROJECT_ID}-support-media" --member="serviceAccount:$(sa api)" --role=roles/storage.objectAdmin
 
 for role in roles/run.admin roles/artifactregistry.writer roles/cloudsql.admin roles/logging.viewer; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$(sa deploy)" --role="$role"
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$(sa deploy)" --role="$role" --condition=None
 done
 # 部署帳戶要能指定另外三個帳戶來執行服務
 for name in api migrate frontend; do
@@ -271,7 +273,8 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 
 ## 尚未驗證
 
-- 以上雲端指令是依 Google Cloud 文件與 Master Travel 的做法寫的，**還沒有在 `master-driver-511510` 執行過**。
+- 第 1 到 6 步的指令已實際執行並核對結果；第 7 到 9 步的指令還沒有執行過。
+- 從本機推送 API 映像檔到映像檔倉庫試了幾次都因上傳逾時失敗（映像檔約 780 MB，本機上行頻寬不足），所以第一次部署要由 GitHub Actions 執行；倉庫目前是空的。
 - 工作流程沒有在 GitHub 上實際跑過部署；已做的是：三個映像檔在本機建置成功，API 映像檔跑過 migration 與資料種子並通過健康檢查，nginx 容器轉發 `/api`、25 MB 以內的上傳、快取與 robots 標頭都在本機確認過，部署腳本通過語法檢查。
 - 客服檔案對真正的 Cloud Storage bucket 的讀寫尚未驗證。
 
