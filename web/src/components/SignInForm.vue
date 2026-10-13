@@ -45,23 +45,34 @@ async function requestCode() {
 }
 
 async function verify() {
+  // The sixth digit and a tap on 登入 can arrive together; send the code once.
+  if (busy.value || code.value.length !== 6) return;
   error.value = '';
   busy.value = true;
   try {
     const result = await api<{ token: string }>('POST', '/auth/otp/verify', { countryCode: countryCode.value, phone: phone.value, code: code.value });
+    codeInput.value?.blur();
     rememberToken(result.token);
     await loadSession();
     emit('signedIn');
   } catch (e) {
     error.value = errorText(e);
+    // A wrong code: empty the boxes and keep the keyboard up for the next try.
+    code.value = '';
+    setTimeout(() => codeInput.value?.focus(), 0);
   } finally {
     busy.value = false;
   }
 }
 
-/** Only digits go into the code, so pasting "驗證碼 123456" still works. */
+/**
+ * Only digits go into the code, so pasting "驗證碼 123456" still works. The sixth digit signs in
+ * at once (typed, pasted, or filled in by the phone from the SMS), so the keyboard never has to
+ * be closed to reach 登入.
+ */
 function onCode(event: Event) {
   code.value = (event.target as HTMLInputElement).value.replace(/\D/g, '').slice(0, 6);
+  if (code.value.length === 6) void verify();
 }
 
 /** Back to step one to fix the number; the countdown keeps running, as the server's limit does. */

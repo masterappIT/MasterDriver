@@ -1,13 +1,24 @@
 import type { Prisma } from '../../generated/prisma';
 import { transferPlacesOf } from './share-text';
 
-const claimerSelect = { select: { countryCode: true, phone: true, profile: true } } as const;
+/** The 名片頁 fields that say how to reach someone, and whether the page is public. */
+const contactPageSelect = { select: { code: true, published: true, wechatId: true, whatsapp: true } } as const;
+/** The driver's page also carries the vehicle photos (at most three), which the passenger sees on their link. */
+const driverPageSelect = {
+  select: { ...contactPageSelect.select, photos: { select: { id: true }, orderBy: { createdAt: 'asc' }, take: 3 } },
+} as const;
+const claimerSelect = { select: { countryCode: true, phone: true, profile: true, profilePage: driverPageSelect } } as const;
+
+/** 行程群 without its image: what the views need. */
+const tripGroupSelect = { select: { platform: true, inviteUrl: true, qrMime: true, expiresAt: true, updatedAt: true } } as const;
 
 export const orderInclude = {
-  dispatcher: { select: { countryCode: true, phone: true, profile: { select: { name: true } } } },
+  dispatcher: { select: { countryCode: true, phone: true, profile: { select: { name: true } }, profilePage: contactPageSelect } },
   claimedBy: claimerSelect,
   // 接駁: every leg of the trip, in order, through the trip's first leg.
-  journeyHead: { include: { journeyLegs: { orderBy: { legIndex: 'asc' }, include: { claimedBy: claimerSelect } } } },
+  journeyHead: { include: { journeyLegs: { orderBy: { legIndex: 'asc' }, include: { claimedBy: claimerSelect } }, tripGroup: tripGroupSelect } },
+  // 行程群: on the order itself, or on the first leg of its trip.
+  tripGroup: tripGroupSelect,
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithPeople = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
@@ -16,7 +27,7 @@ export type JourneyLeg = NonNullable<OrderWithPeople['journeyHead']>['journeyLeg
 /** The legs of the trip this order belongs to, or null when it is a single order. */
 export const legsOf = (order: OrderWithPeople): JourneyLeg[] | null => order.journeyHead?.journeyLegs ?? null;
 
-/** Whether the dispatcher drives this order themselves (這段我自己做). */
+/** Whether the dispatcher drives this order themselves (這單我自己做). */
 export const isSelfDriven = (order: Pick<OrderWithPeople, 'dispatcherId' | 'claimedById'>) =>
   order.claimedById === order.dispatcherId;
 
@@ -47,6 +58,17 @@ export function marginOf(
   return money(order.passengerPriceMinor - order.driverPriceMinor, order.passengerCurrency);
 }
 
+type ContactPage = { code: string; published: boolean; wechatId: string; whatsapp: string } | null;
+
+/**
+ * The WeChat ID and WhatsApp number someone put on their 名片頁, for the other
+ * driver on an order. Whether the page is public does not matter here: only the
+ * dispatcher and the driver who took the order get these, never the passenger.
+ */
+function pageContactOf(page: ContactPage) {
+  return { wechatId: page?.wechatId || null, whatsapp: page?.whatsapp || null };
+}
+
 function driverOf(order: Pick<OrderWithPeople, 'claimedBy'>) {
   const claimer = order.claimedBy;
   if (!claimer) return null;
@@ -56,10 +78,13 @@ function driverOf(order: Pick<OrderWithPeople, 'claimedBy'>) {
     hkPlate: profile?.hkPlate ?? null,
     macauPlate: profile?.macauPlate ?? null,
     mainlandPlate: profile?.mainlandPlate ?? null,
+    plateType: profile?.plateType ?? null,
     vehicleType: profile?.vehicleType ?? null,
     seats: profile?.seats ?? null,
     color: profile?.color ?? null,
     phone: `${claimer.countryCode} ${claimer.phone}`,
+    ...pageContactOf(claimer.profilePage),
+    photoIds: claimer.profilePage?.photos.map((photo) => photo.id) ?? [],
   };
 }
 
@@ -69,6 +94,24 @@ function driverOf(order: Pick<OrderWithPeople, 'claimedBy'>) {
  */
 export function contactRevealAt(order: Pick<OrderWithPeople, 'pickupAt' | 'contactRevealMinutes'>): Date | null {
   return order.contactRevealMinutes === null ? null : new Date(order.pickupAt.getTime() - order.contactRevealMinutes * 60_000);
+}
+
+/**
+ * 行程群: the trip's group as one side may see it. `qrPath` is where that side reads the WeChat
+ * QR from. A WeChat QR past its seven days is only told to the dispatcher, who can replace it.
+ */
+function tripGroupOf(order: OrderWithPeople, qrPath: string, forDispatcher: boolean, now: Date) {
+  const group = order.journeyHead?.tripGroup ?? order.tripGroup;
+  if (!group) return null;
+  const expired = Boolean(group.expiresAt && group.expiresAt <= now);
+  if (expired && !forDispatcher) return null;
+  return {
+    platform: group.platform,
+    inviteUrl: group.inviteUrl,
+    qrUrl: group.qrMime && !expired ? `${qrPath}?v=${group.updatedAt.getTime()}` : null,
+    expiresAt: group.expiresAt?.toISOString() ?? null,
+    expired,
+  };
 }
 
 export function linksOf(order: Pick<OrderWithPeople, 'code' | 'confirmCode'>, baseUrl: string) {
@@ -98,7 +141,7 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         destination: leg.destination,
         ...(viewer === 'dispatcher' ? { id: leg.id } : {}),
         ...(viewer !== 'other'
-          ? { driver: driver && { ...driver, phone: contactVisible ? driver.phone : null } }
+          ? { driver: driver && (contactVisible ? driver : { ...driver, phone: null, wechatId: null, whatsapp: null }) }
           : {}),
       };
     }),
@@ -114,8 +157,11 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
 export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: string, now = new Date()) {
   const participant = viewer !== 'other';
   const revealAt = contactRevealAt(order);
-  // The dispatcher always sees the contact; the driver only from the reveal time on.
-  const contactVisible = viewer === 'dispatcher' || !revealAt || now >= revealAt;
+  // The passenger is the dispatcher's customer: once the trip is done or cancelled, the driver
+  // no longer gets the passenger's phone or the trip's group.
+  const ended = order.status === 'COMPLETED' || order.status === 'CANCELLED';
+  // The dispatcher always sees the contact; the driver only from the reveal time until the trip is over.
+  const contactVisible = viewer === 'dispatcher' || (!ended && (!revealAt || now >= revealAt));
   return {
     code: order.code,
     status: order.status,
@@ -131,6 +177,8 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     requiredPlates: order.requiredPlates,
     journey: journeyOf(order, viewer, contactVisible),
     dispatcherName: order.dispatcher.profile?.name ?? null,
+    // Before claiming, a driver can look at who put the order out: their 名片頁, when it is public.
+    dispatcherPageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,
     claimedAt: order.claimedAt?.toISOString() ?? null,
     passengerConfirmedAt: order.passengerConfirmedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
@@ -141,9 +189,19 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
           passengerName: order.passengerName,
           passengerContact: contactVisible ? order.passengerContact : null,
           contactRevealAt: revealAt?.toISOString() ?? null,
+          // For the driver: the phone is gone because the trip is over, not because it is too early.
+          contactEnded: viewer === 'driver' && ended,
           driver: driverOf(order),
           // Dispatchers publish their number in their group nickname; the winning driver gets it here.
           dispatcherPhone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
+          dispatcherContact: pageContactOf(order.dispatcher.profilePage),
+          // 已結清: the dispatcher's mark, shown to the driver too. Nothing to settle on 這單我自己做.
+          settledAt: isSelfDriven(order) ? null : (order.settledAt?.toISOString() ?? null),
+          // 行程群: the passenger is in it, so the driver gets it when they may see the passenger's contact.
+          tripGroup:
+            contactVisible && order.status !== 'CANCELLED'
+              ? tripGroupOf(order, `/api/orders/${order.id}/trip-group/qr`, viewer === 'dispatcher', now)
+              : null,
         }
       : {}),
     ...(viewer === 'dispatcher'
@@ -155,13 +213,15 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
           serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
           showPassengerPrice: order.showPassengerPrice,
           margin: marginOf(order),
+          showPaymentMethods: order.showPaymentMethods,
+          paidAt: order.paidAt?.toISOString() ?? null,
           links: linksOf(order, baseUrl),
         }
       : {}),
   };
 }
 
-function passengerLeg(leg: JourneyLeg) {
+function passengerLeg(leg: JourneyLeg, confirmCode: string) {
   const assigned = leg.status === 'ASSIGNED' || leg.status === 'COMPLETED';
   const driver = assigned ? driverOf(leg) : null;
   return {
@@ -179,9 +239,12 @@ function passengerLeg(leg: JourneyLeg) {
       hkPlate: driver.hkPlate,
       macauPlate: driver.macauPlate,
       mainlandPlate: driver.mainlandPlate,
+      plateType: driver.plateType,
       vehicleType: driver.vehicleType,
       color: driver.color,
       phone: driver.phone,
+      // The driver's vehicle photos, so the passenger knows the car; served only through this link.
+      photos: driver.photoIds.map((id) => `/api/c/${confirmCode}/driver-photos/${id}`),
     },
   };
 }
@@ -201,10 +264,10 @@ function tripStatus(legs: { status: OrderWithPeople['status'] }[]): OrderWithPeo
  * `legs` lists every leg that is not cancelled; the trip counts as confirmed
  * only when every such leg is.
  */
-export function toPassengerView(order: OrderWithPeople) {
-  const single = passengerLeg(order);
+export function toPassengerView(order: OrderWithPeople, now = new Date()) {
+  const single = passengerLeg(order, order.confirmCode);
   const allLegs = legsOf(order);
-  const legs = allLegs?.filter((leg) => leg.status !== 'CANCELLED').map(passengerLeg) ?? null;
+  const legs = allLegs?.filter((leg) => leg.status !== 'CANCELLED').map((leg) => passengerLeg(leg, order.confirmCode)) ?? null;
   const shown = legs && legs.length > 0 ? legs : null;
   const confirmed = shown
     ? shown.every((leg) => leg.passengerConfirmedAt)
@@ -225,7 +288,20 @@ export function toPassengerView(order: OrderWithPeople) {
     passengerName: order.passengerName,
     price: lead.price,
     dispatcherName: order.dispatcher.profile?.name ?? null,
+    // Who arranged the trip, for questions and changes. The passenger got this link from them,
+    // so their phone, WeChat ID and WhatsApp are theirs to give here. Left out when they drive
+    // the whole trip themselves: the driver's card already is them.
+    dispatcher:
+      !allLegs && isSelfDriven(order)
+        ? null
+        : {
+            name: order.dispatcher.profile?.name ?? null,
+            phone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
+            ...pageContactOf(order.dispatcher.profilePage),
+          },
     passengerConfirmedAt: confirmed,
+    // 行程群: the group the dispatcher made for this trip, when there is one.
+    tripGroup: tripGroupOf(order, `/api/c/${order.confirmCode}/trip-group/qr`, false, now),
     driver: lead.driver,
     legs: shown,
   };

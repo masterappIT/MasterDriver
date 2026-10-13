@@ -1,28 +1,30 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { api, errorText, session } from '../api';
 import OrderCard, { type OrderSummary } from '../components/OrderCard.vue';
+import PoolRadar from '../components/PoolRadar.vue';
 import ProfileForm from '../components/ProfileForm.vue';
 import { t } from '../i18n';
 
 /**
  * 接單池: orders their dispatchers chose to list for every signed-in driver.
  * Each one opens its claim page, the same page as the link in a group.
+ * The pool looks again on its own (no pull to refresh, which fights WeChat's own gesture).
  */
+const REFRESH_MS = 15_000;
 const orders = ref<OrderSummary[]>([]);
 const date = ref('');
-const keyword = ref('');
 const error = ref('');
 const loaded = ref(false);
+let timer: ReturnType<typeof setInterval> | undefined;
 
 async function load() {
   if (!session.profile) return;
-  error.value = '';
   const query = new URLSearchParams();
   if (date.value) query.set('date', date.value);
-  if (keyword.value.trim()) query.set('q', keyword.value.trim());
   try {
     orders.value = await api<OrderSummary[]>('GET', `/orders/pool?${query}`);
+    error.value = '';
   } catch (e) {
     error.value = errorText(e);
   } finally {
@@ -44,16 +46,33 @@ function pickDay(day: string) {
 
 function clear() {
   date.value = '';
-  keyword.value = '';
   void load();
 }
 
-onMounted(load);
+/** Back on the page: look at once. Hidden: stop asking. */
+function onVisible() {
+  if (document.visibilityState === 'visible') void load();
+}
+
+onMounted(() => {
+  void load();
+  timer = setInterval(() => {
+    if (document.visibilityState === 'visible') void load();
+  }, REFRESH_MS);
+  document.addEventListener('visibilitychange', onVisible);
+});
+onBeforeUnmount(() => {
+  clearInterval(timer);
+  document.removeEventListener('visibilitychange', onVisible);
+});
 </script>
 
 <template>
   <div class="page">
-    <h1>{{ t('接單池') }}</h1>
+    <header class="pool-page__head">
+      <h1>{{ t('接單池') }}</h1>
+      <PoolRadar v-if="session.profile && orders.length" :size="28" />
+    </header>
 
     <section v-if="!session.profile" class="card">
       <p>{{ t('填好司機資料（姓名、車牌）就能看接單池，搶單時也要用到。') }}</p>
@@ -61,11 +80,6 @@ onMounted(load);
     </section>
 
     <template v-else>
-      <p class="hint pool-page__intro">{{ t('出單者自己選擇放進來的單。先到先得，和群裡的連結是同一張單。') }}</p>
-      <form class="pool-page__search" role="search" @submit.prevent="load">
-        <input v-model="keyword" type="search" maxlength="40" :placeholder="t('搜地點，例如：機場')" :aria-label="t('地點')" />
-        <button type="submit">{{ t('搜尋') }}</button>
-      </form>
       <div class="chips pool-page__days">
         <button class="chip" :class="{ 'chip--on': date === today }" type="button" :aria-pressed="date === today" @click="pickDay(today)">{{ t('今天') }}</button>
         <button class="chip" :class="{ 'chip--on': date === tomorrow }" type="button" :aria-pressed="date === tomorrow" @click="pickDay(tomorrow)">{{ t('明天') }}</button>
@@ -74,56 +88,32 @@ onMounted(load);
           {{ date && date !== today && date !== tomorrow ? date.slice(5).replace('-', '/') : t('其他日子') }}
           <input v-model="date" type="date" :aria-label="t('出發日期')" @change="load" />
         </label>
-        <button v-if="date || keyword.trim()" class="chip" type="button" @click="clear">{{ t('清除') }}</button>
+        <button v-if="date" class="chip" type="button" @click="clear">{{ t('全部日子') }}</button>
       </div>
       <div v-if="error" class="notice error">{{ error }}</div>
       <OrderCard v-for="order in orders" :key="order.code" :order="order" role="pool" />
-      <div v-if="loaded && !error && orders.length === 0" class="card muted">
-        <template v-if="date || keyword.trim()">{{ t('沒有符合的單。') }}</template>
-        <template v-else>{{ t('接單池目前沒有單。在群裡看到單，點連結一樣可以搶。') }}</template>
+
+      <!-- Nothing yet: the radar keeps turning while the pool looks again every few seconds. -->
+      <div v-if="!error && orders.length === 0" class="pool-page__scan" role="status">
+        <PoolRadar />
+        <strong>{{ loaded ? (date ? t('這天暫時沒有單') : t('正在找單')) : t('正在載入') }}</strong>
+        <span>{{ t('出單者放進接單池的單會自動出現，先到先得。在群裡看到單，點連結一樣可以搶。') }}</span>
       </div>
+      <p v-else-if="orders.length" class="hint pool-page__note">{{ t('出單者自己選擇放進來的單，和群裡的連結是同一張單。每 15 秒自動更新。') }}</p>
     </template>
   </div>
 </template>
 
 <style scoped>
-.pool-page__intro {
-  margin: calc(var(--space-sm) * -1) 0 var(--space-md);
-}
-/* One capsule for the place, with 搜尋 inside it. */
-.pool-page__search {
+.pool-page__head {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  justify-content: space-between;
+  gap: var(--space-md);
   margin-bottom: var(--space-md);
-  padding: 4px 4px 4px var(--space-lg);
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-pill);
-  background: var(--color-card);
-  box-shadow: var(--shadow-card);
 }
-.pool-page__search input {
-  flex: 1;
-  min-width: 0;
-  min-height: 40px;
-  border: none;
-  background: transparent;
-  color: var(--color-text);
-  font: inherit;
-  font-size: 16px;
-  outline: none;
-}
-.pool-page__search button {
-  flex-shrink: 0;
-  min-height: 40px;
-  padding: 0 var(--space-lg);
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
+.pool-page__head h1 {
+  margin: 0;
 }
 .pool-page__days {
   gap: var(--space-sm);
@@ -139,5 +129,27 @@ onMounted(load);
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+/* The radar in the middle of the screen while the pool is empty. */
+.pool-page__scan {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-xl);
+  padding: 0 var(--space-lg);
+  text-align: center;
+}
+.pool-page__scan strong {
+  margin-top: var(--space-md);
+  font-size: var(--font-body-large);
+}
+.pool-page__scan span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+}
+.pool-page__note {
+  margin: var(--space-sm) var(--space-xs) 0;
+  text-align: center;
 }
 </style>

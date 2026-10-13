@@ -72,7 +72,7 @@ onMounted(async () => {
 
     <div class="grid">
       <div class="card">
-        <div class="muted">司機價</div>
+        <div class="muted">出單價</div>
         <div class="stat">{{ money(order.driverPrice) }}</div>
       </div>
       <div class="card">

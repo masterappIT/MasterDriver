@@ -42,7 +42,7 @@ npm run dev:web
 ```
 
 - 網頁在 `http://localhost:5180`（與 `.env` 的 `PUBLIC_BASE_URL` 一致，派單連結和乘客確認連結會打開這裡）。
-- 頁面：`/` 平台首頁（未登入時顯示；登入後轉到 `/app`）、`/legal/terms` 與 `/legal/privacy`（後台「一般設定」的條款內容）、`/p/:code` 名片頁（公開，可預約）、`/b/:code` 乘客的預約連結、`/app/profile-page` 編輯名片頁、`/app/bookings` 與 `/app/bookings/:id` 司機的預約、`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/pool` 接單池（要先有司機資料）、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
+- 頁面：`/` 平台首頁（未登入時顯示；登入後轉到 `/app`）、`/legal/terms` 與 `/legal/privacy`（後台「一般設定」的條款內容）、`/p/:code` 名片頁（公開，可預約）、`/b/:code` 乘客的預約連結、`/app/profile-page` 編輯名片頁、`/app/bookings` 與 `/app/bookings/:id` 司機的預約、`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示出單價）、`/login`、`/app` 首頁、`/app/pool` 接單池（要先有司機資料）、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
 - 發單頁最上方的「一句話發單」用 `shared/src/quick-order.ts` 解析（時間、起終點、座位、人數、行李、價格、備註；繁簡皆可），只負責填入下方表格，不會直接發出。測試案例取自實際的微信群訊息。
 - 平台首頁的標題、描述與分享圖在瀏覽器裡套用後台「SEO → 首頁」的設定。`index.html` 固定帶 `noindex`，所以**首頁目前不會被搜尋引擎收錄**，不執行腳本的分享預覽（例如微信、WhatsApp 的連結預覽）也讀不到這些設定；要收錄和預覽，需要由伺服器輸出每一頁的標題與摘要，這還沒做。
 - Logo 在後台「一般設定」上傳，存在資料庫（`SiteLogo`），由 `BrandMark` 元件顯示在首頁、登入頁、搶單頁；網址帶版本，換了 Logo 會立即更新。
@@ -110,12 +110,16 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/auth/logout` | 要 | 登出 |
 | `GET /api/me` | 要 | 目前用戶與司機資料 |
 | `GET/PUT /api/me/profile` | 要 | 司機資料（第一次搶單前要填）。`vehicleOwnership`（`HK`、`MACAU`、`MAINLAND`）與 `plateType`（`SINGLE`、`DUAL`、`TRIPLE`）決定要填哪些車牌和格式，規則在 `shared/src/vehicle-plate.ts`；車牌存成固定格式（澳門 `AA-00-00`，內地 `粵Z·…港`、`粵Z·…澳` 或 `粵A·…`），該類型沒有的車牌不保存；`vehicleType` 是自由文字，必填 |
-| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer: true`：接駁單的第 1 段；`afterOrderId`：加接駁段（接在行程最後一段後面，出發地即接駁位置，不再扣額度和服務費）；`requiredPlates`：需要的車牌（只標明）；`selfDrive: true`：這段我自己做（直接算自己接，要先有司機資料）；`inPool`：同時放到接單池（不傳時用「我的」的預設值；`selfDrive` 的單一律不進池） |
+| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer: true`：接駁單的第 1 段；`afterOrderId`：加接駁段（接在行程最後一段後面，出發地即接駁位置，不再扣額度和服務費）；`requiredPlates`：需要的車牌（只標明）；`selfDrive: true`：這單我自己做（直接算自己接，要先有司機資料）；`inPool`：同時放到接單池（不傳時用「我的」的預設值；`selfDrive` 的單一律不進池） |
 | `GET /api/orders?role=dispatched\|claimed` | 要 | 我的派單／我的接單 |
 | `GET /api/orders/pool?date=YYYY-MM-DD&q=地點` | 要 | 接單池：發單者勾選放進來、待搶且未到出發時間的單，不含自己發的；與搶單頁相同的資訊，不含乘客資料；最多 50 張。沒有司機資料時回 `PROFILE_REQUIRED` |
 | `GET /api/orders/:id` | 要 | 單的詳情（發單者或接單司機） |
 | `PATCH /api/orders/:id/pool` | 要 | 把單放進或取出接單池（發單者；只限待搶的單） |
-| `PATCH /api/orders/:id/prices` | 要 | 改司機價、乘客價、是否讓乘客看到乘客價（發單者；司機價在有人接單後鎖定） |
+| `PATCH /api/orders/:id/trip-group`、`GET /api/orders/:id/trip-group/qr` | 要 | 行程群（出單者設定）：`platform` 為 `WHATSAPP`（加 `inviteUrl`）、`WECHAT`（加 `qrImage`）或 `null`（移除）；二維碼圖片給出單者與可看乘客電話的接單司機 |
+| `PATCH /api/orders/:id/settlement` | 要 | 已結清（出單者）：`settled` 把和接單司機的帳標記為已結清或改回未結清；只限已完成、由別的司機接的單；接駁各段各自標記；接單司機在單的資料看到 `settledAt` |
+| `PATCH /api/orders/:id/payment` | 要 | 收款（出單者）：`showPaymentMethods` 乘客確認頁是否顯示收款方式，`paid` 標記已收款或改回未收款；接駁行程整個一起改；已取消的單不行 |
+| `GET/POST /api/me/payment-methods`、`PATCH/DELETE /api/me/payment-methods/:id`、`GET /api/me/payment-methods/:id/qr` | 要 | 自己的收款方式（最多 5 個；文字帳號或收款碼圖片，至少一樣）與自己的收款碼圖片 |
+| `PATCH /api/orders/:id/prices` | 要 | 改出單價、乘客價、是否讓乘客看到乘客價（發單者；出單價在有人接單後鎖定） |
 | `POST /api/orders/:id/cancel` | 要 | 取消（發單者） |
 | `POST /api/orders/:id/reopen` | 要 | 改派：收回並重新開放搶單（發單者） |
 | `POST /api/orders/:id/complete` | 要 | 完成（發單者或接單司機） |
@@ -140,7 +144,9 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET /api/public/profiles/:code` | 可選 | 名片頁；未公開時只有本人看得到 |
 | `POST /api/public/profiles/:code/bookings` | — | 乘客送出預約，回傳預約連結 |
 | `GET /api/public/bookings/:code`、`POST …/accept`、`…/cancel` | — | 乘客的預約連結：狀態與報價、同意報價、取消 |
-| `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現）；接駁行程另有 `legs` 列出未取消的各段與司機 |
+| `GET /api/c/:confirmCode` | — | 乘客確認頁（不含出單價；乘客價只在發單者選擇顯示時出現）；接駁行程另有 `legs` 列出未取消的各段與司機；出單者選擇顯示收款方式時另有 `payment`（收款人、金額、是否已收款、收款方式） |
+| `GET /api/c/:confirmCode/trip-group/qr`、`GET /api/c/:confirmCode/driver-photos/:id` | — | 乘客看的行程群二維碼（未取消、未過期）與接送司機的車輛照片（只限現在接這張單或其接駁段的司機） |
+| `GET /api/c/:confirmCode/payment-methods/:id/qr` | — | 乘客看的收款碼圖片：只限該單顯示收款方式、未取消，且收款方式屬於出單者 |
 | `POST /api/c/:confirmCode/confirm` | — | 乘客按確認；接駁行程一次確認全部未取消的段 |
 
 ### 公開資料（司機端與公開頁面用，不用登入）

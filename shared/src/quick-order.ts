@@ -1,6 +1,6 @@
 /**
  * "一句話出單": reads an order written the way dispatchers already type it in
- * WeChat groups, e.g. "明天15:40澳门送惠州博罗湾，直车" or "6：20香机到南山 8座",
+ * WeChat groups, e.g. "明天15:40澳门送香港，直车" or "6：20香机到南山 8座",
  * and pulls out the time, route, seats, people, luggage, price and notes. It
  * only proposes values: the dispatcher sees them and can correct them before
  * sending. Works on Traditional and Simplified Chinese. No dependencies, so the

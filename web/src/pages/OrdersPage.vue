@@ -14,16 +14,26 @@ const error = ref('');
 const loaded = ref(false);
 
 /** Which orders to show; in progress first, since that is what the driver acts on. */
-type Phase = 'live' | 'done' | 'cancelled';
-const PHASES: { value: Phase; label: string; statuses: string[] }[] = [
+type Phase = 'live' | 'done' | 'cancelled' | 'unpaid' | 'unsettled';
+const PHASES: { value: Phase; label: string; statuses: string[]; dispatchedOnly?: boolean }[] = [
   { value: 'live', label: '進行中', statuses: ['OPEN', 'ASSIGNED'] },
   { value: 'done', label: '已完成', statuses: ['COMPLETED'] },
   { value: 'cancelled', label: '已取消', statuses: ['CANCELLED'] },
+  // 收款: orders the dispatcher has a driver for (or finished) but has not marked as paid.
+  { value: 'unpaid', label: '未收款', statuses: ['ASSIGNED', 'COMPLETED'], dispatchedOnly: true },
+  // 已結清: finished orders whose account between dispatcher and driver is not marked settled; both sides.
+  { value: 'unsettled', label: '未結清', statuses: ['COMPLETED'] },
 ];
+const phases = computed(() => PHASES.filter((item) => !item.dispatchedOnly || tab.value === 'dispatched'));
 const phase = ref<Phase>('live');
 const shown = computed(() => {
   const statuses = PHASES.find((item) => item.value === phase.value)?.statuses ?? [];
-  return listed.value.filter((order) => statuses.includes(order.status));
+  return listed.value.filter(
+    (order) =>
+      statuses.includes(order.status) &&
+      (phase.value !== 'unpaid' || !order.paidAt) &&
+      (phase.value !== 'unsettled' || (!order.settledAt && !order.selfDrive)),
+  );
 });
 
 /** 接駁: the legs of one trip stay together, in leg order, where the trip's first listed leg appears. */
@@ -66,6 +76,7 @@ function onVisible() {
 }
 
 watch(tab, (value) => {
+  if (value === 'claimed' && phase.value === 'unpaid') phase.value = 'live';
   void router.replace({ query: { tab: value } });
   void load();
 });
@@ -85,7 +96,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
     </div>
     <div class="chips orders-page__phases">
       <button
-        v-for="item in PHASES"
+        v-for="item in phases"
         :key="item.value"
         class="chip"
         :class="{ 'chip--on': phase === item.value }"

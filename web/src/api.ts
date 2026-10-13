@@ -64,7 +64,7 @@ const ERROR_TEXT: Record<string, string> = {
   PROFILE_REQUIRED: '請先填寫司機資料',
   TEAM_ONLY: '這張單只限車隊成員搶',
   INVALID_ORDER_STATUS: '這張單的狀態已經改變，請重新整理',
-  DRIVER_PRICE_LOCKED: '已有司機接單，司機價不能再改',
+  DRIVER_PRICE_LOCKED: '已有司機接單，出單價不能再改',
   QUOTA_EXCEEDED: '本月出單額度已用完',
   FEATURE_NOT_AVAILABLE: '你目前的方案沒有這個功能',
   INSUFFICIENT_CREDITS: '點數不足，請先充值',

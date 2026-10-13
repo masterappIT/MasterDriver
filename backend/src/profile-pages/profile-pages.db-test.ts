@@ -83,6 +83,27 @@ test('photos: real pictures only, a few per page, public once the page is, gone 
   assert.ok(await ctx.profilePages.photo(code, page.photos[1].id, userId), 'the owner still sees it');
 });
 
+test('the passenger sees the vehicle photos of the driver who has the order, through their link only', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx, '有車照的師傅');
+  // Not published: the photos still reach this driver's passengers.
+  const photoId = (await ctx.profilePages.addPhoto(driver, jpeg(10))).photos[0].id;
+  const order = await ctx.orders.create(dispatcher, sampleOrder);
+  const confirmCode = order.links.passengerConfirm.split('/c/')[1];
+  const other = await ctx.orders.create(dispatcher, sampleOrder);
+  const otherCode = other.links.passengerConfirm.split('/c/')[1];
+
+  await rejectsWith(ctx.profilePages.passengerPhoto(confirmCode, photoId), 'PHOTO_NOT_FOUND');
+  await ctx.orders.claim(order.code, driver);
+  const page = await ctx.orders.getForPassenger(confirmCode);
+  assert.deepEqual(page.driver?.photos, [`/api/c/${confirmCode}/driver-photos/${photoId}`]);
+  assert.ok((await ctx.profilePages.passengerPhoto(confirmCode, photoId)).bytes.equals(jpeg(10)));
+  await rejectsWith(ctx.profilePages.passengerPhoto(otherCode, photoId), 'PHOTO_NOT_FOUND');
+
+  await ctx.orders.reopen(dispatcher, order.id);
+  await rejectsWith(ctx.profilePages.passengerPhoto(confirmCode, photoId), 'PHOTO_NOT_FOUND');
+});
+
 test('a booking goes from request to quote to agreement to an order, and the passenger follows it by link', async () => {
   const { userId, code } = await publishedPage();
   const sent = await ctx.profilePages.createBooking(code, { ...request(), source: 'xhs' }, '2.2.2.2');

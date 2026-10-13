@@ -2,19 +2,29 @@
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
+import AppIcon from '../components/AppIcon.vue';
+import ContactLines from '../components/ContactLines.vue';
 import PlateTag from '../components/PlateTag.vue';
+import TripGroupJoin, { type TripGroup } from '../components/TripGroupJoin.vue';
 import RoutePoints from '../components/RoutePoints.vue';
-import { money, pickup, shortTime } from '../format';
+import { copyText } from '../device';
+import { loadLine, money, pickup, plateKind, shortTime } from '../format';
 import { t } from '../i18n';
+import { PAYMENT_KINDS, type PassengerPayment } from '../payment';
+import { toast } from '../toast';
+import type { PlateType } from '@masterdriver/shared/vehicle-plate';
 
 interface TripDriver {
   name: string | null;
   hkPlate: string | null;
   macauPlate: string | null;
   mainlandPlate: string | null;
+  plateType?: PlateType | null;
   vehicleType: string | null;
   color: string | null;
   phone: string;
+  /** The driver's vehicle photos, when they uploaded any. */
+  photos: string[];
 }
 
 /** 接駁: one leg of the trip, with its own driver. */
@@ -42,10 +52,16 @@ interface PassengerView {
   passengerName: string | null;
   price: { amount: number; currency: string } | null;
   dispatcherName: string | null;
+  /** Who arranged the trip and how to reach them; null when they are the driver. */
+  dispatcher: { name: string | null; phone: string; wechatId: string | null; whatsapp: string | null } | null;
   passengerConfirmedAt: string | null;
+  /** 行程群: the group made for this trip, when the person who arranged it gave one. */
+  tripGroup: TripGroup | null;
   driver: TripDriver | null;
   /** Every leg that is not cancelled, when the trip changes cars on the way. */
   legs: TripLeg[] | null;
+  /** 收款: how to pay the dispatcher, when they chose to show it. */
+  payment: PassengerPayment | null;
 }
 
 /** The passenger's page: no sign-in, no ads, never the driver price. */
@@ -74,6 +90,10 @@ async function confirm() {
   }
 }
 
+async function copyAccount(account: string) {
+  toast((await copyText(account)) ? '已複製' : '複製失敗，請長按文字自行複製');
+}
+
 onMounted(load);
 </script>
 
@@ -90,7 +110,7 @@ onMounted(load);
         <section class="card">
           <div class="confirm-page__time">{{ pickup(trip.pickupAt) }}</div>
           <RoutePoints :origin="trip.origin" :destination="trip.destination" />
-          <p class="confirm-page__load">{{ t(`${trip.passengers}人｜${trip.luggage}件行李｜中途換車，共 ${trip.legs.length} 段`) }}</p>
+          <p class="confirm-page__load">{{ t(`${loadLine(trip.passengers, trip.luggage)}｜中途換車，共 ${trip.legs.length} 段`) }}</p>
         </section>
         <template v-for="leg in trip.legs" :key="leg.legIndex">
           <p v-if="leg.legIndex > 1" class="confirm-page__handoff">
@@ -104,9 +124,12 @@ onMounted(load);
             <div v-if="leg.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(leg.price) }}</strong></div>
             <div v-if="leg.driver" class="confirm-page__driver">
               <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>
-              <span class="muted">{{ [leg.driver.vehicleType, leg.driver.color].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
+              <span class="muted">{{ [leg.driver.vehicleType, leg.driver.color, plateKind(leg.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
               <div class="confirm-page__plates">
                 <PlateTag :hk="leg.driver.hkPlate" :macau="leg.driver.macauPlate" :mainland="leg.driver.mainlandPlate" />
+              </div>
+              <div v-if="leg.driver.photos.length" class="confirm-page__photos">
+                <img v-for="photo in leg.driver.photos" :key="photo" :src="photo" :alt="t('司機的車')" loading="lazy" />
               </div>
               <a class="button secondary block" :href="`tel:${leg.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
             </div>
@@ -119,7 +142,7 @@ onMounted(load);
         <section class="card">
           <div class="confirm-page__time">{{ pickup(trip.pickupAt) }}</div>
           <RoutePoints :origin="trip.origin" :destination="trip.destination" :waypoints="trip.waypoints" />
-          <p class="confirm-page__load">{{ t([`${trip.passengers}人`, `${trip.luggage}件行李`, trip.vehicleType].filter(Boolean).join('｜')) }}</p>
+          <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
           <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(trip.price) }}</strong></div>
         </section>
 
@@ -127,9 +150,12 @@ onMounted(load);
           <p class="confirm-page__label">{{ t('接送司機') }}</p>
           <div class="confirm-page__driver">
             <strong>{{ trip.driver.name ? t(trip.driver.name) : t('司機') }}</strong>
-            <span class="muted">{{ [trip.driver.vehicleType, trip.driver.color].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
+            <span class="muted">{{ [trip.driver.vehicleType, trip.driver.color, plateKind(trip.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
             <div class="confirm-page__plates">
               <PlateTag :hk="trip.driver.hkPlate" :macau="trip.driver.macauPlate" :mainland="trip.driver.mainlandPlate" />
+            </div>
+            <div v-if="trip.driver.photos.length" class="confirm-page__photos">
+              <img v-for="photo in trip.driver.photos" :key="photo" :src="photo" :alt="t('司機的車')" loading="lazy" />
             </div>
             <a class="button secondary block" :href="`tel:${trip.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
           </div>
@@ -137,10 +163,46 @@ onMounted(load);
         <section v-else-if="trip.status === 'OPEN'" class="card muted">{{ t('司機安排中，安排好後這裡會顯示司機和車牌。') }}</section>
       </template>
 
-      <p class="confirm-page__note">{{ t('車費由你和司機直接約定和支付，平台不收款。') }}</p>
+      <!-- Who arranged the trip: the one to ask about changes, the price or anything else. -->
+      <section v-if="trip.dispatcher" class="card">
+        <p class="confirm-page__label">{{ t('行程有問題或要更改，聯絡為你安排的人') }}</p>
+        <div class="confirm-page__arranger">
+          <strong>{{ trip.dispatcher.name ? t(trip.dispatcher.name) : t('安排行程的人') }}</strong>
+          <span class="muted">{{ trip.dispatcher.phone }}</span>
+        </div>
+        <a class="button secondary block" :href="`tel:${trip.dispatcher.phone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電') }}</a>
+        <ContactLines class="confirm-page__arranger-more" :wechat-id="trip.dispatcher.wechatId" :whatsapp="trip.dispatcher.whatsapp" />
+      </section>
+
+      <section v-if="trip.tripGroup && trip.status !== 'CANCELLED'" class="card">
+        <p class="confirm-page__label">{{ t('行程群：你、司機和為你安排的人都在裡面') }}</p>
+        <TripGroupJoin :group="trip.tripGroup" />
+      </section>
+
+      <!-- 收款: the dispatcher's own ways to be paid; the money goes straight to them. -->
+      <section v-if="trip.payment" class="card confirm-page__pay">
+        <span class="confirm-page__label">{{ trip.payment.payee ? t(`付款給 ${trip.payment.payee}`) : t('付款方式') }}</span>
+        <strong v-if="trip.payment.amount" class="confirm-page__pay-amount">{{ money(trip.payment.amount) }}</strong>
+        <p v-if="trip.payment.paid" class="confirm-page__paid">{{ t('已確認收到你的付款') }}</p>
+        <div v-for="method in trip.payment.methods" :key="method.id" class="confirm-page__method">
+          <div class="confirm-page__method-head">
+            <strong>{{ t(method.label) }}</strong>
+            <span v-if="method.label !== PAYMENT_KINDS[method.kind].name" class="hint">{{ t(PAYMENT_KINDS[method.kind].name) }}</span>
+          </div>
+          <img v-if="method.qrUrl" :src="method.qrUrl" :alt="t(`${method.label}收款碼`)" class="confirm-page__method-qr" />
+          <p v-if="method.qrUrl" class="hint confirm-page__method-hint">{{ t('長按圖片可以儲存，再到對應的 App 掃碼付款') }}</p>
+          <div v-if="method.account" class="confirm-page__method-account">
+            <span>{{ method.account }}</span>
+            <button class="chip" type="button" @click="copyAccount(method.account)">{{ t('複製') }}</button>
+          </div>
+        </div>
+      </section>
+
+      <p class="confirm-page__note">
+        {{ trip.payment ? t('車費直接付給為你安排的司機，平台不經手。付款後請告訴對方。') : t('車費由你和司機直接約定和支付，平台不收款。') }}
+      </p>
 
       <footer class="confirm-page__footer">
-        <RouterLink to="/">{{ t('你也是司機？用師傅幫免費出單') }}</RouterLink>
         <span>{{ t('由 MasterDriver 跨境師傅幫 提供') }}</span>
       </footer>
 
@@ -164,6 +226,33 @@ onMounted(load);
   margin: 0 0 var(--space-sm);
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
+}
+/* The driver's car, side by side, so the passenger can spot it. */
+.confirm-page__photos {
+  display: flex;
+  gap: var(--space-sm);
+  width: 100%;
+  margin-bottom: var(--space-sm);
+  overflow-x: auto;
+}
+.confirm-page__photos img {
+  flex: 1 1 0;
+  min-width: 96px;
+  max-width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-input);
+  background: var(--color-tint);
+}
+.confirm-page__arranger {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.confirm-page__arranger-more {
+  margin-top: var(--space-md);
 }
 .confirm-page__time {
   margin-bottom: var(--space-lg);
@@ -218,6 +307,55 @@ onMounted(load);
 .confirm-page__leg-route {
   font-weight: 600;
   margin: var(--space-xs) 0 var(--space-sm);
+}
+.confirm-page__pay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+.confirm-page__pay-amount {
+  color: var(--color-gold-ink);
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.confirm-page__paid {
+  margin: 0;
+  color: var(--status-confirmed);
+  font-weight: 700;
+}
+.confirm-page__method {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  padding-top: var(--space-md);
+  margin-top: var(--space-sm);
+  border-top: 1px solid var(--color-divider);
+}
+.confirm-page__method-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+.confirm-page__method-qr {
+  align-self: center;
+  width: 200px;
+  max-width: 100%;
+  border-radius: var(--radius-input);
+  background: var(--color-surface);
+}
+.confirm-page__method-hint {
+  align-self: center;
+  margin: 0;
+}
+.confirm-page__method-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  align-self: stretch;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .confirm-page__note {
   margin: 0 0 var(--space-md);

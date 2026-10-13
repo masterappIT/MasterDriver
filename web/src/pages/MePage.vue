@@ -8,7 +8,7 @@ import MenuRow from '../components/MenuRow.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect from '../components/RevealSelect.vue';
 import ProfileForm from '../components/ProfileForm.vue';
-import { money } from '../format';
+import { money, plateKind } from '../format';
 import { language, setLanguage, t } from '../i18n';
 import { toast } from '../toast';
 import { refreshUnread, unread } from '../unread';
@@ -45,10 +45,10 @@ const settings = ref<Settings | null>(null);
 const upgradeUrl = ref<string | null>(null);
 const credits = ref<{ balance: { amount: number; currency: string }; serviceFee: { enabled: boolean; feePerOrder: { amount: number; currency: string }; exempt: boolean } } | null>(null);
 
-/** "Alphard・7座・黑色" under the driver's name. */
+/** "Alphard・7座・黑色・兩地牌" under the driver's name. */
 const vehicle = computed(() => {
   const profile = session.profile;
-  return profile ? [profile.vehicleType, profile.seats ? `${profile.seats}座` : '', profile.color].filter(Boolean).join('・') : '';
+  return profile ? [profile.vehicleType, profile.seats ? `${profile.seats}座` : '', profile.color, plateKind(profile)].filter(Boolean).join('・') : '';
 });
 const supportContacts = computed(() =>
   [settings.value?.support.wechatId ? `${t('微信')} ${settings.value.support.wechatId}` : '', settings.value?.support.whatsapp ? `WhatsApp ${settings.value.support.whatsapp}` : '']
@@ -107,6 +107,7 @@ onMounted(async () => {
 
     <section class="card me__group">
       <span class="section-label">{{ t('出單') }}</span>
+      <MenuRow to="/app/payment-methods" :title="t('收款方式')" :detail="t('乘客付車費給你的方式，出單時選擇是否顯示')" />
       <div v-if="credits" class="me__line">
         <span class="me__line-text">
           {{ t('點數餘額') }}

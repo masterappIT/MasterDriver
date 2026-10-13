@@ -37,7 +37,7 @@ const endOfTomorrow = computed(() => {
   return Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 2) - 8 * 60 * 60 * 1000;
 });
 
-/** Trips this driver drives: ones they claimed, and legs they kept for themselves (這段我自己做). */
+/** Trips this driver drives: ones they claimed, and legs they kept for themselves (這單我自己做). */
 const myTrips = computed(() =>
   [...claimed.value, ...dispatched.value.filter((order) => order.selfDrive)]
     .filter((order) => order.status === 'ASSIGNED' && new Date(order.pickupAt).getTime() <= endOfTomorrow.value)
@@ -124,7 +124,7 @@ onBeforeUnmount(() => clearInterval(clock));
         </div>
         <span class="home__route">{{ t(`${order.origin} 至 ${order.destination}`) }}</span>
         <span v-if="!order.passengerContact && order.contactRevealAt" class="home__note">{{ t(`乘客電話 ${shortTime(order.contactRevealAt)} 顯示`) }}</span>
-        <span v-else-if="order.selfDrive" class="home__note">{{ t('這段你自己做') }}</span>
+        <span v-else-if="order.selfDrive" class="home__note">{{ t('這單你自己做') }}</span>
       </RouterLink>
       <p v-if="loaded && myTrips.length === 0" class="home__empty">{{ t('今天和明天沒有行程。在群裡看到單，點連結就能搶。') }}</p>
     </section>

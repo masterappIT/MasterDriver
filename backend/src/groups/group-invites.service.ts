@@ -7,7 +7,7 @@ import { decodeQrImage } from './qr-image';
 
 const MAX_INVITES = 5;
 /** WeChat group QR codes stop working seven days after they are generated. */
-const WECHAT_GROUP_QR_DAYS = 7;
+export const WECHAT_GROUP_QR_DAYS = 7;
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
 

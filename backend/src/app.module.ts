@@ -3,6 +3,7 @@ import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { GroupsModule } from './groups/groups.module';
+import { PaymentMethodsModule } from './payment-methods/payment-methods.module';
 import { HealthController } from './health.controller';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma.module';
@@ -13,7 +14,7 @@ import { StorageModule } from './storage/storage.module';
 import { SupportModule } from './support/support.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule, SupportModule, ProfilePagesModule],
+  imports: [PrismaModule, StorageModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule, PaymentMethodsModule, SupportModule, ProfilePagesModule],
   controllers: [HealthController, ProfileController, PreferencesController],
 })
 export class AppModule {}

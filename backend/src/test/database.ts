@@ -18,6 +18,7 @@ import type { SmsProvider } from '../auth/sms';
 import { loadConfig } from '../config';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { OrdersService } from '../orders/orders.service';
+import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { SiteService } from '../site/site.service';
 import { LocalMediaStorage } from '../storage/media-storage';
@@ -38,6 +39,7 @@ const TABLES = [
   'SupportMedia',
   'SupportConversation',
   'GroupInvite',
+  'PaymentMethod',
   'SmsMessage',
   'SmsChannel',
   'PaymentChannel',
@@ -55,6 +57,7 @@ const TABLES = [
   'CommissionSetting',
   'OrderClaim',
   'Order',
+  'TripGroup',
   'Usage',
   'EntitlementOverride',
   'Subscription',
@@ -116,7 +119,8 @@ export async function setupDatabase() {
     commission,
     credits,
     groupInvites: new GroupInvitesService(prisma),
-    orders: new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), config),
+    paymentMethods: new PaymentMethodsService(prisma),
+    orders: new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config),
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
     adminData: new AdminDataService(prisma, audit, credits, commission, entitlements),

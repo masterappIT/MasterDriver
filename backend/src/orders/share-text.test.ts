@@ -68,6 +68,12 @@ test('dispatch text skips empty optional parts', () => {
   assert.equal(text.wechat, '【有單】10/15（四）14:30\n深圳灣口岸 → 香港國際機場\n4人｜3件行李\n搶單：https://x.test/o/abc');
 });
 
+test('dispatch text leaves out luggage when there is none', () => {
+  const text = dispatchShareText({ ...order, luggage: 0, vehicleType: null }, 'https://x.test/o/abc');
+  assert.ok(text.wechat.includes('\n4人\n'));
+  assert.ok(!text.wechat.includes('行李'));
+});
+
 test('claimed text names the driver and every plate they gave', () => {
   const text = claimedShareText(order, { name: '李師傅', hkPlate: 'AB1234', macauPlate: null, mainlandPlate: '粤Z1234港' });
   assert.equal(text, '【已派出】10/15（四）14:30 深圳灣口岸 → 香港國際機場\n司機：李師傅\n車牌：AB1234 / 粤Z1234港');

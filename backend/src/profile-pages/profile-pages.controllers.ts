@@ -120,3 +120,23 @@ export class PublicProfilePageController {
     return this.pages.passengerCancel(code);
   }
 }
+
+/** The driver's vehicle photos on a passenger's confirmation link: /c/{confirmCode}. No sign-in. */
+@Controller('c')
+export class PassengerDriverPhotoController {
+  constructor(@Inject(ProfilePagesService) private readonly pages: ProfilePagesService) {}
+
+  @Get(':confirmCode/driver-photos/:id')
+  async photo(@Param('confirmCode') confirmCode: string, @Param('id') id: string, @Res() response: Response) {
+    const photo = await this.pages.passengerPhoto(confirmCode, id);
+    response
+      .set({
+        'content-type': photo.mime,
+        // Behind an unguessable link, for one passenger: not for shared caches.
+        'cache-control': 'private, max-age=3600',
+        'x-content-type-options': 'nosniff',
+        'content-security-policy': "default-src 'none'; sandbox",
+      })
+      .send(photo.bytes);
+  }
+}

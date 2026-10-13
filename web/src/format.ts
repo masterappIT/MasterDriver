@@ -35,8 +35,24 @@ export function toLocalInput(date: Date): string {
 
 export const fromLocalInput = (value: string) => `${value}:00+08:00`;
 
-export function plates(driver: { hkPlate?: string | null; macauPlate?: string | null; mainlandPlate?: string | null } | null) {
-  return driver ? [driver.hkPlate, driver.macauPlate, driver.mainlandPlate].filter(Boolean).join(' / ') : '';
+/** "4人｜3件行李｜7座", as in the group text; no luggage is left unsaid. */
+export function loadLine(passengers: number, luggage: number, vehicleType?: string | null): string {
+  return [`${passengers}人`, luggage > 0 ? `${luggage}件行李` : null, vehicleType].filter(Boolean).join('｜');
+}
+
+const PLATE_KINDS = { SINGLE: '單牌', DUAL: '兩地牌', TRIPLE: '三地牌' } as const;
+
+/**
+ * 單牌, 兩地牌 or 三地牌: what kind of cross-border car a driver has, as they said, or counted
+ * from the plates for details filled in before that was asked. Shown with the vehicle type and colour.
+ */
+export function plateKind(
+  driver: { plateType?: keyof typeof PLATE_KINDS | null; hkPlate?: string | null; macauPlate?: string | null; mainlandPlate?: string | null } | null | undefined,
+): string {
+  if (!driver) return '';
+  if (driver.plateType) return PLATE_KINDS[driver.plateType];
+  const count = [driver.hkPlate, driver.macauPlate, driver.mainlandPlate].filter(Boolean).length;
+  return count > 0 ? Object.values(PLATE_KINDS)[count - 1] : '';
 }
 
 export const STATUS_LABEL: Record<string, string> = {

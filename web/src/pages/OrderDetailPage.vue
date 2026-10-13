@@ -1,29 +1,38 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import BottomSheet from '../components/BottomSheet.vue';
+import ContactLines from '../components/ContactLines.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
 import RoutePoints from '../components/RoutePoints.vue';
 import StatusBadge from '../components/StatusBadge.vue';
+import TripGroupJoin, { type TripGroup } from '../components/TripGroupJoin.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
-import { money, pickup, shortTime, type Money } from '../format';
+import { imageForUpload } from '../image';
+import { loadLine, money, pickup, plateKind, shortTime, type Money } from '../format';
 import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
+import GroupText from '../components/GroupText.vue';
 import { t } from '../i18n';
 import { MAX_JOURNEY_LEGS, legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
+import type { PlateType } from '@masterdriver/shared/vehicle-plate';
 
 interface Driver {
   name: string | null;
   hkPlate: string | null;
   macauPlate: string | null;
   mainlandPlate: string | null;
+  plateType?: PlateType | null;
   vehicleType: string | null;
   color: string | null;
   phone: string;
+  /** From the driver's 名片頁, when it is public. */
+  wechatId?: string | null;
+  whatsapp?: string | null;
 }
 
 interface Detail {
@@ -41,12 +50,20 @@ interface Detail {
   requiredPlates: PlateRegion[];
   journey: Journey | null;
   dispatcherName: string | null;
+  dispatcherPhone?: string;
+  /** The dispatcher's 名片頁, when it is public. */
+  dispatcherPageCode?: string | null;
+  dispatcherContact?: { wechatId: string | null; whatsapp: string | null };
   claimedAt: string | null;
   passengerConfirmedAt: string | null;
   viewer: 'dispatcher' | 'driver';
   passengerName: string | null;
   passengerContact: string | null;
   contactRevealAt: string | null;
+  /** For the driver: the trip is over, so the passenger's phone is no longer shown. */
+  contactEnded?: boolean;
+  /** 行程群: the dispatcher's own group for this trip (passenger, dispatcher, driver). */
+  tripGroup?: TripGroup | null;
   contactRevealMinutes?: number | null;
   selfDrive?: boolean;
   /** 接單池: listed for every signed-in driver (dispatcher only). */
@@ -57,6 +74,11 @@ interface Detail {
   showPassengerPrice?: boolean;
   margin?: Money;
   serviceFee?: number | null;
+  /** 收款 (dispatcher only): the passenger's page shows the ways to pay, and when the fare was marked received. */
+  showPaymentMethods?: boolean;
+  paidAt?: string | null;
+  /** 已結清: the dispatcher's mark that the account with the driver is settled; both see it. */
+  settledAt?: string | null;
   links?: { dispatch: string; passengerConfirm: string };
   share?: { dispatch: { wechat: string; whatsapp: string }; claimed: string | null; passenger: string };
 }
@@ -68,11 +90,17 @@ const order = ref<Detail | null>(null);
 const error = ref('');
 const busy = ref(false);
 const editingPrices = ref(false);
-const prices = reactive({ currency: 'HKD', driver: '', passenger: '' });
+const prices = reactive({ currency: 'HKD', driver: '', passengerCurrency: 'HKD', passenger: '' });
 
 const isDispatcher = computed(() => order.value?.viewer === 'dispatcher');
 const live = computed(() => order.value?.status === 'OPEN' || order.value?.status === 'ASSIGNED');
 const selfDriven = computed(() => Boolean(order.value?.selfDrive) && order.value?.status === 'ASSIGNED');
+/** A driver is set and the passenger has not confirmed: remind the dispatcher to send the link. */
+/** Someone else has the order: the group now needs 已派出, not the order again. */
+const taken = computed(() => order.value?.status === 'ASSIGNED' && !selfDriven.value && Boolean(order.value.share?.claimed));
+const remindPassenger = computed(
+  () => isDispatcher.value && order.value?.status === 'ASSIGNED' && !order.value.passengerConfirmedAt,
+);
 
 /** 接駁: a leg can be added after the last leg of a trip, up to the limit. */
 const canAddLeg = computed(() => {
@@ -136,6 +164,41 @@ async function act(path: string, done: string) {
 }
 
 /** 接單池: list the order for every signed-in driver, or take it out; only while nobody has claimed it. */
+/** 收款: show the ways to pay on the passenger's page, or mark the fare received (the whole trip for 接駁). */
+async function setPayment(body: { showPaymentMethods?: boolean; paid?: boolean }, done: string) {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/payment`, body);
+    toast(done);
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** Done or due and not marked received: remind the dispatcher to check their account. */
+const remindPayment = computed(() => {
+  const o = order.value;
+  if (!o || !isDispatcher.value || o.paidAt || o.status === 'CANCELLED' || o.status === 'OPEN') return false;
+  return o.status === 'COMPLETED' || new Date(o.pickupAt).getTime() <= Date.now();
+});
+
+/** 已結清: only once the trip is done, and only when someone else drove it. */
+const canSettle = computed(() => order.value?.status === 'COMPLETED' && !order.value.selfDrive);
+
+async function setSettled(settled: boolean) {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/settlement`, { settled });
+    toast(settled ? '已記為已結清' : '已改回未結清');
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function setPool(inPool: boolean) {
   busy.value = true;
   try {
@@ -145,6 +208,36 @@ async function setPool(inPool: boolean) {
     toast(errorText(e));
   } finally {
     busy.value = false;
+  }
+}
+
+/** 行程群: a WhatsApp invite link, a WeChat group QR, or none. */
+const groupLink = ref('');
+const editingGroup = ref(false);
+
+async function setTripGroup(body: Record<string, unknown>, done: string) {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/trip-group`, body);
+    editingGroup.value = false;
+    groupLink.value = '';
+    toast(done);
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function pickGroupQr(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    await setTripGroup({ platform: 'WECHAT', qrImage: await imageForUpload(file) }, '已加上行程群');
+  } catch {
+    toast('無法讀取這張圖片');
   }
 }
 
@@ -178,6 +271,7 @@ function editPrices() {
   const o = order.value;
   if (!o) return;
   prices.currency = o.driverPrice?.currency ?? o.passengerPrice?.currency ?? 'HKD';
+  prices.passengerCurrency = o.passengerPrice?.currency ?? prices.currency;
   prices.driver = o.driverPrice ? String(o.driverPrice.amount) : '';
   prices.passenger = o.passengerPrice ? String(o.passengerPrice.amount) : '';
   editingPrices.value = true;
@@ -197,14 +291,39 @@ async function patchPrices(body: Record<string, unknown>, done: string) {
 }
 
 function savePrices() {
-  const money = (value: string) => (value ? { amount: Number(value), currency: prices.currency } : null);
-  const body: Record<string, unknown> = { passengerPrice: money(prices.passenger) };
-  // The driver price is fixed once a driver has taken the order.
-  if (order.value?.status === 'OPEN') body.driverPrice = money(prices.driver);
+  const money = (value: string, currency: string) => (value ? { amount: Number(value), currency } : null);
+  const body: Record<string, unknown> = { passengerPrice: money(prices.passenger, prices.passengerCurrency) };
+  // The driver price (and its currency) is fixed once a driver has taken the order.
+  if (order.value?.status === 'OPEN') body.driverPrice = money(prices.driver, prices.currency);
   return patchPrices(body, '價格已更新');
 }
 
-onMounted(load);
+/**
+ * The order changes while the dispatcher looks at it (a driver claims it, the passenger confirms),
+ * so it is read again every 10 seconds while on screen and at once when the page comes back.
+ * Not while an action is being sent or a sheet is open, and not once the order is finished.
+ */
+const REFRESH_MS = 10_000;
+let timer: ReturnType<typeof setInterval> | undefined;
+
+function refresh() {
+  if (document.visibilityState !== 'visible' || busy.value || pending.value || !live.value) return;
+  void load();
+}
+
+function onVisible() {
+  if (document.visibilityState === 'visible') refresh();
+}
+
+onMounted(() => {
+  void load();
+  timer = setInterval(refresh, REFRESH_MS);
+  document.addEventListener('visibilitychange', onVisible);
+});
+onBeforeUnmount(() => {
+  clearInterval(timer);
+  document.removeEventListener('visibilitychange', onVisible);
+});
 watch(id, () => {
   order.value = null;
   editingPrices.value = false;
@@ -215,7 +334,7 @@ watch(id, () => {
 
 <template>
   <div class="page">
-    <PageBack :title="t('單詳情')" fallback="/app/orders" />
+    <PageBack :title="t('訂單詳情')" fallback="/app/orders" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="order">
@@ -226,6 +345,33 @@ watch(id, () => {
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
       </ol>
 
+      <!-- The moment to send the passenger their link: a driver is set, and the passenger has not confirmed. -->
+      <section v-if="remindPayment" class="detail__remind">
+        <p>
+          {{ t('乘客付款了嗎？') }}
+          <small>{{ t('查過自己的帳戶，收到了就按「已收款」。乘客直接付給你，平台不經手。') }}</small>
+        </p>
+        <button class="button" type="button" :disabled="busy" @click="setPayment({ paid: true }, '已記為已收款')">{{ t('已收款') }}</button>
+      </section>
+
+      <section v-if="isDispatcher && canSettle && !order.settledAt" class="detail__remind">
+        <p>
+          {{ t(`和${order.driver?.name ?? '接單司機'}結清了嗎？`) }}
+          <small>{{ t('你們自己結，結好了按「已結清」，司機那邊也會看到。平台不經手、不核對。') }}</small>
+        </p>
+        <button class="button" type="button" :disabled="busy" @click="setSettled(true)">{{ t('已結清') }}</button>
+      </section>
+
+      <section v-if="remindPassenger && order.share" class="detail__remind">
+        <p>
+          {{ selfDriven ? t('這單你自己做，把確認連結傳給乘客') : t(`${order.driver?.name ?? '司機'} 接了這張單，把確認連結傳給乘客`) }}
+          <small>{{ t('乘客會看到司機和車牌，按一下就確認行程') }}</small>
+        </p>
+        <button class="button" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
+          <AppIcon name="copy" :size="18" />{{ t('複製給乘客') }}
+        </button>
+      </section>
+
       <!-- The trip in the order of the group text: time, route, load, then what must be noticed. -->
       <section class="card">
         <div class="detail__top">
@@ -234,7 +380,7 @@ watch(id, () => {
         </div>
         <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" /></div>
         <div class="detail__meta">
-          <span>{{ t([`${order.passengers}人`, `${order.luggage}件行李`, order.vehicleType].filter(Boolean).join('｜')) }}</span>
+          <span>{{ t(loadLine(order.passengers, order.luggage, order.vehicleType)) }}</span>
           <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
           <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
         </div>
@@ -258,16 +404,90 @@ watch(id, () => {
         <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
       </section>
 
+      <!-- The passenger, right under the trip: who to call comes before texts, prices and the driver. -->
+      <section class="card">
+        <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
+        <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
+        <p v-else-if="order.contactEnded" class="detail__waiting">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
+        <p v-else class="detail__waiting">{{ t(`乘客電話 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡出單者。`) }}</p>
+        <p class="detail__confirmed" :class="{ 'detail__confirmed--yes': order.passengerConfirmedAt }">
+          {{ order.passengerConfirmedAt ? t(`乘客 ${shortTime(order.passengerConfirmedAt)} 確認了行程`) : t('乘客還沒確認') }}
+        </p>
+        <div v-if="order.passengerContact" class="detail__pair detail__gap">
+          <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電乘客') }}</a>
+          <button class="button secondary" type="button" @click="copy(order.passengerContact, '已複製')">{{ t('複製號碼') }}</button>
+        </div>
+        <div v-if="isDispatcher" class="detail__divided detail__reveal">
+          <template v-if="!editingReveal">
+            <span class="detail__reveal-text">{{ order.contactRevealMinutes == null ? t('接單司機搶到就看到乘客電話') : t(`接單司機${revealLabel(order.contactRevealMinutes)}看到乘客電話`) }}</span>
+            <button v-if="live" class="chip" type="button" @click="editReveal">{{ t('修改') }}</button>
+          </template>
+          <template v-else>
+            <RevealSelect v-model="reveal" class="select--inline" />
+            <button class="chip" type="button" @click="editingReveal = false">{{ t('取消') }}</button>
+            <button class="chip chip--on" type="button" :disabled="busy" @click="saveReveal">{{ t('儲存') }}</button>
+          </template>
+        </div>
+        <p v-if="isDispatcher && !selfDriven" class="hint detail__protect">{{ t('乘客是你的客人：行程完成或取消後，接單司機就看不到乘客電話。') }}</p>
+
+        <!-- 行程群: the driver joins the group the dispatcher made, while they may see the passenger. -->
+        <div v-if="!isDispatcher && order.tripGroup" class="detail__divided">
+          <span class="section-label">{{ t('行程群：乘客、出單者都在裡面') }}</span>
+          <TripGroupJoin :group="order.tripGroup" />
+        </div>
+
+        <!-- 行程群: the dispatcher's own group for this trip, passed on to the passenger and the driver. -->
+        <div v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__divided">
+          <span class="section-label">{{ t('行程群（你、乘客、司機）') }}</span>
+          <template v-if="order.tripGroup && !editingGroup">
+            <p v-if="order.tripGroup.expired" class="detail__group-expired">{{ t('微信群二維碼已超過 7 天，乘客和司機看不到了，請重新上傳。') }}</p>
+            <p v-else class="detail__line">
+              {{
+                order.tripGroup.platform === 'WHATSAPP'
+                  ? t('已加上 WhatsApp 群連結，乘客確認頁和接單司機都看得到。')
+                  : t(`已加上微信群二維碼，${shortTime(order.tripGroup.expiresAt ?? null)} 前有效，乘客確認頁和接單司機都看得到。`)
+              }}
+            </p>
+            <div class="detail__pair detail__gap">
+              <button class="button secondary" type="button" :disabled="busy" @click="editingGroup = true">{{ t('更換') }}</button>
+              <button class="button secondary" type="button" :disabled="busy" @click="setTripGroup({ platform: null }, '已移除行程群')">{{ t('移除') }}</button>
+            </div>
+          </template>
+          <template v-else>
+            <p class="hint">{{ t('先在微信或 WhatsApp 自己建好群，再把入群方式放這裡。平台不建群，也不代發訊息。') }}</p>
+            <form class="detail__group-form" @submit.prevent="setTripGroup({ platform: 'WHATSAPP', inviteUrl: groupLink.trim() }, '已加上行程群')">
+              <input v-model="groupLink" class="line-input" inputmode="url" :aria-label="t('WhatsApp 群邀請連結')" placeholder="https://chat.whatsapp.com/…" />
+              <button class="chip chip--on" type="submit" :disabled="busy || !groupLink.trim()">{{ t('加上') }}</button>
+            </form>
+            <label class="button secondary block detail__gap">
+              {{ t('上傳微信群二維碼') }}<input type="file" accept="image/*" hidden @change="pickGroupQr" />
+            </label>
+            <span class="hint">{{ t('微信群二維碼 7 天後失效；超過 200 人的群不能掃碼加入。') }}</span>
+            <button v-if="editingGroup" class="detail__link" type="button" @click="editingGroup = false">{{ t('取消') }}</button>
+          </template>
+        </div>
+      </section>
+
       <!-- Dispatcher: texts to paste into groups and to the passenger -->
       <section v-if="isDispatcher && order.share && live" class="card">
-        <template v-if="!selfDriven">
+        <p v-if="selfDriven" class="detail__line">{{ t('這單你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
+        <!-- Taken: the group needs to hear that, and the order must not be pasted again. -->
+        <template v-else-if="taken">
+          <span class="section-label">{{ t('已有人接，貼回群裡讓大家知道') }}</span>
+          <GroupText :text="order.share.claimed ?? ''" />
+          <button class="button block" type="button" @click="copy(order.share.claimed, '已複製，貼回群裡吧')">
+            <AppIcon name="copy" :size="18" />{{ t('複製「已派出」貼回群') }}
+          </button>
+        </template>
+        <template v-else>
           <span class="section-label">{{ t('貼到群裡') }}</span>
-          <pre class="detail__share">{{ t(order.share.dispatch.wechat) }}</pre>
-          <div class="detail__stack">
-            <button class="button" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">
+          <GroupText :text="order.share.dispatch.wechat" :link-note="t('藍色是這張單的搶單連結，會和文字一起複製')" />
+          <!-- One main button: the app this page is most likely open next to. -->
+          <div class="detail__stack" :class="{ 'detail__stack--whatsapp-first': !inWeChat }">
+            <button class="button" :class="{ outline: !inWeChat }" type="button" @click="copy(order.share.dispatch.wechat, '已複製，回到微信群長按輸入框貼上')">
               <AppIcon name="copy" :size="18" />{{ t('複製到微信群') }}
             </button>
-            <button class="button" type="button" @click="copy(order.share.dispatch.whatsapp, '已複製，貼到 WhatsApp 群吧')">
+            <button class="button" :class="{ outline: inWeChat }" type="button" @click="copy(order.share.dispatch.whatsapp, '已複製，回到 WhatsApp 群長按輸入框貼上')">
               <AppIcon name="copy" :size="18" />{{ t('複製到 WhatsApp') }}
             </button>
           </div>
@@ -282,13 +502,10 @@ watch(id, () => {
             <input class="switch" type="checkbox" :checked="order.inPool" :disabled="busy" @change="setPool(!order.inPool)" />
           </label>
         </template>
-        <p v-else class="detail__line">{{ t('這段你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
-        <div class="detail__links" :class="{ 'detail__divided': !selfDriven }">
+        <div class="detail__divided">
+          <span class="section-label">{{ t('傳給乘客') }}</span>
           <button class="detail__link" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
             <AppIcon name="copy" :size="18" />{{ t('複製給乘客的確認訊息') }}
-          </button>
-          <button v-if="order.share.claimed && !selfDriven" class="detail__link" type="button" @click="copy(order.share.claimed, '已複製，貼回群裡吧')">
-            <AppIcon name="copy" :size="18" />{{ t('複製「已派出」訊息貼回群') }}
           </button>
         </div>
       </section>
@@ -297,7 +514,7 @@ watch(id, () => {
       <section class="card">
         <template v-if="!editingPrices">
           <div class="detail__price">
-            <span class="section-label">{{ t('司機價') }}</span>
+            <span class="section-label">{{ t('出單價') }}</span>
             <strong>{{ money(order.driverPrice) || t('沒有填') }}</strong>
           </div>
           <template v-if="isDispatcher">
@@ -320,22 +537,61 @@ watch(id, () => {
               </label>
               <button class="button secondary block detail__gap" type="button" @click="editPrices">{{ t('修改價格') }}</button>
             </template>
+            <!-- 收款: the dispatcher's own mark, after checking their account. -->
+            <div v-if="order.status !== 'CANCELLED'" class="detail__paid detail__divided">
+              <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.paidAt }">
+                {{ order.paidAt ? t(`${shortTime(order.paidAt)} 已收款`) : t('未收款') }}
+              </span>
+              <button class="chip" type="button" :disabled="busy" @click="setPayment({ paid: !order.paidAt }, order.paidAt ? '已改回未收款' : '已記為已收款')">
+                {{ order.paidAt ? t('改回未收款') : t('標記已收款') }}
+              </button>
+            </div>
+            <label v-if="order.status !== 'CANCELLED'" class="detail__switch detail__divided">
+              <span>
+                {{ t('乘客確認頁顯示收款方式') }}
+                <small>{{ order.journey ? t('整個接駁行程一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
+              </span>
+              <input
+                class="switch"
+                type="checkbox"
+                :checked="order.showPaymentMethods"
+                :disabled="busy"
+                @change="setPayment({ showPaymentMethods: !order.showPaymentMethods }, '已更新')"
+              />
+            </label>
           </template>
         </template>
-        <form v-else @submit.prevent="savePrices">
-          <span class="section-label">{{ order.status === 'OPEN' ? t('司機價') : t('司機價（已有司機接單，不能再改）') }}</span>
+        <!-- 已結清: the dispatcher's own mark; the driver sees it. No amount, and the platform does not check it. -->
+        <div v-if="canSettle && !editingPrices" class="detail__paid detail__divided">
+          <span class="detail__settle">
+            <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.settledAt }">
+              {{ order.settledAt ? t(`${shortTime(order.settledAt)} 已結清`) : t('未結清') }}
+            </span>
+            <small>{{ isDispatcher ? t('和接單司機的帳，你們自己結，平台不經手') : t('和出單者的帳，由出單者標記，平台不經手') }}</small>
+          </span>
+          <button v-if="isDispatcher" class="chip" type="button" :disabled="busy" @click="setSettled(!order.settledAt)">
+            {{ order.settledAt ? t('改回未結清') : t('標記已結清') }}
+          </button>
+        </div>
+        <form v-else-if="editingPrices" @submit.prevent="savePrices">
+          <span class="section-label">{{ order.status === 'OPEN' ? t('出單價') : t('出單價（已有司機接單，不能再改）') }}</span>
           <div class="amount-line detail__gap-bottom">
-            <select v-model="prices.currency" :aria-label="t('幣種')">
+            <select v-model="prices.currency" :aria-label="t('出單價幣種')" :disabled="order.status !== 'OPEN'">
               <option value="HKD">HK$</option>
               <option value="CNY">RMB¥</option>
               <option value="MOP">MOP$</option>
             </select>
-            <input v-model="prices.driver" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('司機價')" :disabled="order.status !== 'OPEN'" />
+            <input v-model="prices.driver" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :disabled="order.status !== 'OPEN'" />
           </div>
-          <label class="line-field">
-            <span>{{ t('乘客價，只有你看得到') }}</span>
-            <input v-model="prices.passenger" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" />
-          </label>
+          <span class="section-label">{{ t('乘客價，只有你看得到') }}</span>
+          <div class="amount-line amount-line--quiet detail__gap-bottom">
+            <select v-model="prices.passengerCurrency" :aria-label="t('乘客價幣種')">
+              <option value="HKD">HK$</option>
+              <option value="CNY">RMB¥</option>
+              <option value="MOP">MOP$</option>
+            </select>
+            <input v-model="prices.passenger" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('乘客價')" :placeholder="t('乘客價（選填）')" />
+          </div>
           <div class="detail__pair">
             <button class="button secondary" type="button" @click="editingPrices = false">{{ t('取消') }}</button>
             <button class="button" type="submit" :disabled="busy">{{ t('儲存') }}</button>
@@ -344,40 +600,33 @@ watch(id, () => {
       </section>
 
       <section v-if="order.driver" class="card">
-        <span class="section-label">{{ selfDriven ? t('這段你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
+        <span class="section-label">{{ selfDriven ? t('這單你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
         <div class="detail__person">
           <strong>{{ order.driver.name ? t(order.driver.name) : t('沒有留名') }}</strong>
           <span class="hint">{{ t(`${shortTime(order.claimedAt)} 搶到`) }}</span>
         </div>
+        <p class="hint detail__car">{{ [order.driver.vehicleType, order.driver.color, plateKind(order.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</p>
         <PlateTag :hk="order.driver.hkPlate" :macau="order.driver.macauPlate" :mainland="order.driver.mainlandPlate" />
         <div v-if="isDispatcher && !selfDriven" class="detail__pair detail__gap">
           <a class="button secondary" :href="`tel:${order.driver.phone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電司機') }}</a>
           <button class="button secondary" type="button" @click="copy(order.driver.phone, '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
+        <ContactLines v-if="isDispatcher && !selfDriven" class="detail__gap" :wechat-id="order.driver.wechatId" :whatsapp="order.driver.whatsapp" />
       </section>
 
-      <section class="card">
-        <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
-        <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
-        <p v-else class="detail__waiting">{{ t(`乘客電話 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡出單者。`) }}</p>
-        <p class="detail__confirmed" :class="{ 'detail__confirmed--yes': order.passengerConfirmedAt }">
-          {{ order.passengerConfirmedAt ? t(`乘客 ${shortTime(order.passengerConfirmedAt)} 確認了行程`) : t('乘客還沒確認') }}
-        </p>
-        <div v-if="order.passengerContact" class="detail__pair detail__gap">
-          <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電乘客') }}</a>
-          <button class="button secondary" type="button" @click="copy(order.passengerContact, '已複製')">{{ t('複製號碼') }}</button>
+      <!-- The driver who took the order: how to reach whoever put it out. -->
+      <section v-if="!isDispatcher && order.dispatcherPhone" class="card">
+        <span class="section-label">{{ t('出單者') }}</span>
+        <div class="detail__person">
+          <strong>{{ order.dispatcherName ? t(order.dispatcherName) : t('沒有留名') }}</strong>
+          <span class="hint">{{ order.dispatcherPhone }}</span>
         </div>
-        <div v-if="isDispatcher" class="detail__divided detail__reveal">
-          <template v-if="!editingReveal">
-            <span class="detail__reveal-text">{{ order.contactRevealMinutes == null ? t('接單司機搶到就看到乘客電話') : t(`接單司機${revealLabel(order.contactRevealMinutes)}看到乘客電話`) }}</span>
-            <button v-if="live" class="chip" type="button" @click="editReveal">{{ t('修改') }}</button>
-          </template>
-          <template v-else>
-            <RevealSelect v-model="reveal" class="select--inline" />
-            <button class="chip" type="button" @click="editingReveal = false">{{ t('取消') }}</button>
-            <button class="chip chip--on" type="button" :disabled="busy" @click="saveReveal">{{ t('儲存') }}</button>
-          </template>
+        <div class="detail__pair detail__gap">
+          <a class="button secondary" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電出單者') }}</a>
+          <button class="button secondary" type="button" @click="copy(order.dispatcherPhone, '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
+        <ContactLines class="detail__gap" :wechat-id="order.dispatcherContact?.wechatId" :whatsapp="order.dispatcherContact?.whatsapp" />
+        <RouterLink v-if="order.dispatcherPageCode" class="button secondary block detail__gap" :to="`/p/${order.dispatcherPageCode}`">{{ t('看出單者的名片') }}</RouterLink>
       </section>
 
       <!-- What can still be done, least drastic first; cancelling is a quiet red link. -->
@@ -391,7 +640,7 @@ watch(id, () => {
             :disabled="busy"
             @click="
               selfDriven
-                ? ask('reopen', '已重新開放搶單', '把這段放到群裡讓司機搶？', '放到群裡搶')
+                ? ask('reopen', '已重新開放搶單', '把這單放到群裡讓司機搶？', '放到群裡搶')
                 : ask('reopen', '已重新開放搶單', '收回這張單，重新讓司機搶？', '改派', '原本接單的司機打開連結會看到單已改派，請另外通知他。')
             "
           >
@@ -437,6 +686,70 @@ watch(id, () => {
   color: var(--color-text);
   font-weight: 700;
 }
+.detail__paid {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.detail__car {
+  margin: 0 0 var(--space-sm);
+}
+.detail__protect {
+  margin: var(--space-sm) 0 0;
+}
+.detail__group-expired {
+  margin: 0;
+  color: var(--color-gold-ink);
+  font-weight: 600;
+}
+.detail__group-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+.detail__group-form .line-input {
+  flex: 1;
+  min-width: 0;
+}
+.detail__settle {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.detail__settle small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+.detail__paid-state {
+  color: var(--color-gold-ink);
+  font-weight: 700;
+}
+.detail__paid-state--yes {
+  color: var(--status-confirmed);
+}
+.detail__remind {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-card);
+  background: var(--color-gold-tint);
+}
+.detail__remind p {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  color: var(--color-gold-ink);
+  font-weight: 700;
+}
+.detail__remind small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 400;
+}
 .detail__top {
   display: flex;
   justify-content: space-between;
@@ -469,17 +782,6 @@ watch(id, () => {
   background: var(--color-gold-tint);
   color: var(--color-gold-ink);
   white-space: pre-wrap;
-}
-.detail__share {
-  margin: 0 0 var(--space-md);
-  padding: var(--space-md);
-  border-radius: 4px 18px 18px 18px;
-  background: var(--color-tint);
-  font: inherit;
-  font-size: var(--font-label);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .detail__stack {
   display: grid;
@@ -514,14 +816,8 @@ watch(id, () => {
   font-size: var(--font-caption);
   font-weight: 400;
 }
-.detail__links {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-xs);
-}
-.detail__links:not(.detail__divided) {
-  margin-top: var(--space-md);
+.detail__stack--whatsapp-first > :first-child {
+  order: 1;
 }
 .detail__link {
   display: inline-flex;
@@ -548,7 +844,7 @@ watch(id, () => {
 }
 .detail__price strong {
   color: var(--color-gold-ink);
-  font-size: 28px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
 }
 .detail__fee {

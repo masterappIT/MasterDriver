@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { COUNTRY_CODES, type CountryCode, formatPassengerPhone, isValidPassengerPhone, splitPassengerPhone } from '@masterdriver/shared/phone';
 import { parseQuickOrder } from '@masterdriver/shared/quick-order';
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, errorText, session } from '../api';
 import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
@@ -86,8 +86,11 @@ const form = reactive({
   passengers: '1',
   luggage: '0',
   vehicleType: '',
+  /** The driver price's currency. */
   currency: 'HKD',
   driverPrice: '',
+  /** The passenger price's own currency: it follows the driver price's until the dispatcher picks another. */
+  passengerCurrency: 'HKD',
   passengerPrice: '',
   showPassengerPrice: false,
   notes: '',
@@ -102,7 +105,11 @@ const form = reactive({
   selfDrive: false,
   /** 接單池: also list the order for every signed-in driver, not only the groups the link is pasted in. */
   inPool: false,
+  /** 收款方式: show the dispatcher's ways to be paid on the passenger's confirmation page. */
+  showPaymentMethods: false,
 });
+/** How many 收款方式 the dispatcher has set; with none there is nothing to show the passenger. */
+const paymentMethodCount = ref<number | null>(null);
 
 /** Places used before, most recent first: one tap fills them in. */
 const places = computed(() => [...new Set(past.value.flatMap((order) => [order.origin, order.destination]))].slice(0, 6));
@@ -144,7 +151,7 @@ function fillFromLine() {
   if (parsed.price) {
     form.currency = parsed.price.currency;
     form.driverPrice = String(parsed.price.amount);
-    filled.push(`司機價 ${parsed.price.amount}`);
+    filled.push(`出單價 ${parsed.price.amount}`);
   }
   if (parsed.notes) {
     form.notes = parsed.notes;
@@ -153,8 +160,18 @@ function fillFromLine() {
   filledFromLine.value = filled;
 }
 
+/** Set once the passenger price's currency was picked, or came with the order being copied or the booking. */
+const passengerCurrencyChosen = ref(false);
+watch(
+  () => form.currency,
+  (currency) => {
+    if (!passengerCurrencyChosen.value) form.passengerCurrency = currency;
+  },
+);
+
+/** The spread, only when both prices are in the same currency (the API counts it the same way). */
 const margin = computed(() => {
-  if (!form.driverPrice || !form.passengerPrice) return null;
+  if (!form.driverPrice || !form.passengerPrice || form.currency !== form.passengerCurrency) return null;
   return Number(form.passengerPrice) - Number(form.driverPrice);
 });
 
@@ -172,9 +189,11 @@ function copyLast() {
     notes: last.notes ?? '',
     currency: last.driverPrice?.currency ?? 'HKD',
     driverPrice: last.driverPrice ? String(last.driverPrice.amount) : '',
+    passengerCurrency: last.passengerPrice?.currency ?? last.driverPrice?.currency ?? 'HKD',
     passengerPrice: last.passengerPrice ? String(last.passengerPrice.amount) : '',
     showPassengerPrice: last.showPassengerPrice ?? false,
   });
+  passengerCurrencyChosen.value = Boolean(last.passengerPrice);
 }
 
 function togglePlate(region: PlateRegion) {
@@ -186,7 +205,7 @@ function fillPlace(place: string) {
   else if (!form.destination) form.destination = place;
 }
 
-const price = (value: string) => (value ? { amount: Number(value), currency: form.currency } : undefined);
+const price = (value: string, currency: string) => (value ? { amount: Number(value), currency } : undefined);
 
 async function submit() {
   error.value = '';
@@ -206,8 +225,8 @@ async function submit() {
       passengers: Number(form.passengers),
       luggage: Number(form.luggage),
       vehicleType: form.vehicleType,
-      driverPrice: price(form.driverPrice),
-      passengerPrice: price(form.passengerPrice),
+      driverPrice: price(form.driverPrice, form.currency),
+      passengerPrice: price(form.passengerPrice, form.passengerCurrency),
       showPassengerPrice: form.showPassengerPrice,
       notes: form.notes,
       rawText: line.value.trim() || undefined,
@@ -220,6 +239,8 @@ async function submit() {
       requiredPlates: afterId || form.transfer ? form.requiredPlates : [],
       selfDrive: form.selfDrive,
       inPool: !form.selfDrive && form.inPool,
+      // A leg follows its trip's choice; the server takes it from the first leg.
+      showPaymentMethods: !afterId && form.showPaymentMethods,
     });
     // Straight to the texts to paste: getting the order into the groups is the point of dispatching.
     await router.replace(`/app/orders/${created.id}/share`);
@@ -273,9 +294,10 @@ async function loadBooking() {
       passengerName: booking.passengerName ?? '',
       notes: booking.notes ?? '',
       ...(booking.quote
-        ? { currency: booking.quote.currency, passengerPrice: String(booking.quote.amount), showPassengerPrice: true }
+        ? { currency: booking.quote.currency, passengerCurrency: booking.quote.currency, passengerPrice: String(booking.quote.amount), showPassengerPrice: true }
         : {}),
     });
+    if (booking.quote) passengerCurrencyChosen.value = true;
     carryContact(booking.passengerContact);
     fromBooking.value = true;
   } catch (e) {
@@ -287,7 +309,7 @@ async function loadBooking() {
 const moreSummary = computed(() =>
   [
     `乘客電話：${revealLabel(form.contactRevealMinutes)}`,
-    form.selfDrive ? '這段我自己做' : form.inPool ? '放進接單池' : '只給拿到連結的人',
+    form.selfDrive ? '這單我自己做' : form.inPool ? '放進接單池' : '只給拿到連結的人',
   ].join(' · '),
 );
 
@@ -301,6 +323,9 @@ onMounted(async () => {
     api<{ contactRevealMinutes: number | null; poolByDefault: boolean }>('GET', '/me/preferences').catch(() => null),
   ]);
   past.value = orders;
+  void api<unknown[]>('GET', '/me/payment-methods')
+    .then((methods) => (paymentMethodCount.value = methods.length))
+    .catch(() => (paymentMethodCount.value = null));
   if (preferences) {
     form.contactRevealMinutes = preferences.contactRevealMinutes;
     form.inPool = preferences.poolByDefault;
@@ -324,7 +349,7 @@ onMounted(async () => {
     </div>
 
     <div v-if="fromBooking" class="notice">
-      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後出單；想自己做就在最下面「更多設定」打開「這段我自己做」，否則填司機價派到群裡。') }}
+      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後出單；想自己做就在最下面「更多設定」打開「這單我自己做」，否則填出單價派到群裡。') }}
     </div>
 
     <!-- 一句話出單: written like a message in the group, so it looks like one. -->
@@ -335,7 +360,7 @@ onMounted(async () => {
         class="quick-line__input"
         maxlength="300"
         :aria-label="t('一句話出單')"
-        :placeholder="t('照群裡的寫法貼上一句，例如：明天15:40澳門送惠州博羅灣 直車 7座')"
+        :placeholder="t('照群裡的寫法貼上一句，例如：明天15:40澳門送香港 直車 7座')"
       />
       <div class="quick-line__foot">
         <span class="hint">{{ filledFromLine.length ? t(`已填入：${filledFromLine.join('、')}。請核對下面。`) : t('一句話出單，自動填好下面') }}</span>
@@ -436,23 +461,39 @@ onMounted(async () => {
     </section>
 
     <section class="card">
-      <span class="section-label">{{ t('司機價，貼到群裡大家都看得到') }}</span>
+      <span class="section-label">{{ t('出單價，拿到連結的司機看得到') }}</span>
       <div class="amount-line">
         <select v-model="form.currency" :aria-label="t('幣種')">
           <option value="HKD">HK$</option>
           <option value="CNY">RMB¥</option>
           <option value="MOP">MOP$</option>
         </select>
-        <input v-model="form.driverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('司機價')" :placeholder="t('司機價')" />
+        <input v-model="form.driverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :placeholder="t('出單價')" />
       </div>
-      <label class="line-field new-order__passenger-price">
-        <span>{{ t('乘客價，只有你看得到') }}</span>
-        <input v-model="form.passengerPrice" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" />
-      </label>
+      <span class="section-label new-order__passenger-price">{{ t('乘客價，只有你看得到') }}</span>
+      <div class="amount-line amount-line--quiet">
+        <select v-model="form.passengerCurrency" :aria-label="t('乘客價幣種')" @change="passengerCurrencyChosen = true">
+          <option value="HKD">HK$</option>
+          <option value="CNY">RMB¥</option>
+          <option value="MOP">MOP$</option>
+        </select>
+        <input v-model="form.passengerPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('乘客價')" :placeholder="t('乘客價（選填）')" />
+      </div>
       <p v-if="margin !== null" class="new-order__margin">{{ t(`差價 ${margin}`) }}</p>
+      <p v-else-if="form.driverPrice && form.passengerPrice" class="hint new-order__margin-none">{{ t('兩個價格幣種不同，不計差價。') }}</p>
       <label class="new-order__switch">
         <span>{{ t('乘客確認頁顯示乘客價') }}</span>
         <input v-model="form.showPassengerPrice" class="switch" type="checkbox" />
+      </label>
+      <label v-if="!afterId" class="new-order__switch">
+        <span>
+          {{ t('乘客確認頁顯示收款方式') }}
+          <small v-if="paymentMethodCount === 0">
+            {{ t('還沒有收款方式，') }}<RouterLink to="/app/payment-methods">{{ t('先去設定') }}</RouterLink>
+          </small>
+          <small v-else>{{ t('乘客直接付給你，顯示時會一併顯示乘客價') }}</small>
+        </span>
+        <input v-model="form.showPaymentMethods" class="switch" type="checkbox" :disabled="paymentMethodCount === 0" />
       </label>
     </section>
 
@@ -494,13 +535,13 @@ onMounted(async () => {
       <label class="new-order__switch">
         <span>
           {{ t('乘客電話給接單司機看') }}
-          <small>{{ t('在這之前，司機只能聯絡你') }}</small>
+          <small>{{ t('在這之前，司機只能聯絡你；行程完成或取消後，司機就看不到乘客電話') }}</small>
         </span>
         <RevealSelect v-model="form.contactRevealMinutes" class="select--inline" />
       </label>
       <label class="new-order__switch">
         <span>
-          {{ t('這段我自己做') }}
+          {{ t('這單我自己做') }}
           <small>
             {{
               !form.selfDrive
@@ -619,10 +660,13 @@ onMounted(async () => {
   margin-bottom: 0;
 }
 .new-order__passenger-price {
-  margin: var(--space-lg) 0 var(--space-sm);
+  margin: var(--space-lg) 0 var(--space-xs);
+}
+.new-order__margin-none {
+  margin: var(--space-sm) 0;
 }
 .new-order__margin {
-  margin: 0 0 var(--space-sm);
+  margin: var(--space-sm) 0;
   color: var(--color-teal);
   font-size: var(--font-label);
   font-weight: 700;

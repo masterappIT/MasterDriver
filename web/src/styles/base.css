@@ -175,6 +175,16 @@ h2 {
   color: var(--color-primary-dark);
 }
 
+/* Plain white with a blue edge: easy to see, but second to the filled button above it. */
+.button.outline {
+  border: 1.5px solid var(--color-primary);
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+.button.outline:active {
+  background: var(--color-tint);
+}
+
 .button.block {
   width: 100%;
 }
@@ -220,6 +230,8 @@ h2 {
 
 /* An input that reads like writing on a line, not a box (docs/DESIGN.md「不要像表格」3). */
 .line-input {
+  /* Block, so iOS Safari puts a date field under its label like any other field. */
+  display: block;
   width: 100%;
   min-height: 44px;
   padding: var(--space-sm) 0;
@@ -235,6 +247,16 @@ h2 {
 }
 .line-input:focus {
   border-bottom-color: var(--color-primary);
+}
+/* iOS draws date fields centred and narrower than other inputs; line them up on the left. */
+.line-input[type='datetime-local'],
+.line-input[type='date'] {
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: left;
+}
+.line-input::-webkit-date-and-time-value {
+  text-align: left;
 }
 textarea.line-input {
   min-height: 72px;
@@ -340,14 +362,38 @@ input[type='checkbox'].switch:checked::after {
 .amount-line > input {
   flex: 1;
   min-width: 0;
-  min-height: 52px;
+  min-height: 48px;
   border: none;
   background: transparent;
   color: var(--color-gold-ink);
   font: inherit;
-  font-size: 28px;
-  font-weight: 800;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   outline: none;
+}
+/* A second, quieter price (the passenger price): same layout, plain ink, smaller. */
+.amount-line.amount-line--quiet {
+  border-bottom-width: 1px;
+}
+.amount-line.amount-line--quiet > select {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+.amount-line.amount-line--quiet > input {
+  min-height: 44px;
+  color: var(--color-text);
+  font-size: 18px;
+  font-weight: 600;
+}
+.amount-line > select:disabled {
+  opacity: 0.5;
+}
+/* The hint inside an empty price reads like any other field's, not like a price. */
+.amount-line > input::placeholder {
+  color: var(--color-text-muted);
+  font-size: 16px;
+  font-weight: 400;
 }
 
 /* Where a trip goes, typed on lines joined by dots: teal for 上車, gold for 目的地 (as on the claim page). */

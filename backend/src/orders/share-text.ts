@@ -66,7 +66,8 @@ export function plateRequirement(plates: PlateRegion[] | undefined): string | nu
 }
 
 function dispatchLines(order: ShareOrder): string[] {
-  const load = [`${order.passengers}人`, `${order.luggage}件行李`, order.vehicleType].filter(Boolean).join('｜');
+  // No luggage is left unsaid, as a driver would write it: "1人", not "1人｜0件行李".
+  const load = [`${order.passengers}人`, order.luggage > 0 ? `${order.luggage}件行李` : null, order.vehicleType].filter(Boolean).join('｜');
   const leg = order.legIndex ? { ...order, legIndex: order.legIndex, legCount: order.legCount ?? order.legIndex } : null;
   return [
     route(order),

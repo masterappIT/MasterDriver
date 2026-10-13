@@ -14,51 +14,52 @@ datasource db {
 
 /// A verified phone number. Every user can both dispatch and claim orders.
 model User {
-  id          String   @id @default(cuid())
-  countryCode String
-  phone       String
-  locale      String   @default("zh-Hant")
+  id                   String   @id @default(cuid())
+  countryCode          String
+  phone                String
+  locale               String   @default("zh-Hant")
   /// Default for new orders: minutes before pickup when the winning driver may see
   /// the passenger's contact. Null means as soon as the order is claimed.
-  contactRevealMinutes Int? @default(60)
+  contactRevealMinutes Int?     @default(60)
   /// Default for new orders: whether they are also listed in the 接單池.
-  poolByDefault Boolean @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  poolByDefault        Boolean  @default(false)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
-  profile               DriverProfile?
-  sessions              Session[]
-  dispatchedOrders      Order[]               @relation("OrderDispatcher")
-  claimedOrders         Order[]               @relation("OrderClaimer")
-  claims                OrderClaim[]
-  subscriptions         Subscription[]
-  entitlementOverrides  EntitlementOverride[]
-  usages                Usage[]
-  creditAccount         CreditAccount?
-  creditEntries         CreditEntry[]
-  lead                  Lead?
-  groupInvites          GroupInvite[]
-  supportConversation   SupportConversation?
-  profilePage           ProfilePage?
+  profile              DriverProfile?
+  sessions             Session[]
+  dispatchedOrders     Order[]               @relation("OrderDispatcher")
+  claimedOrders        Order[]               @relation("OrderClaimer")
+  claims               OrderClaim[]
+  subscriptions        Subscription[]
+  entitlementOverrides EntitlementOverride[]
+  usages               Usage[]
+  creditAccount        CreditAccount?
+  creditEntries        CreditEntry[]
+  lead                 Lead?
+  groupInvites         GroupInvite[]
+  paymentMethods       PaymentMethod[]
+  supportConversation  SupportConversation?
+  profilePage          ProfilePage?
 
   @@unique([countryCode, phone])
 }
 
 /// Filled in once, the first time a driver claims an order.
 model DriverProfile {
-  userId        String   @id
-  name          String
+  userId           String       @id
+  name             String
   /// 車輛歸屬地 and 車牌類型 decide which plates the car has and their format.
   /// Null on profiles saved before these were asked.
   vehicleOwnership PlateRegion?
-  plateType     PlateType?
-  hkPlate       String?
-  macauPlate    String?
-  mainlandPlate String?
-  vehicleType   String?
-  seats         Int?
-  color         String?
-  updatedAt     DateTime @updatedAt
+  plateType        PlateType?
+  hkPlate          String?
+  macauPlate       String?
+  mainlandPlate    String?
+  vehicleType      String?
+  seats            Int?
+  color            String?
+  updatedAt        DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -78,10 +79,10 @@ model VerificationCode {
   mode        VerificationMode @default(SMS)
   codeHash    String
   ip          String?
-  attempts    Int       @default(0)
+  attempts    Int              @default(0)
   expiresAt   DateTime
   consumedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  createdAt   DateTime         @default(now())
 
   @@index([countryCode, phone, createdAt])
   @@index([ip, createdAt])
@@ -152,30 +153,30 @@ enum PlateType {
 }
 
 model Order {
-  id                   String      @id @default(cuid())
+  id                   String        @id @default(cuid())
   /// Unguessable code used in the dispatch link (/o/{code}).
-  code                 String      @unique
+  code                 String        @unique
   /// Unguessable code used in the passenger-confirmation link (/c/{confirmCode}).
-  confirmCode          String      @unique
+  confirmCode          String        @unique
   dispatcherId         String
-  scope                ClaimScope  @default(PUBLIC)
-  status               OrderStatus @default(OPEN)
+  scope                ClaimScope    @default(PUBLIC)
+  status               OrderStatus   @default(OPEN)
   pickupAt             DateTime
   origin               String
   destination          String
-  waypoints            String[]    @default([])
+  waypoints            String[]      @default([])
   passengers           Int
-  luggage              Int         @default(0)
+  luggage              Int           @default(0)
   vehicleType          String?
   /// What the dispatcher pays the driver, in minor units (cents). Shown in the
   /// group text and on the claim page. Null when left blank.
   driverPriceMinor     Int?
-  driverCurrency       Currency    @default(HKD)
+  driverCurrency       Currency      @default(HKD)
   /// What the passenger pays, in minor units. Never shown to drivers.
   passengerPriceMinor  Int?
-  passengerCurrency    Currency    @default(HKD)
+  passengerCurrency    Currency      @default(HKD)
   /// Whether the passenger-confirmation page shows the passenger price.
-  showPassengerPrice   Boolean     @default(false)
+  showPassengerPrice   Boolean       @default(false)
   /// Platform service fee charged to the dispatcher's credits when the order
   /// was created; refunded if the order is cancelled. Null when no fee applied.
   commissionMinor      Int?
@@ -186,7 +187,7 @@ model Order {
   /// Visible to the dispatcher always; to the driver who claimed the order only
   /// from contactRevealMinutes before pickup (null: as soon as claimed).
   passengerContact     String
-  contactRevealMinutes Int?        @default(60)
+  contactRevealMinutes Int?          @default(60)
   /// 接駁: every leg of one trip points at the trip's first leg (the first
   /// leg at itself). Null for an order that is not part of a trip.
   journeyId            String?
@@ -197,21 +198,32 @@ model Order {
   requiredPlates       PlateRegion[] @default([])
   /// 接單池: the dispatcher chose to list this order for every signed-in driver,
   /// besides the groups the link is pasted in. Off unless they tick it.
-  inPool               Boolean     @default(false)
+  inPool               Boolean       @default(false)
+  /// 收款方式: the passenger's confirmation page shows the dispatcher's own ways
+  /// to be paid. Off unless the dispatcher turns it on for this order (or trip).
+  showPaymentMethods   Boolean       @default(false)
+  /// 已收款: when the dispatcher marked the fare as received. The dispatcher
+  /// checks their own account and marks it; the platform never sees the money.
+  paidAt               DateTime?
+  /// 已結清: when the dispatcher marked the account with the driver who took this
+  /// order as settled. A mark only: who paid whom and how much is between the two
+  /// of them, and the platform neither sees the money nor checks it.
+  settledAt            DateTime?
   claimedById          String?
   claimedAt            DateTime?
   passengerConfirmedAt DateTime?
   completedAt          DateTime?
   cancelledAt          DateTime?
-  createdAt            DateTime    @default(now())
-  updatedAt            DateTime    @updatedAt
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
-  dispatcher  User         @relation("OrderDispatcher", fields: [dispatcherId], references: [id])
-  claimedBy   User?        @relation("OrderClaimer", fields: [claimedById], references: [id])
+  dispatcher  User            @relation("OrderDispatcher", fields: [dispatcherId], references: [id])
+  claimedBy   User?           @relation("OrderClaimer", fields: [claimedById], references: [id])
   claims      OrderClaim[]
-  journeyHead Order?       @relation("Journey", fields: [journeyId], references: [id])
+  journeyHead Order?          @relation("Journey", fields: [journeyId], references: [id])
   booking     BookingRequest?
-  journeyLegs Order[]      @relation("Journey")
+  journeyLegs Order[]         @relation("Journey")
+  tripGroup   TripGroup?
 
   @@unique([journeyId, legIndex])
   @@index([dispatcherId, createdAt])
@@ -358,7 +370,6 @@ model Usage {
   @@id([userId, featureKey, period])
 }
 
-
 // ---------------------------------------------------------------------------
 // Platform service fee (抽水) and prepaid credits. The fee is a fixed amount per
 // order charged to the dispatcher, never to the driver who claims it. It is a
@@ -424,19 +435,19 @@ enum AdminRole {
 }
 
 model Administrator {
-  id           String     @id @default(cuid())
-  username     String     @unique
+  id           String    @id @default(cuid())
+  username     String    @unique
   displayName  String
   /// scrypt hash; the password itself is never stored or logged.
   passwordHash String
   role         AdminRole
   disabledAt   DateTime?
   lastLoginAt  DateTime?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  sessions  AdminSession[]
-  auditLogs AdminAuditLog[]
+  sessions        AdminSession[]
+  auditLogs       AdminAuditLog[]
   supportMessages SupportMessage[]
 }
 
@@ -507,21 +518,21 @@ model SiteLogo {
 /// Limits against abuse (防濫用設定), changed in the platform admin and applied at
 /// once. The defaults here are the values the code used before they moved here.
 model LimitSetting {
-  id                                  String   @id @default("default")
+  id                                   String   @id @default("default")
   /// 客服: pictures a guest conversation may send in 24 hours (guests send no video).
-  supportGuestMediaPerDay             Int      @default(10)
+  supportGuestMediaPerDay              Int      @default(10)
   /// 客服: pictures and videos a signed-in user may send in 24 hours.
-  supportUserMediaPerDay              Int      @default(30)
+  supportUserMediaPerDay               Int      @default(30)
   /// 客服: messages a user or guest may send in one conversation per minute.
-  supportMessagesPerMinute            Int      @default(20)
+  supportMessagesPerMinute             Int      @default(20)
   /// 客服: guest conversations one address may open in 24 hours.
-  supportGuestConversationsPerIpPerDay Int     @default(5)
+  supportGuestConversationsPerIpPerDay Int      @default(5)
   /// 名片頁: booking requests one address may send in 24 hours.
-  bookingPerIpPerDay                  Int      @default(5)
+  bookingPerIpPerDay                   Int      @default(5)
   /// 名片頁: booking requests one page may receive in 24 hours.
-  bookingPerPagePerDay                Int      @default(30)
-  updatedAt                           DateTime @updatedAt
-  updatedBy                           String?
+  bookingPerPagePerDay                 Int      @default(30)
+  updatedAt                            DateTime @updatedAt
+  updatedBy                            String?
 }
 
 /// Site-wide SEO. The claim page (/o/), passenger page (/c/), driver app and admin
@@ -626,30 +637,30 @@ enum PaymentProvider {
 }
 
 model PaymentChannel {
-  id                String          @id @default(cuid())
-  provider          PaymentProvider
+  id               String          @id @default(cuid())
+  provider         PaymentProvider
   /// "sandbox" or "production"; one saved configuration per environment.
-  environment       String
+  environment      String
   /// The configuration future online payments use. At most one per provider.
-  enabled           Boolean         @default(false)
+  enabled          Boolean         @default(false)
   // Stripe
-  publishableKey    String?
-  secretKeyEnc      String?
-  webhookSecretEnc  String?
-  paymentMethods    String[]        @default([])
+  publishableKey   String?
+  secretKeyEnc     String?
+  webhookSecretEnc String?
+  paymentMethods   String[]        @default([])
   // AlipayHK
-  gatewayUrl        String?
-  partner           String?
-  appId             String?
-  privateKeyEnc     String?
-  publicKeyEnc      String?
-  notifyUrl         String?
-  returnUrl         String?
-  lastTestedAt      DateTime?
-  lastTestStatus    String?
-  lastTestMessage   String?
-  updatedAt         DateTime        @updatedAt
-  updatedBy         String?
+  gatewayUrl       String?
+  partner          String?
+  appId            String?
+  privateKeyEnc    String?
+  publicKeyEnc     String?
+  notifyUrl        String?
+  returnUrl        String?
+  lastTestedAt     DateTime?
+  lastTestStatus   String?
+  lastTestMessage  String?
+  updatedAt        DateTime        @updatedAt
+  updatedBy        String?
 
   @@unique([provider, environment])
 }
@@ -700,6 +711,60 @@ model SmsMessage {
 /// WECHAT: a group QR (expires after 7 days, and groups over 200 members cannot be
 /// joined by QR). WECHAT_CONTACT: the dispatcher's own WeChat QR, "add me and I'll
 /// pull you in" — it does not expire, so it suits big groups. WHATSAPP: an invite link.
+/// 收款方式: how a dispatcher can be paid. Not the platform's own payment
+/// channels (PaymentChannel); the money goes straight to the dispatcher.
+enum PaymentKind {
+  WECHAT
+  ALIPAY
+  PAYME
+  FPS
+  BANK
+  OTHER
+}
+
+model PaymentMethod {
+  id        String      @id @default(cuid())
+  ownerId   String
+  kind      PaymentKind
+  /// What the passenger sees above it, e.g. "微信收款" or the account holder's name.
+  label     String
+  /// Typed account details: an FPS ID, a PayMe phone, a bank and account number.
+  account   String?
+  /// A payment QR code (PNG/JPEG/WebP, at most 400 KB), shown only through the
+  /// confirmation link of an order that shows payment methods.
+  qrImage   Bytes?
+  qrMime    String?
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId])
+}
+
+/// 行程群: a group the dispatcher made themselves for one trip, with the
+/// passenger and the driver in it. The platform only passes on the way in: a
+/// WhatsApp invite link, or a WeChat group QR (which stops working after 7
+/// days). One per trip: orderId is the single order, or the first leg of a 接駁
+/// trip. The image is read only when it is asked for, never with the order.
+model TripGroup {
+  orderId   String            @id
+  platform  TripGroupPlatform
+  inviteUrl String?
+  qrImage   Bytes?
+  qrMime    String?
+  expiresAt DateTime?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+enum TripGroupPlatform {
+  WHATSAPP
+  WECHAT
+}
+
 enum GroupPlatform {
   WECHAT
   WHATSAPP
@@ -741,19 +806,19 @@ enum SupportMessageKind {
 /// One conversation per signed-in user, or per guest token. A guest who later
 /// signs in starts the user's own conversation; the two are never merged.
 model SupportConversation {
-  id                   String    @id @default(cuid())
-  userId               String?   @unique
+  id                  String    @id @default(cuid())
+  userId              String?   @unique
   /// Hash of the random token a guest keeps in the browser; the token itself is never stored.
-  guestTokenHash       String?   @unique
+  guestTokenHash      String?   @unique
   /// Limits how many guest conversations one address can open.
-  guestIp              String?
+  guestIp             String?
   /// The last message came from the user or guest and no staff has answered it.
-  waiting              Boolean   @default(false)
+  waiting             Boolean   @default(false)
   /// Staff messages the user or guest has not opened yet.
-  unreadByParticipant  Int       @default(0)
-  lastMessageAt        DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  unreadByParticipant Int       @default(0)
+  lastMessageAt       DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user     User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages SupportMessage[]

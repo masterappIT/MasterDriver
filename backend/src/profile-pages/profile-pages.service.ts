@@ -18,7 +18,7 @@ const OPEN: BookingStatus[] = ['PENDING', 'QUOTED', 'ACCEPTED'];
 
 const pageInclude = {
   photos: { orderBy: { createdAt: 'asc' } },
-  user: { select: { profile: { select: { name: true, vehicleType: true, seats: true, color: true } } } },
+  user: { select: { profile: { select: { name: true, vehicleType: true, seats: true, color: true, plateType: true } } } },
 } satisfies Prisma.ProfilePageInclude;
 type PageRow = Prisma.ProfilePageGetPayload<{ include: typeof pageInclude }>;
 type BookingRow = Prisma.BookingRequestGetPayload<{ include: { order: { select: { id: true; confirmCode: true } } } }>;
@@ -88,6 +88,31 @@ export class ProfilePagesService {
     const photo = await this.prisma.profilePhoto.findFirst({
       where: { id: photoId, page: { code, OR: [{ published: true }, ...(viewerId ? [{ userId: viewerId }] : [])] } },
     });
+    const bytes = photo ? await this.storage.read(photo.storageKey) : null;
+    if (!photo || !bytes) throw apiError(HttpStatus.NOT_FOUND, 'PHOTO_NOT_FOUND', 'Photo not found');
+    return { mime: photo.mimeType, bytes };
+  }
+
+  /**
+   * A vehicle photo for a passenger's confirmation link: of a driver who has that order, or a
+   * leg of its trip, and only while that leg is on. The page need not be published.
+   */
+  async passengerPhoto(confirmCode: string, photoId: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { confirmCode },
+      select: {
+        status: true,
+        claimedById: true,
+        journeyHead: { select: { journeyLegs: { select: { status: true, claimedById: true } } } },
+      },
+    });
+    const drivers = (order?.journeyHead?.journeyLegs ?? (order ? [order] : []))
+      .filter((leg) => leg.status === 'ASSIGNED' || leg.status === 'COMPLETED')
+      .map((leg) => leg.claimedById)
+      .filter((id): id is string => id !== null);
+    const photo = drivers.length
+      ? await this.prisma.profilePhoto.findFirst({ where: { id: photoId, page: { userId: { in: drivers } } } })
+      : null;
     const bytes = photo ? await this.storage.read(photo.storageKey) : null;
     if (!photo || !bytes) throw apiError(HttpStatus.NOT_FOUND, 'PHOTO_NOT_FOUND', 'Photo not found');
     return { mime: photo.mimeType, bytes };
@@ -234,6 +259,7 @@ export class ProfilePagesService {
       vehicleType: profile?.vehicleType ?? null,
       seats: profile?.seats ?? null,
       color: profile?.color ?? null,
+      plateType: profile?.plateType ?? null,
       intro: page.intro,
       routes: page.routes,
       languages: page.languages,

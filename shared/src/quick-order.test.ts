@@ -5,20 +5,20 @@ import { parseQuickOrder } from './quick-order';
 // Tuesday 13 October 2026, 19:03 in Hong Kong.
 const now = new Date('2026-10-13T11:03:00Z');
 
-test('「现在中山北站送九龙8座」 — from the group screenshot', () => {
-  const order = parseQuickOrder('现在中山北站送九龙8座', now);
+test('「现在深圳湾送九龙8座」 — 现在 means a few minutes from now', () => {
+  const order = parseQuickOrder('现在深圳湾送九龙8座', now);
   assert.equal(order.pickupAt, '2026-10-13T19:05:00+08:00');
-  assert.equal(order.origin, '中山北站');
+  assert.equal(order.origin, '深圳湾');
   assert.equal(order.destination, '九龙');
   assert.equal(order.vehicleType, '8座');
   assert.deepEqual(order.missing, []);
 });
 
-test('「明天15:40澳门送惠州博罗湾，直车」 — from the group screenshot', () => {
-  const order = parseQuickOrder('明天15:40澳门送惠州博罗湾，直车', now);
+test('「明天15:40澳门送香港，直车」 — a service word after a comma is a note', () => {
+  const order = parseQuickOrder('明天15:40澳门送香港，直车', now);
   assert.equal(order.pickupAt, '2026-10-14T15:40:00+08:00');
   assert.equal(order.origin, '澳门');
-  assert.equal(order.destination, '惠州博罗湾');
+  assert.equal(order.destination, '香港');
   assert.equal(order.notes, '直车');
 });
 

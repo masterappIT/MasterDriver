@@ -74,7 +74,7 @@ onMounted(load);
           <th>出發時間</th>
           <th>路線</th>
           <th>狀態</th>
-          <th>司機價</th>
+          <th>出單價</th>
           <th>服務費</th>
           <th>出單者</th>
           <th>接單司機</th>

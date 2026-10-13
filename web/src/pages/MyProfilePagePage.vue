@@ -173,13 +173,14 @@ onMounted(async () => {
           <input v-model="form.otherLanguages" class="line-input" :aria-label="t('其他語言')" :placeholder="t('其他語言（選填）')" />
         </div>
         <label class="line-field">
-          <span>{{ t('微信號（選填，會公開顯示）') }}</span>
+          <span>{{ t('微信號（選填）') }}</span>
           <input v-model="form.wechatId" class="line-input" maxlength="60" />
         </label>
         <label class="line-field">
-          <span>{{ t('WhatsApp 號碼（選填，會公開顯示）') }}</span>
+          <span>{{ t('WhatsApp 號碼（選填）') }}</span>
           <input v-model="form.whatsapp" class="line-input" maxlength="30" placeholder="+852 …" />
         </label>
+        <p class="hint">{{ t('名片頁公開後，這兩項會顯示在名片頁上。不公開也一樣：接了你的單的司機，或你接單的出單者，看得到這兩項，方便聯絡。') }}</p>
         <button class="button block" type="submit" :disabled="busy">{{ t('儲存') }}</button>
       </form>
 
@@ -205,7 +206,7 @@ onMounted(async () => {
           </button>
         </div>
         <input ref="picker" class="my-page__picker" type="file" accept="image/*" @change="picked" />
-        <p class="hint">{{ t('請只放自己車輛的照片，不要拍到乘客或他人的車牌。') }}</p>
+        <p class="hint">{{ t('請只放自己車輛的照片，不要拍到乘客或他人的車牌。你接單後，乘客在確認頁也會看到這些照片，方便認車，不用公開名片頁。') }}</p>
       </section>
 
       <button v-if="!page.published" class="button block large" type="button" :disabled="busy || !page.hasDriverProfile" @click="save(true)">

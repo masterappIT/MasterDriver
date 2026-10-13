@@ -191,9 +191,9 @@ test("the dispatcher's own default applies to new orders", async () => {
 
 test('the one-line text the order was written from is kept with the order', async () => {
   const dispatcher = await createDriver(ctx);
-  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, rawText: '明天15:40澳门送惠州博罗湾，直车 7座' });
+  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, rawText: '明天15:40澳门送香港，直车 7座' });
   const stored = await ctx.prisma.order.findUniqueOrThrow({ where: { id: created.id } });
-  assert.equal(stored.rawText, '明天15:40澳门送惠州博罗湾，直车 7座');
+  assert.equal(stored.rawText, '明天15:40澳门送香港，直车 7座');
 });
 
 // 接駁: one trip, several legs, each its own order.
@@ -378,7 +378,127 @@ test("the other leg's driver phone waits for this leg's reveal time", async () =
   assert.ok(dispatcherView.journey?.legs[1].driver?.phone);
 });
 
-test('這段我自己做: the dispatcher drives the leg, nobody can claim it, and 改派 offers it to the group', async () => {
+test('a driver sees the dispatcher\'s 名片頁 before claiming, and each side gets the other\'s WeChat and WhatsApp after', async () => {
+  const dispatcher = await createDriver(ctx, '出單師傅');
+  const driver = await createDriver(ctx, '接單師傅');
+  const hidden = await createDriver(ctx, '未公開師傅');
+  const page = (userId: string, code: string, published: boolean) =>
+    ctx.prisma.profilePage.create({ data: { userId, code, published, wechatId: `wx-${code}`, whatsapp: '+852 6000 0000' } });
+  await page(dispatcher, 'dispatcherpage', true);
+  await page(driver, 'driverpage', true);
+  await page(hidden, 'hiddenpage', false);
+  const created = await ctx.orders.create(dispatcher, sampleOrder);
+
+  const before = await ctx.orders.getByCode(created.code, driver);
+  assert.equal(before.dispatcherPageCode, 'dispatcherpage');
+  assert.equal('dispatcherContact' in before, false, 'no way to reach the dispatcher before claiming');
+  assert.equal('dispatcherPhone' in before, false);
+
+  const won = (await ctx.orders.claim(created.code, driver)).order;
+  assert.deepEqual(won.dispatcherContact, { wechatId: 'wx-dispatcherpage', whatsapp: '+852 6000 0000' });
+  const mine = await ctx.orders.getForParticipant(dispatcher, created.id);
+  assert.equal(mine.driver?.wechatId, 'wx-driverpage');
+  assert.equal(mine.driver?.whatsapp, '+852 6000 0000');
+  const passenger = await ctx.orders.getForPassenger(created.links.passengerConfirm.split('/c/')[1]);
+  assert.equal('wechatId' in (passenger.driver ?? {}), false, 'of the driver, the passenger gets the phone only');
+  // The passenger can reach whoever arranged the trip.
+  assert.equal(passenger.dispatcher?.name, '出單師傅');
+  assert.ok(passenger.dispatcher?.phone.startsWith('+852 '));
+  assert.equal(passenger.dispatcher?.wechatId, 'wx-dispatcherpage');
+  const selfDriven = await ctx.orders.create(dispatcher, { ...sampleOrder, selfDrive: true });
+  assert.equal((await ctx.orders.getForPassenger(selfDriven.links.passengerConfirm.split('/c/')[1])).dispatcher, null);
+
+  // A page that is not public is not linked, but the driver who took the order still gets the contacts on it.
+  const quiet = await ctx.orders.create(hidden, sampleOrder);
+  const open = await ctx.orders.getByCode(quiet.code, driver);
+  assert.equal(open.dispatcherPageCode, null);
+  assert.equal('dispatcherContact' in open, false);
+  const taken = (await ctx.orders.claim(quiet.code, driver)).order;
+  assert.deepEqual(taken.dispatcherContact, { wechatId: 'wx-hiddenpage', whatsapp: '+852 6000 0000' });
+  assert.equal(taken.dispatcherPageCode, null);
+});
+
+test('once the trip is over the driver no longer gets the passenger phone; the dispatcher always does', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, contactRevealMinutes: null });
+  const won = (await ctx.orders.claim(created.code, driver)).order;
+  assert.equal(won.passengerContact, '+852 9876 5432');
+  assert.equal(won.contactEnded, false);
+
+  const done = await ctx.orders.complete(driver, created.id);
+  assert.equal(done.passengerContact, null);
+  assert.equal(done.contactEnded, true);
+  assert.equal((await ctx.orders.getByCode(created.code, driver)).passengerContact, null, 'nor on the claim page');
+  assert.equal((await ctx.orders.getForParticipant(dispatcher, created.id)).passengerContact, '+852 9876 5432');
+
+  const second = await ctx.orders.create(dispatcher, { ...sampleOrder, contactRevealMinutes: null });
+  await ctx.orders.claim(second.code, driver);
+  await ctx.orders.cancel(dispatcher, second.id);
+  assert.equal((await ctx.orders.getForParticipant(driver, second.id)).passengerContact, null, 'nor after a cancellation');
+});
+
+const PNG = `data:image/png;base64,${Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32, 1)]).toString('base64')}`;
+
+test('行程群: the dispatcher gives the trip a group; the passenger gets it, the driver when they may see the passenger', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, contactRevealMinutes: 60 });
+  const confirmCode = created.links.passengerConfirm.split('/c/')[1];
+  await rejectsWith(ctx.orders.setTripGroup(driver, created.id, { platform: 'WHATSAPP', inviteUrl: 'https://chat.whatsapp.com/AbCdEf1234567890' }), 'ORDER_NOT_FOUND');
+
+  const withLink = await ctx.orders.setTripGroup(dispatcher, created.id, { platform: 'WHATSAPP', inviteUrl: 'https://chat.whatsapp.com/AbCdEf1234567890' });
+  assert.equal(withLink.tripGroup?.inviteUrl, 'https://chat.whatsapp.com/AbCdEf1234567890');
+  assert.equal((await ctx.orders.getForPassenger(confirmCode)).tripGroup?.platform, 'WHATSAPP');
+  assert.equal('tripGroup' in (await ctx.orders.getByCode(created.code)), false, 'nobody else');
+
+  // The pickup is days away: the driver does not get the passenger, so not the group either.
+  await ctx.orders.claim(created.code, driver);
+  assert.equal((await ctx.orders.getForParticipant(driver, created.id)).tripGroup, null);
+  await ctx.orders.setContactReveal(dispatcher, created.id, { contactRevealMinutes: null });
+  assert.equal((await ctx.orders.getForParticipant(driver, created.id)).tripGroup?.platform, 'WHATSAPP');
+
+  // A WeChat group QR replaces the link and stops after seven days.
+  await rejectsWith(ctx.orders.setTripGroup(dispatcher, created.id, { platform: 'WECHAT', qrImage: 'data:image/png;base64,AAAA' }), 'QR_IMAGE_INVALID');
+  const now = new Date();
+  const withQr = await ctx.orders.setTripGroup(dispatcher, created.id, { platform: 'WECHAT', qrImage: PNG }, now);
+  assert.equal(withQr.tripGroup?.inviteUrl, null);
+  assert.ok(withQr.tripGroup?.qrUrl?.startsWith(`/api/orders/${created.id}/trip-group/qr`));
+  assert.ok(await ctx.orders.tripGroupQr({ confirmCode }));
+  assert.ok(await ctx.orders.tripGroupQr({ userId: driver, id: created.id }));
+  assert.equal(await ctx.orders.tripGroupQr({ userId: await createDriver(ctx), id: created.id }), null);
+  const later = new Date(now.getTime() + 8 * 24 * 60 * 60 * 1000);
+  assert.equal(await ctx.orders.tripGroupQr({ confirmCode }, later), null);
+
+  await ctx.orders.complete(driver, created.id);
+  assert.equal((await ctx.orders.getForParticipant(driver, created.id)).tripGroup, null, 'gone for the driver once the trip is over');
+  assert.equal(await ctx.orders.tripGroupQr({ userId: driver, id: created.id }), null);
+  assert.equal((await ctx.orders.setTripGroup(dispatcher, created.id, { platform: null })).tripGroup, null);
+  assert.equal((await ctx.orders.getForPassenger(confirmCode)).tripGroup, null);
+});
+
+test('已結清 is the dispatcher\'s mark on a finished order; the driver sees it and cannot set it', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const created = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(created.code, driver);
+  await rejectsWith(ctx.orders.setSettlement(dispatcher, created.id, { settled: true }), 'INVALID_ORDER_STATUS');
+  await ctx.orders.complete(driver, created.id);
+
+  await rejectsWith(ctx.orders.setSettlement(driver, created.id, { settled: true }), 'ORDER_NOT_FOUND');
+  const marked = await ctx.orders.setSettlement(dispatcher, created.id, { settled: true });
+  assert.ok(marked.settledAt);
+  assert.ok((await ctx.orders.getForParticipant(driver, created.id)).settledAt, 'the driver sees the mark');
+  assert.equal('settledAt' in (await ctx.orders.getByCode(created.code)), false, 'nobody else does');
+  assert.equal((await ctx.orders.setSettlement(dispatcher, created.id, { settled: false })).settledAt, null);
+
+  // 這單我自己做: there is nobody to settle with.
+  const own = await ctx.orders.create(dispatcher, { ...sampleOrder, selfDrive: true });
+  await ctx.orders.complete(dispatcher, own.id);
+  await rejectsWith(ctx.orders.setSettlement(dispatcher, own.id, { settled: true }), 'INVALID_ORDER_STATUS');
+});
+
+test('這單我自己做: the dispatcher drives the leg, nobody can claim it, and 改派 offers it to the group', async () => {
   const dispatcher = await createDriver(ctx, '派單師傅');
   const driver = await createDriver(ctx);
   const own = await ctx.orders.create(dispatcher, { ...sampleOrder, selfDrive: true });
@@ -443,7 +563,7 @@ test('an order leaves the 接單池 when claimed, taken out, cancelled or past i
   assert.deepEqual(await codes(), []);
 });
 
-test('the 接單池 default comes from the dispatcher, and 這段我自己做 never enters it', async () => {
+test('the 接單池 default comes from the dispatcher, and 這單我自己做 never enters it', async () => {
   const dispatcher = await createDriver(ctx);
   const viewer = await createDriver(ctx);
   await ctx.prisma.user.update({ where: { id: dispatcher }, data: { poolByDefault: true } });

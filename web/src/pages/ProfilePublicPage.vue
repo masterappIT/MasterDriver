@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { api, errorText } from '../api';
 import BrandMark from '../components/BrandMark.vue';
 import { copyText } from '../device';
-import { fromLocalInput, toLocalInput } from '../format';
+import { fromLocalInput, plateKind, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { toast } from '../toast';
@@ -15,6 +15,7 @@ interface Page {
   vehicleType: string | null;
   seats: number | null;
   color: string | null;
+  plateType?: 'SINGLE' | 'DUAL' | 'TRIPLE' | null;
   intro: string;
   routes: string[];
   languages: string[];
@@ -54,7 +55,7 @@ const form = reactive({
 /** "7座商務車・黑"; the seat count is left out when the vehicle type already says it. */
 function vehicleLine(shown: Page) {
   const seats = shown.seats ? `${shown.seats}座` : '';
-  return [shown.vehicleType, shown.vehicleType?.includes(seats) ? '' : seats, shown.color].filter(Boolean).join('・');
+  return [shown.vehicleType, shown.vehicleType?.includes(seats) ? '' : seats, shown.color, plateKind(shown)].filter(Boolean).join('・');
 }
 
 async function submit() {

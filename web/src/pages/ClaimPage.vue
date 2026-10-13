@@ -5,6 +5,7 @@ import { api, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
 import AppIcon from '../components/AppIcon.vue';
 import BrandHeader from '../components/BrandHeader.vue';
+import ContactLines from '../components/ContactLines.vue';
 import InlineStatus from '../components/InlineStatus.vue';
 import JoinGroups, { type OfferedGroup } from '../components/JoinGroups.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
@@ -17,7 +18,7 @@ import { timeUntil } from '../relative-time';
 import SignInForm from '../components/SignInForm.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { copyText } from '../device';
-import { money, pickup, plates, shortTime } from '../format';
+import { loadLine, money, pickup, plateKind, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
@@ -44,7 +45,15 @@ interface ClaimView {
   passengerName?: string | null;
   passengerContact?: string | null;
   contactRevealAt?: string | null;
+  /** The trip is over: the passenger's phone is no longer shown to the driver. */
+  contactEnded?: boolean;
   dispatcherPhone?: string;
+  /** The winning driver's own details as the passenger will see them; photoIds are their vehicle photos. */
+  driver?: { photoIds?: string[] } | null;
+  /** The dispatcher's WeChat ID and WhatsApp from their 名片頁, for the driver who won. */
+  dispatcherContact?: { wechatId: string | null; whatsapp: string | null };
+  /** The dispatcher's 名片頁, when it is public: who you would be driving for. */
+  dispatcherPageCode?: string | null;
   groupInvites: OfferedGroup[];
   /** Trips the dispatcher took and finished in the tool, counted like the 名片頁 figure. */
   dispatcherCompletedTrips?: number;
@@ -68,9 +77,9 @@ let clock: ReturnType<typeof setInterval> | undefined;
 const untilPickup = computed(() => (order.value ? timeUntil(order.value.pickupAt, now.value) : null));
 
 /** "4人｜3件行李｜7座", the same line as in the group text. */
-const loadLine = computed(() => {
+const loadText = computed(() => {
   const o = order.value;
-  return o ? [`${o.passengers}人`, `${o.luggage}件行李`, o.vehicleType].filter(Boolean).join('｜') : '';
+  return o ? loadLine(o.passengers, o.luggage, o.vehicleType) : '';
 });
 
 async function load() {
@@ -124,17 +133,6 @@ async function afterProfile() {
   await claim();
 }
 
-/** What the winning driver pastes back into the group. */
-const claimedMessage = computed(() => {
-  const o = order.value;
-  if (!o) return '';
-  const driverPlates = plates(session.profile);
-  const leg = o.journey ? `（接駁第 ${o.journey.legIndex} 段）` : '';
-  return [`【已接單】${pickup(o.pickupAt)} ${o.origin} → ${o.destination}${leg}`, `司機：${session.profile?.name ?? ''}`, driverPlates ? `車牌：${driverPlates}` : '']
-    .filter(Boolean)
-    .join('\n');
-});
-
 async function copy(text: string, done: string) {
   toast((await copyText(t(text))) ? done : '複製失敗，請長按文字自行複製');
 }
@@ -167,24 +165,46 @@ onBeforeUnmount(() => {
       <InlineStatus v-else-if="order.viewer === 'other' && order.status === 'CANCELLED'" icon="cancel">{{ t('這張單已被取消。') }}</InlineStatus>
       <InlineStatus v-else-if="order.viewer === 'other' && order.status !== 'OPEN'" icon="info">{{ t('這張單已被接走。') }}</InlineStatus>
 
-      <!-- The winning driver: first paste it back into the group, then the passenger. -->
+      <!-- The winning driver: what the order is first, then the passenger and who put it out.
+           Every group's link already shows the order as taken. -->
+      <section v-if="order.viewer === 'driver'" class="card claim-page__won">
+        <strong>{{ t('你接到這張單了') }}</strong>
+        <span>{{ t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`) }}</span>
+        <RouterLink v-if="order.driver && !order.driver.photoIds?.length" class="claim-page__photo-hint" to="/app/profile-page">
+          {{ t('上傳車輛照片，乘客在確認頁比較容易認車') }}
+        </RouterLink>
+      </section>
+      <InlineStatus v-if="order.viewer === 'dispatcher'" icon="info">{{ t('這是你出的單。') }}</InlineStatus>
+
+      <!-- The order, in the same order as the group text: time, route, load, price, notes. -->
+      <section class="card claim-page__order">
+        <div class="claim-page__tags">
+          <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
+          <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
+          <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
+        </div>
+
+        <div class="claim-page__when">
+          <span class="claim-page__time">{{ pickup(order.pickupAt) }}</span>
+          <span v-if="untilPickup && order.status === 'OPEN'" class="claim-page__until">{{ t(untilPickup) }}</span>
+        </div>
+
+        <RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" />
+        <p v-if="order.journey" class="claim-page__transfer">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
+
+        <div class="claim-page__load-row">
+          <span class="claim-page__load">{{ t(loadText) }}</span>
+          <span v-if="order.driverPrice && !canClaim" class="claim-page__price">{{ money(order.driverPrice) }}</span>
+        </div>
+
+        <p v-if="order.notes" class="claim-page__notes"><strong>{{ t('備註') }}</strong>{{ t(order.notes) }}</p>
+      </section>
+
       <template v-if="order.viewer === 'driver'">
-        <section class="card claim-page__won">
-          <strong>{{ t('你接到這張單了') }}</strong>
-          <span>{{ t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`) }}</span>
-        </section>
-
-        <section class="card">
-          <p class="claim-page__label">{{ t('下一步：貼回群裡，讓大家知道單已有人接') }}</p>
-          <pre class="claim-page__group-text">{{ t(claimedMessage) }}</pre>
-          <button class="button block" type="button" @click="copy(claimedMessage, '已複製，可貼回群裡')">
-            <AppIcon name="copy" :size="18" />{{ t('複製「已接單」貼回群') }}
-          </button>
-        </section>
-
         <section class="card">
           <p class="claim-page__label">{{ t('乘客') }}</p>
-          <p v-if="!order.passengerContact" class="claim-page__reveal">
+          <p v-if="order.contactEnded" class="claim-page__reveal">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
+          <p v-else-if="!order.passengerContact" class="claim-page__reveal">
             {{ t(`乘客電話將於 ${shortTime(order.contactRevealAt ?? null)} 顯示。之前如需安排，請聯絡出單者。`) }}
           </p>
           <template v-else>
@@ -209,42 +229,20 @@ onBeforeUnmount(() => {
             </span>
             <a class="chip" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`">{{ t('致電出單者') }}</a>
           </div>
+          <ContactLines :wechat-id="order.dispatcherContact?.wechatId" :whatsapp="order.dispatcherContact?.whatsapp" />
+          <RouterLink v-if="order.dispatcherPageCode" class="claim-page__contact claim-page__card-link" :to="`/p/${order.dispatcherPageCode}`">{{ t('看出單者的名片') }}</RouterLink>
           <div v-if="session.profile?.hkPlate || session.profile?.macauPlate || session.profile?.mainlandPlate" class="claim-page__contact">
-            <span><small>{{ t('你開的車') }}</small></span>
+            <span><small>{{ [t('你開的車'), t(plateKind(session.profile))].filter(Boolean).join(' · ') }}</small></span>
             <PlateTag :hk="session.profile?.hkPlate" :macau="session.profile?.macauPlate" :mainland="session.profile?.mainlandPlate" />
           </div>
         </section>
       </template>
 
-      <InlineStatus v-else-if="order.viewer === 'dispatcher'" icon="info">{{ t('這是你出的單。') }}</InlineStatus>
-
-      <!-- The order, in the same order as the group text: time, route, load, price, notes. -->
-      <section class="card claim-page__order">
-        <div class="claim-page__tags">
-          <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
-          <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
-          <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
-        </div>
-
-        <div class="claim-page__when">
-          <span class="claim-page__time">{{ pickup(order.pickupAt) }}</span>
-          <span v-if="untilPickup && order.status === 'OPEN'" class="claim-page__until">{{ t(untilPickup) }}</span>
-        </div>
-
-        <RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" />
-        <p v-if="order.journey" class="claim-page__transfer">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
-
-        <div class="claim-page__load-row">
-          <span class="claim-page__load">{{ t(loadLine) }}</span>
-          <span v-if="order.driverPrice && !canClaim" class="claim-page__price">{{ money(order.driverPrice) }}</span>
-        </div>
-
-        <p v-if="order.notes" class="claim-page__notes"><strong>{{ t('備註') }}</strong>{{ t(order.notes) }}</p>
-      </section>
 
       <!-- Who put the order out, as one line: "陳師傅出的單 · 已在師傅幫完成 128 張單". -->
       <p v-if="order.viewer !== 'driver'" class="claim-page__dispatcher">
         <strong>{{ order.dispatcherName ? t(`${order.dispatcherName} 出的單`) : t('出單者沒有留名') }}</strong>
+        <RouterLink v-if="order.dispatcherPageCode && order.viewer === 'other'" class="claim-page__card-link" :to="`/p/${order.dispatcherPageCode}`">{{ t('看名片') }}</RouterLink>
         <span v-if="order.dispatcherCompletedTrips">{{ t(`已在師傅幫完成 ${order.dispatcherCompletedTrips} 張單`) }}</span>
       </p>
 
@@ -271,7 +269,7 @@ onBeforeUnmount(() => {
       <!-- Price on the left and the button on the right, within reach of one thumb. -->
       <div v-if="canClaim" class="action-bar claim-page__bar">
         <div v-if="order.driverPrice" class="claim-page__bar-price">
-          <span>{{ t('司機價') }}</span>
+          <span>{{ t('出單價') }}</span>
           <strong>{{ money(order.driverPrice) }}</strong>
         </div>
         <button class="button large claim-page__claim" type="button" :disabled="busy" @click="claim">
@@ -390,6 +388,10 @@ onBeforeUnmount(() => {
   gap: var(--space-xs) var(--space-sm);
   margin: 0 var(--space-xs) var(--space-lg);
 }
+.claim-page__card-link {
+  font-size: var(--font-label);
+  font-weight: 600;
+}
 .claim-page__dispatcher span {
   padding: 1px var(--space-sm);
   border-radius: var(--radius-pill);
@@ -405,13 +407,17 @@ onBeforeUnmount(() => {
   gap: var(--space-md);
   padding: var(--space-sm) 0;
 }
-.claim-page__contact + .claim-page__contact {
+.claim-page__people > * + .claim-page__contact {
   border-top: 1px solid var(--color-divider);
 }
-.claim-page__contact > span {
+/* The words on the left stack; the plates on the right are a span too and keep their own row. */
+.claim-page__contact > span:not(.plate-tag) {
   display: flex;
   flex-direction: column;
   min-width: 0;
+}
+.claim-page__contact > .plate-tag {
+  justify-content: flex-end;
 }
 .claim-page__contact small {
   color: var(--color-text-secondary);
@@ -425,23 +431,17 @@ onBeforeUnmount(() => {
   text-align: center;
   background: var(--color-tint);
 }
+.claim-page__photo-hint {
+  margin-top: var(--space-xs);
+  font-size: var(--font-label);
+  font-weight: 600;
+}
 .claim-page__won strong {
   font-size: 20px;
 }
 .claim-page__won span {
   color: var(--color-text-secondary);
   font-size: var(--font-label);
-}
-/* The text exactly as it will be pasted, so the driver sees it before copying. */
-.claim-page__group-text {
-  margin: 0 0 var(--space-md);
-  padding: var(--space-md);
-  border-radius: 4px 18px 18px 18px;
-  background: var(--color-tint);
-  font: inherit;
-  font-size: var(--font-label);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .claim-page__person {
   display: flex;

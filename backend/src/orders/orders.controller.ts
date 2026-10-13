@@ -1,22 +1,42 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import {
   createOrderSchema,
   orderListQuerySchema,
   poolQuerySchema,
   poolUpdateSchema,
   contactRevealUpdateSchema,
+  orderPaymentUpdateSchema,
+  orderSettlementUpdateSchema,
+  tripGroupUpdateSchema,
   updateOrderPricesSchema,
   type ContactRevealUpdate,
+  type OrderPaymentUpdate,
+  type OrderSettlementUpdate,
+  type TripGroupUpdate,
   type CreateOrderInput,
   type OrderListQuery,
   type PoolQuery,
   type PoolUpdate,
   type UpdateOrderPricesInput,
 } from '@masterdriver/shared';
+import type { Response } from 'express';
 import { AuthGuard, CurrentUser, OptionalAuthGuard } from '../auth/auth.guard';
 import type { SessionUser } from '../auth/auth.service';
+import { apiError } from '../common/errors';
 import { ZodPipe } from '../common/zod-pipe';
 import { OrdersService } from './orders.service';
+
+function sendGroupQr(response: Response, image: { mime: string; bytes: Buffer } | null) {
+  if (!image) throw apiError(HttpStatus.NOT_FOUND, 'TRIP_GROUP_NOT_FOUND', 'QR not available');
+  response
+    .set({
+      'content-type': image.mime,
+      // The way into one trip's group: never kept by anything shared between people.
+      'cache-control': 'private, max-age=300',
+      'x-content-type-options': 'nosniff',
+    })
+    .send(image.bytes);
+}
 
 /** Orders as seen by the signed-in dispatcher or driver. */
 @Controller('orders')
@@ -61,6 +81,29 @@ export class OrdersController {
     @Body(new ZodPipe(contactRevealUpdateSchema)) body: ContactRevealUpdate,
   ) {
     return this.orders.setContactReveal(user.id, id, body);
+  }
+
+  /** 收款: show the dispatcher's ways to be paid to the passenger, and mark the fare received. */
+  @Patch(':id/payment')
+  setPayment(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(orderPaymentUpdateSchema)) body: OrderPaymentUpdate) {
+    return this.orders.setPayment(user.id, id, body);
+  }
+
+  /** 行程群: the dispatcher's own group for the trip, given to the passenger and the driver. */
+  @Patch(':id/trip-group')
+  setTripGroup(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(tripGroupUpdateSchema)) body: TripGroupUpdate) {
+    return this.orders.setTripGroup(user.id, id, body);
+  }
+
+  @Get(':id/trip-group/qr')
+  async tripGroupQr(@CurrentUser() user: SessionUser, @Param('id') id: string, @Res() response: Response) {
+    sendGroupQr(response, await this.orders.tripGroupQr({ userId: user.id, id }));
+  }
+
+  /** 已結清: the dispatcher's mark that the account with the driver of a finished order is settled. */
+  @Patch(':id/settlement')
+  setSettlement(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(orderSettlementUpdateSchema)) body: OrderSettlementUpdate) {
+    return this.orders.setSettlement(user.id, id, body);
   }
 
   @Patch(':id/pool')
@@ -114,6 +157,11 @@ export class PassengerLinkController {
   @Get(':confirmCode')
   view(@Param('confirmCode') confirmCode: string) {
     return this.orders.getForPassenger(confirmCode);
+  }
+
+  @Get(':confirmCode/trip-group/qr')
+  async tripGroupQr(@Param('confirmCode') confirmCode: string, @Res() response: Response) {
+    sendGroupQr(response, await this.orders.tripGroupQr({ confirmCode }));
   }
 
   @Post(':confirmCode/confirm')

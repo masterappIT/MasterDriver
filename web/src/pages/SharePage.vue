@@ -3,6 +3,8 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import AppIcon from '../components/AppIcon.vue';
+import BottomSheet from '../components/BottomSheet.vue';
+import GroupText from '../components/GroupText.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
@@ -17,6 +19,8 @@ interface Sent {
   claimedAt: string | null;
   passengerConfirmedAt: string | null;
   journey: Journey | null;
+  /** The dispatcher's own WeChat ID and WhatsApp, as the driver who takes the order will see them. */
+  dispatcherContact?: { wechatId: string | null; whatsapp: string | null };
   share?: { dispatch: { wechat: string; whatsapp: string }; claimed: string | null; passenger: string };
 }
 
@@ -38,6 +42,26 @@ const canAddLeg = computed(() => {
   return !o.journey || (o.journey.legIndex === o.journey.legCount && o.journey.legCount < MAX_JOURNEY_LEGS);
 });
 
+/**
+ * The driver who takes the order reaches the dispatcher by phone, and by WeChat or WhatsApp when
+ * the dispatcher gave them. With neither, say so once in a sheet; after that a line on the page.
+ */
+const ASKED_KEY = 'md.contactAsked';
+const noContact = computed(() => {
+  const o = order.value;
+  return Boolean(o && o.viewer === 'dispatcher' && !selfDriven.value && o.dispatcherContact && !o.dispatcherContact.wechatId && !o.dispatcherContact.whatsapp);
+});
+const askContact = ref(false);
+
+function closeAsk() {
+  askContact.value = false;
+  try {
+    localStorage.setItem(ASKED_KEY, '1');
+  } catch {
+    /* private mode: the sheet shows again next time */
+  }
+}
+
 async function copy(text: string | undefined, done: string) {
   if (!text) return;
   toast((await copyText(t(text))) ? done : '複製失敗，請長按文字自行複製');
@@ -46,6 +70,13 @@ async function copy(text: string | undefined, done: string) {
 onMounted(async () => {
   try {
     order.value = await api<Sent>('GET', `/orders/${id}`);
+    let asked = false;
+    try {
+      asked = localStorage.getItem(ASKED_KEY) === '1';
+    } catch {
+      /* ask */
+    }
+    askContact.value = noContact.value && !asked;
   } catch (e) {
     error.value = errorText(e);
   }
@@ -60,8 +91,7 @@ onMounted(async () => {
     <template v-if="order && order.share">
       <header class="share__head">
         <strong>{{ t('已出單') }}</strong>
-        <span v-if="!selfDriven">{{ t('把下面的文字貼到群裡，司機點連結就能搶') }}</span>
-        <span v-else>{{ t('這段你自己做，不用貼到群裡') }}</span>
+        <span v-if="selfDriven">{{ t('這單你自己做，不用貼到群裡') }}</span>
       </header>
 
       <ol class="share__steps" :aria-label="t('進度')">
@@ -71,13 +101,18 @@ onMounted(async () => {
       </ol>
 
       <section v-if="!selfDriven" class="card">
-        <h2 class="share__label">{{ t('貼到群裡') }}</h2>
-        <pre class="share__text">{{ t(order.share.dispatch.wechat) }}</pre>
-        <div class="share__buttons">
-          <button class="button" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">
+        <!-- How it works, in three short steps, for someone dispatching for the first time. -->
+        <ol class="share__how">
+          <li><span>1</span>{{ t('複製') }}</li>
+          <li><span>2</span>{{ t('到群裡長按貼上') }}</li>
+          <li><span>3</span>{{ t('司機點連結搶單') }}</li>
+        </ol>
+        <GroupText :text="order.share.dispatch.wechat" :link-note="t('藍色是這張單的搶單連結，會和文字一起複製')" />
+        <div class="share__buttons" :class="{ 'share__buttons--whatsapp-first': !inWeChat }">
+          <button class="button" :class="{ outline: !inWeChat }" type="button" @click="copy(order.share.dispatch.wechat, '已複製，回到微信群長按輸入框貼上')">
             <AppIcon name="copy" :size="18" />{{ t('複製到微信群') }}
           </button>
-          <button class="button" type="button" @click="copy(order.share.dispatch.whatsapp, '已複製，貼到 WhatsApp 群吧')">
+          <button class="button" :class="{ outline: inWeChat }" type="button" @click="copy(order.share.dispatch.whatsapp, '已複製，回到 WhatsApp 群長按輸入框貼上')">
             <AppIcon name="copy" :size="18" />{{ t('複製到 WhatsApp') }}
           </button>
         </div>
@@ -88,12 +123,17 @@ onMounted(async () => {
       </section>
 
       <section class="card">
-        <h2 class="share__label">{{ t('傳給乘客的確認連結') }}</h2>
-        <pre class="share__text">{{ t(order.share.passenger) }}</pre>
-        <button class="button secondary block" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
+        <h2 class="share__label">{{ t('傳給乘客確認') }}</h2>
+        <p class="share__passenger-hint">{{ t('乘客按連結確認行程；有司機接單後，乘客會看到司機和車牌。') }}</p>
+        <GroupText :text="order.share.passenger" />
+        <button class="button outline block" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
           <AppIcon name="copy" :size="18" />{{ t('複製給乘客') }}
         </button>
       </section>
+
+      <p v-if="noContact" class="hint share__hint">
+        {{ t('你還沒填微信號或 WhatsApp，接單司機只能打電話找你。') }}<RouterLink to="/app/profile-page">{{ t('去填寫') }}</RouterLink>
+      </p>
 
       <div class="share__next">
         <RouterLink v-if="canAddLeg" class="button secondary" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
@@ -101,6 +141,15 @@ onMounted(async () => {
       </div>
       <p v-if="order.journey?.legCount === 1" class="hint share__hint">{{ t('這是接駁單的第 1 段，接著按「加接駁段」發下一段。') }}</p>
     </template>
+
+    <BottomSheet v-if="askContact" :title="t('讓接單司機找得到你')" @close="closeAsk">
+      <p class="share__ask">{{ t('你還沒填微信號或 WhatsApp。有人接單後，對方現在只看得到你的電話。填了之後，接單司機可以直接加你微信或開 WhatsApp。') }}</p>
+      <p class="hint">{{ t('只有接了你的單的司機看得到，不用公開名片頁。') }}</p>
+      <div class="share__ask-buttons">
+        <button class="button secondary" type="button" @click="closeAsk">{{ t('之後再說') }}</button>
+        <RouterLink class="button" to="/app/profile-page" @click="closeAsk">{{ t('去填寫') }}</RouterLink>
+      </div>
+    </BottomSheet>
 
     <!-- Someone other than the dispatcher opened this address: send them to the order itself. -->
     <section v-else-if="order" class="card">
@@ -152,21 +201,58 @@ onMounted(async () => {
   font-size: var(--font-caption);
   font-weight: 600;
 }
-/* The text exactly as it will be pasted, as a message bubble in the group. */
-.share__text {
+/* 1 複製 · 2 到群裡長按貼上 · 3 司機點連結搶單: one short row, numbers in small circles. */
+.share__how {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-xs) var(--space-sm);
   margin: 0 0 var(--space-md);
-  padding: var(--space-md);
-  border-radius: 4px 18px 18px 18px;
-  background: var(--color-tint);
-  font: inherit;
+  padding: 0;
+  list-style: none;
+  color: var(--color-label);
+  font-size: var(--font-caption);
+  line-height: 1.4;
+}
+.share__how li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.share__how span {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.share__passenger-hint {
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-secondary);
   font-size: var(--font-label);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 .share__buttons {
   display: grid;
   gap: var(--space-sm);
+}
+.share__buttons--whatsapp-first > :first-child {
+  order: 1;
+}
+.share__ask {
+  margin: 0 0 var(--space-sm);
+}
+.share__ask-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
 }
 .share__wa {
   display: block;

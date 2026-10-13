@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { JourneyLeg } from '../journey';
-import { pickup } from '../format';
+import { pickup, plateKind } from '../format';
 import { t } from '../i18n';
 import PlateTag from './PlateTag.vue';
 import StatusBadge from './StatusBadge.vue';
@@ -31,7 +31,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
         <div v-if="leg.driver && leg.legIndex !== current" class="journey-legs__driver">
           <span>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</span>
           <PlateTag :hk="leg.driver.hkPlate" :macau="leg.driver.macauPlate" :mainland="leg.driver.mainlandPlate" />
-          <span v-if="leg.driver.color" class="hint">{{ t(leg.driver.color) }}</span>
+          <span v-if="leg.driver.color || plateKind(leg.driver)" class="hint">{{ [leg.driver.color, plateKind(leg.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
           <a v-if="leg.driver.phone" :href="`tel:${leg.driver.phone.replace(/\s/g, '')}`" @click.stop>{{ leg.driver.phone }}</a>
         </div>
         <div v-else-if="leg.driver === null && leg.status === 'OPEN'" class="hint">{{ t('等待司機搶單') }}</div>

@@ -168,7 +168,7 @@ onBeforeUnmount(() => clearInterval(poller));
   display: block;
   margin-bottom: var(--space-xs);
   color: var(--color-gold-ink);
-  font-size: 28px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
 }
 .booking__next {

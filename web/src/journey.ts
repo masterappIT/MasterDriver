@@ -6,6 +6,7 @@ export interface LegDriver {
   hkPlate: string | null;
   macauPlate: string | null;
   mainlandPlate: string | null;
+  plateType?: 'SINGLE' | 'DUAL' | 'TRIPLE' | null;
   vehicleType: string | null;
   color: string | null;
   /** Null until this order's contact reveal time (other legs' drivers). */

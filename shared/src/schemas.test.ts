@@ -42,7 +42,7 @@ test('order input fills defaults and drops blank optional text', () => {
 });
 
 test('an order still needs passengers and the passenger contact', () => {
-  assert.equal(createOrderSchema.safeParse({ pickupAt: '2026-10-15T14:30:00+08:00', origin: '澳门', destination: '惠州博罗湾' }).success, false);
+  assert.equal(createOrderSchema.safeParse({ pickupAt: '2026-10-15T14:30:00+08:00', origin: '澳门', destination: '香港' }).success, false);
 });
 
 test('the passenger contact is a phone with its country code, stored in one format', () => {

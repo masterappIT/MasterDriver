@@ -130,10 +130,12 @@ export const createOrderSchema = z.object({
     .transform((plates) => PLATE_REGIONS.filter((plate) => plates.includes(plate))),
   /** 名片頁: the booking request this order is made from; it must be the dispatcher's own and still open. */
   bookingId: z.string().trim().min(1).max(40).optional(),
-  /** 這段我自己做: the dispatcher drives this order, so it is not offered for claiming. */
+  /** 這單我自己做: the dispatcher drives this order, so it is not offered for claiming. */
   selfDrive: z.boolean().default(false),
   /** 接單池: also list the order for every signed-in driver. Defaults to the dispatcher's preference. */
   inPool: z.boolean().optional(),
+  /** 收款方式: show the dispatcher's own ways to be paid on the passenger's confirmation page. */
+  showPaymentMethods: z.boolean().default(false),
 });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
@@ -149,6 +151,26 @@ export const updateOrderPricesSchema = z
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });
 export type UpdateOrderPricesInput = z.infer<typeof updateOrderPricesSchema>;
+
+/**
+ * 收款: whether the passenger's confirmation page shows the dispatcher's ways to be paid, and
+ * whether the dispatcher has received the fare (they check their own account and mark it).
+ * For a trip with 接駁 both apply to every leg: the passenger pays once.
+ */
+export const orderPaymentUpdateSchema = z
+  .object({
+    showPaymentMethods: z.boolean().optional(),
+    paid: z.boolean().optional(),
+  })
+  .refine((value) => value.showPaymentMethods !== undefined || value.paid !== undefined, { message: 'NOTHING_TO_UPDATE' });
+export type OrderPaymentUpdate = z.infer<typeof orderPaymentUpdateSchema>;
+
+/**
+ * 已結清: the dispatcher marks the account with the driver who took the order as settled, or
+ * takes the mark back. A mark only; no amount, and the platform does not check it.
+ */
+export const orderSettlementUpdateSchema = z.object({ settled: z.boolean() });
+export type OrderSettlementUpdate = z.infer<typeof orderSettlementUpdateSchema>;
 
 /** Admin update of development-mode sign-in. A missing code keeps the stored one. */
 export const developmentLoginUpdateSchema = z
@@ -208,6 +230,17 @@ export const WHATSAPP_INVITE = /^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]{10,4
 /** A QR image sent as a data URL: PNG, JPEG or WebP. Size is checked on the server after decoding. */
 export const QR_DATA_URL = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
 
+/**
+ * 行程群: the dispatcher's own group for one trip (passenger, dispatcher, driver): a WhatsApp
+ * invite link or a WeChat group QR; `platform: null` takes it away.
+ */
+export const tripGroupUpdateSchema = z.discriminatedUnion('platform', [
+  z.object({ platform: z.literal('WHATSAPP'), inviteUrl: z.string().trim().regex(WHATSAPP_INVITE, 'WHATSAPP_INVITE_INVALID') }),
+  z.object({ platform: z.literal('WECHAT'), qrImage: z.string().regex(QR_DATA_URL, 'QR_IMAGE_REQUIRED') }),
+  z.object({ platform: z.literal(null) }),
+]);
+export type TripGroupUpdate = z.infer<typeof tripGroupUpdateSchema>;
+
 export const groupInviteCreateSchema = z
   .object({
     platform: z.enum(GROUP_PLATFORMS),
@@ -235,3 +268,29 @@ export const groupInviteUpdateSchema = z
   })
   .partial();
 export type GroupInviteUpdate = z.infer<typeof groupInviteUpdateSchema>;
+
+/** 收款方式: how a dispatcher can be paid. The money goes straight to them, never through the platform. */
+export const PAYMENT_KINDS = ['WECHAT', 'ALIPAY', 'PAYME', 'FPS', 'BANK', 'OTHER'] as const;
+export type PaymentKind = (typeof PAYMENT_KINDS)[number];
+export const MAX_PAYMENT_METHODS = 5;
+
+/** A way to be paid needs something to pay to: typed account details, a QR image, or both. */
+export const paymentMethodCreateSchema = z
+  .object({
+    kind: z.enum(PAYMENT_KINDS),
+    label: text(30),
+    account: optionalText(80),
+    qrImage: z.string().regex(QR_DATA_URL, 'QR_IMAGE_INVALID').optional(),
+  })
+  .refine((value) => Boolean(value.account || value.qrImage), { message: 'PAYMENT_METHOD_EMPTY', path: ['account'] });
+export type PaymentMethodCreate = z.infer<typeof paymentMethodCreateSchema>;
+
+/** Null clears the account or the QR image; a method must still keep one of them. */
+export const paymentMethodUpdateSchema = z
+  .object({
+    label: text(30),
+    account: z.string().trim().max(80).nullable(),
+    qrImage: z.string().regex(QR_DATA_URL, 'QR_IMAGE_INVALID').nullable(),
+  })
+  .partial();
+export type PaymentMethodUpdate = z.infer<typeof paymentMethodUpdateSchema>;

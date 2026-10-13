@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { money, pickup } from '../format';
+import { loadLine, money, pickup } from '../format';
 import { t } from '../i18n';
 import { legLabel, plateRequirement, type PlateRegion } from '../journey';
 import StatusBadge from './StatusBadge.vue';
@@ -21,6 +21,10 @@ export interface OrderSummary {
   driver?: { name: string | null } | null;
   selfDrive?: boolean;
   requiredPlates?: PlateRegion[];
+  /** 收款 (dispatcher only): when the fare was marked received. */
+  paidAt?: string | null;
+  /** 已結清: when the dispatcher marked the account with the driver as settled. */
+  settledAt?: string | null;
   /** 接駁: the trip this order is a leg of; legs[0].id (dispatcher only) identifies it. */
   journey?: { legIndex: number; legCount: number; legs: { id?: string }[] } | null;
 }
@@ -29,7 +33,7 @@ export interface OrderSummary {
 const props = defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' | 'pool' }>();
 
 /** "4人｜3件行李｜7座", the same line as in the group text. */
-const load = computed(() => [`${props.order.passengers}人`, `${props.order.luggage}件行李`, props.order.vehicleType].filter(Boolean).join('｜'));
+const load = computed(() => loadLine(props.order.passengers, props.order.luggage, props.order.vehicleType));
 </script>
 
 <template>
@@ -44,6 +48,8 @@ const load = computed(() => [`${props.order.passengers}人`, `${props.order.lugg
       <span>{{ t(load) }}</span>
       <span v-if="order.requiredPlates?.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
       <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
+      <span v-if="role === 'dispatched' && order.status === 'COMPLETED' && !order.paidAt" class="gold-tag">{{ t('未收款') }}</span>
+      <span v-if="order.status === 'COMPLETED' && !order.settledAt && !order.selfDrive" class="gold-tag">{{ t('未結清') }}</span>
     </div>
     <div class="order-card__foot">
       <template v-if="role === 'dispatched'">

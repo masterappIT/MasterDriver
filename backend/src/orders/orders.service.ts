@@ -3,6 +3,9 @@ import {
   MAX_JOURNEY_LEGS,
   type ContactRevealUpdate,
   type CreateOrderInput,
+  type OrderPaymentUpdate,
+  type OrderSettlementUpdate,
+  type TripGroupUpdate,
   type OrderListQuery,
   type PoolQuery,
   type PoolUpdate,
@@ -15,9 +18,11 @@ import { apiError } from '../common/errors';
 import { CommissionService } from '../billing/commission.service';
 import { CreditsService } from '../billing/credits.service';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
-import { GroupInvitesService } from '../groups/group-invites.service';
+import { GroupInvitesService, WECHAT_GROUP_QR_DAYS } from '../groups/group-invites.service';
+import { decodeQrImage } from '../groups/qr-image';
+import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { PrismaService } from '../prisma.service';
-import { orderInclude, legsOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
+import { contactRevealAt, orderInclude, legsOf, passengerPriceOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
 import { claimedShareText, dispatchShareText, passengerShareText } from './share-text';
 
 const ORDER_CODE_LENGTH = 10;
@@ -38,6 +43,7 @@ export class OrdersService {
     @Inject(CommissionService) private readonly commission: CommissionService,
     @Inject(CreditsService) private readonly credits: CreditsService,
     @Inject(GroupInvitesService) private readonly groupInvites: GroupInvitesService,
+    @Inject(PaymentMethodsService) private readonly paymentMethods: PaymentMethodsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -82,10 +88,13 @@ export class OrdersService {
               passengerContact: input.passengerContact,
               contactRevealMinutes: preference,
               requiredPlates: input.requiredPlates,
-              // 這段我自己做 is never offered to others, so it stays out of the 接單池 too.
+              // 這單我自己做 is never offered to others, so it stays out of the 接單池 too.
               inPool: !input.selfDrive && (input.inPool ?? defaults!.poolByDefault),
+              // 收款 belongs to the whole trip: a new leg follows the trip's first leg.
+              showPaymentMethods: leg ? leg.showPaymentMethods : input.showPaymentMethods,
+              paidAt: leg ? leg.paidAt : null,
               ...(leg ? { journeyId: leg.journeyId, legIndex: leg.legIndex } : {}),
-              // 這段我自己做: taken by the dispatcher at once, never offered for claiming.
+              // 這單我自己做: taken by the dispatcher at once, never offered for claiming.
               ...(input.selfDrive ? { status: 'ASSIGNED' as const, claimedById: userId, claimedAt: now } : {}),
             },
             include: orderInclude,
@@ -216,7 +225,7 @@ export class OrdersService {
       userId,
       id,
       ['ASSIGNED'],
-      { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null },
+      { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null },
       'dispatcher',
     );
   }
@@ -266,10 +275,119 @@ export class OrdersService {
     return this.transition(userId, id, ['OPEN'], { inPool: input.inPool }, 'dispatcher');
   }
 
+  /**
+   * 收款: the dispatcher shows their ways to be paid on the passenger's page, and marks the fare
+   * received after checking their own account. A trip with 接駁 is paid once, so both apply to
+   * every leg. Not for a cancelled order.
+   */
+  async setPayment(userId: string, id: string, input: OrderPaymentUpdate, now = new Date()) {
+    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { journeyId: true, status: true } });
+    if (!order) throw this.notFound();
+    if (order.status === 'CANCELLED') throw this.invalidStatus();
+    const trip: Prisma.OrderWhereInput = order.journeyId ? { journeyId: order.journeyId } : { id };
+    await this.prisma.order.updateMany({
+      where: { ...trip, dispatcherId: userId },
+      data: {
+        ...(input.showPaymentMethods === undefined ? {} : { showPaymentMethods: input.showPaymentMethods }),
+        ...(input.paid === undefined ? {} : { paidAt: input.paid ? now : null }),
+      },
+    });
+    return this.getForParticipant(userId, id);
+  }
+
+  /**
+   * 已結清: the dispatcher marks the account with the driver of a finished order as settled,
+   * or takes the mark back. Each leg of a 接駁 trip has its own driver, so each is marked on
+   * its own. Not for 這單我自己做: there is nobody to settle with.
+   */
+  async setSettlement(userId: string, id: string, input: OrderSettlementUpdate, now = new Date()) {
+    const order = await this.prisma.order.findFirst({
+      where: { id, dispatcherId: userId },
+      select: { status: true, dispatcherId: true, claimedById: true },
+    });
+    if (!order) throw this.notFound();
+    if (order.status !== 'COMPLETED' || !order.claimedById || order.claimedById === order.dispatcherId) throw this.invalidStatus();
+    await this.prisma.order.update({ where: { id }, data: { settledAt: input.settled ? now : null } });
+    return this.getForParticipant(userId, id);
+  }
+
+  /**
+   * 行程群: the dispatcher gives the trip a group they made themselves (a WhatsApp invite link
+   * or a WeChat group QR), replaces it, or takes it away. One for the whole trip.
+   */
+  async setTripGroup(userId: string, id: string, input: TripGroupUpdate, now = new Date()) {
+    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { journeyId: true, status: true } });
+    if (!order) throw this.notFound();
+    if (order.status === 'CANCELLED') throw this.invalidStatus();
+    const orderId = order.journeyId ?? id;
+    if (input.platform === null) {
+      await this.prisma.tripGroup.deleteMany({ where: { orderId } });
+    } else if (input.platform === 'WHATSAPP') {
+      const data = { platform: input.platform, inviteUrl: input.inviteUrl, qrImage: null, qrMime: null, expiresAt: null };
+      await this.prisma.tripGroup.upsert({ where: { orderId }, create: { orderId, ...data }, update: data });
+    } else {
+      const image = decodeQrImage(input.qrImage);
+      if (!image) throw apiError(HttpStatus.BAD_REQUEST, 'QR_IMAGE_INVALID', 'Upload a PNG, JPEG or WebP image up to 400 KB');
+      const data = {
+        platform: input.platform,
+        inviteUrl: null,
+        qrImage: image.bytes,
+        qrMime: image.mime,
+        expiresAt: new Date(now.getTime() + WECHAT_GROUP_QR_DAYS * 24 * 60 * 60 * 1000),
+      };
+      await this.prisma.tripGroup.upsert({ where: { orderId }, create: { orderId, ...data }, update: data });
+    }
+    return this.getForParticipant(userId, id);
+  }
+
+  /**
+   * The WeChat QR of a trip's group, for whoever the view offered it to: the dispatcher, the
+   * driver once they may see the passenger's contact, or the passenger through their link.
+   */
+  async tripGroupQr(by: { userId: string; id: string } | { confirmCode: string }, now = new Date()) {
+    const order = await this.prisma.order.findFirst({
+      where: 'confirmCode' in by ? { confirmCode: by.confirmCode } : { id: by.id, OR: [{ dispatcherId: by.userId }, { claimedById: by.userId }] },
+      select: { id: true, journeyId: true, status: true, dispatcherId: true, pickupAt: true, contactRevealMinutes: true },
+    });
+    if (!order || order.status === 'CANCELLED') return null;
+    if ('userId' in by && order.dispatcherId !== by.userId) {
+      const revealAt = contactRevealAt(order);
+      if (order.status === 'COMPLETED' || (revealAt && now < revealAt)) return null;
+    }
+    const group = await this.prisma.tripGroup.findUnique({ where: { orderId: order.journeyId ?? order.id } });
+    if (!group?.qrImage || !group.qrMime || (group.expiresAt && group.expiresAt <= now)) return null;
+    return { mime: group.qrMime, bytes: Buffer.from(group.qrImage) };
+  }
+
   async getForPassenger(confirmCode: string) {
     const order = await this.prisma.order.findUnique({ where: { confirmCode }, include: orderInclude });
     if (!order) throw this.notFound();
-    return toPassengerView(order);
+    const view = toPassengerView(order);
+    return { ...view, payment: view.status === 'CANCELLED' ? null : await this.paymentFor(order, confirmCode) };
+  }
+
+  /**
+   * The payment section of the passenger's page: who to pay, how much and how. Only when the
+   * dispatcher turned it on and has ways to be paid. The amount is the passenger price; for a
+   * trip, the sum of its legs when every leg still on has one in the same currency.
+   */
+  private async paymentFor(order: OrderWithPeople, confirmCode: string) {
+    if (!order.showPaymentMethods) return null;
+    const methods = await this.paymentMethods.forPassenger(order.dispatcherId, confirmCode);
+    if (methods.length === 0) return null;
+    const legs = legsOf(order)?.filter((leg) => leg.status !== 'CANCELLED') ?? [order];
+    const prices = legs.map(passengerPriceOf);
+    const sameCurrency = prices.every((price) => price && price.currency === prices[0]?.currency);
+    const amount =
+      prices.length > 0 && sameCurrency
+        ? { amount: Math.round(prices.reduce((sum, price) => sum + price!.amount * 100, 0)) / 100, currency: prices[0]!.currency }
+        : null;
+    return {
+      payee: order.dispatcher.profile?.name ?? null,
+      amount,
+      paid: Boolean(order.paidAt),
+      methods,
+    };
   }
 
   /** One confirmation covers every leg of a trip with 接駁 that is still on. */
@@ -340,7 +458,8 @@ export class OrdersService {
         throw apiError(HttpStatus.CONFLICT, 'TRANSFER_PLACE_LOCKED', 'The previous leg is claimed; its destination cannot change');
       }
     }
-    return { journeyId, legIndex: (last.legIndex ?? 1) + 1 };
+    const head = await tx.order.findUniqueOrThrow({ where: { id: journeyId }, select: { showPaymentMethods: true, paidAt: true } });
+    return { journeyId, legIndex: (last.legIndex ?? 1) + 1, showPaymentMethods: head.showPaymentMethods, paidAt: head.paidAt };
   }
 
   /**

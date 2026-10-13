@@ -29,3 +29,6 @@ export async function copyText(text: string): Promise<boolean> {
 }
 
 export const whatsappLink = (text: string) => `https://wa.me/?text=${encodeURIComponent(text)}`;
+
+/** A WhatsApp chat with one number, as typed ("+852 9123 4567"). */
+export const whatsappChat = (number: string) => `https://wa.me/${number.replace(/[^0-9]/g, '')}`;
