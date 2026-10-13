@@ -6,6 +6,8 @@ export interface AppConfig {
   /** Print sign-in codes to the log instead of sending SMS. Never true in production. */
   devLogOtp: boolean;
   sessionCookieSecure: boolean;
+  /** Key for provider secrets stored in the database (base64, 32 bytes). */
+  dataEncryptionKey: string;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -14,6 +16,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   if (isProduction && otpPepper.length < 32) {
     throw new Error('OTP_PEPPER must be set to at least 32 characters in production');
   }
+  const dataEncryptionKey = env.DATA_ENCRYPTION_KEY ?? '';
+  if (isProduction && Buffer.from(dataEncryptionKey, 'base64').length !== 32) {
+    throw new Error('DATA_ENCRYPTION_KEY must be a base64-encoded 32-byte key in production');
+  }
   return {
     port: Number(env.PORT ?? 3020),
     isProduction,
@@ -21,6 +27,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     otpPepper: otpPepper || 'local-development-pepper',
     devLogOtp: !isProduction && env.DEV_LOG_OTP === 'true',
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
+    dataEncryptionKey: dataEncryptionKey || 'local-development-only-key',
   };
 }
 

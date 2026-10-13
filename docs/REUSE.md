@@ -46,4 +46,8 @@
 
 | 日期 | 本專案檔案 | Master Travel 來源 | 來源 commit | 調整內容 |
 |---|---|---|---|---|
-| — | — | — | — | 尚未沿用任何檔案 |
+| 2026-10-13 | `backend/src/channels/stripe-config.ts` | `backend/src/stripe-channel-config.ts` | `e4a82aa2` | 原樣複製；設定的儲存、加密與 API 改由本專案的 `payment-channels.service.ts` 處理 |
+| 2026-10-13 | `backend/src/channels/stripe-config.test.ts` | `backend/src/stripe-channel-config.test.ts` | `e4a82aa2` | 只改 import 路徑 |
+| 2026-10-13 | `backend/src/channels/alipayhk-config.ts` | `backend/src/main.ts` 的 AlipayHK 設定驗證與金鑰檢查 | `c902bb5a` | 依同樣規則重寫成獨立函式（HTTPS 網關、2160 開頭 16 位商戶、PKCS8／SPKI 金鑰） |
+| 2026-10-13 | `backend/src/channels/sms253.ts`、`sms-channels.service.ts` | `backend/src/main.ts` 的 253 雲通訊呼叫（`requestSms253WithConfig`、`sendSms253`） | `c902bb5a` | 依同樣的請求格式重寫；改為 +86 走國內帳號、+852／+853 走國際帳號；紀錄不保存含驗證碼的簡訊內容 |
+| 2026-10-13 | `backend/src/common/secret-box.ts` | `backend/src/main.ts` 的 `encryptWechatSecret`／`decryptWechatSecret` | `c902bb5a` | 同樣使用 AES-256-GCM；金鑰改用獨立的 `DATA_ENCRYPTION_KEY`，密文加版本前綴 `v1` |

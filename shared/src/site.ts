@@ -104,3 +104,24 @@ export const leadsQuerySchema = z.object({
 export type LeadsQuery = z.infer<typeof leadsQuerySchema>;
 
 export const adPositionQuerySchema = z.object({ position: z.enum(AD_POSITIONS) });
+
+/** Admin update of a 253 SMS channel. A blank password keeps the stored one. */
+export const smsChannelUpdateSchema = z
+  .object({
+    enabled: z.boolean(),
+    endpoint: httpsUrl,
+    account: z.string().trim().max(60),
+    password: z.string().trim().max(200),
+    template: z
+      .string()
+      .trim()
+      .max(300)
+      .refine((value) => value === '' || value.includes('{code}'), { message: 'TEMPLATE_NEEDS_CODE' }),
+    testPhone: z
+      .string()
+      .trim()
+      .max(20)
+      .regex(/^\d*$/, 'DIGITS_ONLY'),
+  })
+  .partial();
+export type SmsChannelUpdate = z.infer<typeof smsChannelUpdateSchema>;

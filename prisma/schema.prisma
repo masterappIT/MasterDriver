@@ -535,3 +535,81 @@ model Lead {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// ---------------------------------------------------------------------------
+// Payment and SMS channels (same providers as Master Travel, separate settings).
+// Secret fields hold AES-256-GCM ciphertext ("v1.<iv>.<tag>.<data>"), never plain
+// text, and are never returned by any API.
+// ---------------------------------------------------------------------------
+
+enum PaymentProvider {
+  STRIPE
+  ALIPAY_HK
+}
+
+model PaymentChannel {
+  id                String          @id @default(cuid())
+  provider          PaymentProvider
+  /// "sandbox" or "production"; one saved configuration per environment.
+  environment       String
+  /// The configuration future online payments use. At most one per provider.
+  enabled           Boolean         @default(false)
+  // Stripe
+  publishableKey    String?
+  secretKeyEnc      String?
+  webhookSecretEnc  String?
+  paymentMethods    String[]        @default([])
+  // AlipayHK
+  gatewayUrl        String?
+  partner           String?
+  appId             String?
+  privateKeyEnc     String?
+  publicKeyEnc      String?
+  notifyUrl         String?
+  returnUrl         String?
+  lastTestedAt      DateTime?
+  lastTestStatus    String?
+  lastTestMessage   String?
+  updatedAt         DateTime        @updatedAt
+  updatedBy         String?
+
+  @@unique([provider, environment])
+}
+
+/// DOMESTIC sends to +86 numbers; INTERNATIONAL to +852 and +853 (253 雲通訊).
+enum SmsRoute {
+  DOMESTIC
+  INTERNATIONAL
+}
+
+model SmsChannel {
+  route           SmsRoute  @id
+  enabled         Boolean   @default(false)
+  endpoint        String    @default("")
+  account         String    @default("")
+  passwordEnc     String?
+  /// Must contain {code}.
+  template        String    @default("")
+  testPhone       String    @default("")
+  lastTestedAt    DateTime?
+  lastTestStatus  String?
+  lastTestMessage String?
+  updatedAt       DateTime  @updatedAt
+  updatedBy       String?
+}
+
+/// One row per SMS attempt. The verification code itself is never stored.
+model SmsMessage {
+  id            String   @id @default(cuid())
+  route         SmsRoute
+  countryCode   String
+  phone         String
+  purpose       String
+  status        String
+  providerCode  String?
+  providerError String?
+  createdAt     DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([countryCode, phone, createdAt])
+}

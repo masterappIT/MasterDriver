@@ -7,6 +7,9 @@ import { AdminDataService } from '../admin/admin-data.service';
 import { AuditService } from '../admin/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { CommissionService } from '../billing/commission.service';
+import { PaymentChannelsService } from '../channels/payment-channels.service';
+import { SmsChannelsService } from '../channels/sms-channels.service';
+import { SecretBox } from '../common/secret-box';
 import { CreditsService } from '../billing/credits.service';
 import { DevelopmentLoginService } from '../auth/development-login.service';
 import type { SmsProvider } from '../auth/sms';
@@ -21,6 +24,9 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'SmsMessage',
+  'SmsChannel',
+  'PaymentChannel',
   'AdStat',
   'AdSlot',
   'Lead',
@@ -85,6 +91,7 @@ export async function setupDatabase() {
   const commission = new CommissionService(prisma, entitlements);
   const credits = new CreditsService(prisma);
   const audit = new AuditService(prisma);
+  const box = new SecretBox('test-encryption-key');
   return {
     prisma,
     sms,
@@ -98,6 +105,9 @@ export async function setupDatabase() {
     adminAuth: new AdminAuthService(prisma, audit),
     adminData: new AdminDataService(prisma, audit, credits, commission, entitlements),
     site: new SiteService(prisma),
+    box,
+    paymentChannels: new PaymentChannelsService(prisma, box),
+    smsChannels: new SmsChannelsService(prisma, box, { ...config, devLogOtp: false }),
     async reset() {
       sms.sent = [];
       await prisma.$executeRawUnsafe(`TRUNCATE ${TABLES.map((table) => `"${table}"`).join(', ')} CASCADE`);
