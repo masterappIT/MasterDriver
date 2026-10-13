@@ -6,15 +6,15 @@
 
 **目前狀態（2026-10-13）：已部署。**「一次性設定」全部完成，第一次部署由 GitHub Actions 執行成功，資料種子已執行。`DEPLOY_ENABLED` 已是 `true`：**之後每次推送到 `main` 都會自動部署正式環境。**
 
-| 服務 | 目前的網址（暫時，等正式網域） |
-|---|---|
-| 司機與乘客網頁 | `https://masterdriver-web-396289477283.asia-east2.run.app` |
-| 平台後台 | `https://masterdriver-admin-396289477283.asia-east2.run.app` |
-| API | 只經上面兩個網址的 `/api` 使用 |
+| 服務 | 正式網址（2026-10-14 起） | Cloud Run 原網址（仍可用） |
+|---|---|---|
+| 司機與乘客網頁 | `https://masterdriverapp.masterappinc.com` | `https://masterdriver-web-396289477283.asia-east2.run.app` |
+| 平台後台 | `https://masterdriveradmin.masterappinc.com` | `https://masterdriver-admin-396289477283.asia-east2.run.app` |
+| API | 只經上面網址的 `/api` 使用 | |
 
-還不能給人用，因為：
+派單連結與乘客確認連結用正式網址產生（見下方「正式網域」）。還不能給人用，因為：
 
-- 還沒有正式網域，`*.run.app` 在內地很可能打不開；派單連結目前也是用這個暫時的網址產生。
+- 正式網域還沒在內地手機的微信內實測。
 - 簡訊通道還沒設定，所以沒有人能登入（取得驗證碼會回 `SMS_NOT_CONFIGURED`）。
 
 已完成的還有：資料種子、第一個超級管理員（帳號 `vincent`）、客服檔案的每日清理（Cloud Run Job `masterdriver-support-purge`，Cloud Scheduler 每天 04:30 香港時間觸發）。
@@ -290,18 +290,36 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 
 ## 正式網域
 
-這一步等正式網域確定後才能做，需要您提供：
+2026-10-14 設定完成：
 
-1. 司機與乘客網頁用的網域（例如 `shifu.example.com`）。
-2. 平台後台用的網域（建議另一個子網域，例如 `admin.shifu.example.com`）。
-3. 這個網域的 DNS 由誰管理（之後要加紀錄）。
+| 網域 | 指向 |
+|---|---|
+| `masterdriverapp.masterappinc.com` | 司機與乘客網頁（Cloud Run `masterdriver-web`） |
+| `masterdriveradmin.masterappinc.com` | 平台後台（Cloud Run `masterdriver-admin`） |
+
+**為什麼用負載平衡器：**Cloud Run 的自訂網域對應不支援 `asia-east2`（2026-10-14 查 Google Cloud 文件確認），所以在前面加了全球外部 HTTPS 負載平衡器，做法照同公司 MasterBox（`masterbox-507211`）現有的那一套，但資源完全在本專案，不與 MasterBox 共用。
+
+| 資源（`master-driver-511510`，全球） | 用途 |
+|---|---|
+| `masterdriver-public-ip` | 固定 IP `34.144.204.172`（Premium） |
+| `masterdriver-web-neg`、`masterdriver-admin-neg` | serverless NEG（`asia-east2`），指向兩個 Cloud Run 服務 |
+| `masterdriver-web-backend`、`masterdriver-admin-backend` | 後端服務（`EXTERNAL_MANAGED`、HTTP） |
+| `masterdriver-map` | 依主機名稱分流；其他主機名稱一律到 `web` |
+| `masterdriver-cert` | Google 代管憑證，涵蓋兩個網域，自動續期 |
+| `masterdriver-https-proxy`、`masterdriver-https-rule` | 443 |
+| `masterdriver-http-redirect`、`masterdriver-http-proxy`、`masterdriver-http-rule` | 80，一律 301 轉到 `https://`（MasterBox 沒有這一段） |
+
+**DNS：**`masterappinc.com` 在 Squarespace 註冊，DNS 也在 Squarespace（公司官網、Mailgun 郵件、MasterBox 子網域都在同一份紀錄）。只新增了兩筆 A 紀錄 `masterdriverapp`、`masterdriveradmin` → `34.144.204.172`，TTL 4 小時；其他紀錄沒有變動。改 DNS 要在 Squarespace 後台以 `info@masterappinc.com` 登入，每次新增紀錄都要再用 Google 驗證一次。DNS 是否搬到 Google Cloud DNS 另行處理：整份紀錄屬於公司，不應放在本專案。
+
+**連結：**GitHub `production` 環境的 `PRODUCTION_WEB_URL` 已改為 `https://masterdriverapp.masterappinc.com`，部署時寫入 API 的 `PUBLIC_BASE_URL`。改這個變數後要重新部署才生效。
+
+**費用：**負載平衡器每月約 18 到 25 美元，另加流量費用。
 
 要留意的事：
 
-- **Cloud Run 的自訂網域對應功能只在部分區域提供，據我所知不包含 `asia-east2`（建立前請以 Google Cloud 文件確認）。**若不支援，要在前面加一個全球外部 HTTPS 負載平衡器（serverless NEG 指向 `web` 與 `admin`），憑證用 Google 代管憑證。Master Travel 目前沒有負載平衡器，也沒有網域對應，這一段沒有現成做法可以沿用。
-- **`*.run.app` 網址在內地很可能打不開**（Google 的網域在內地多數被封鎖）。計劃第 0 階段的「新網域在微信內打開實測」必須用正式網域、在內地的手機上做；負載平衡器的 IP 在內地能否穩定連線也要實測，不行的話要改用其他入口（例如在香港的反向代理或 CDN）。
+- `*.run.app` 原網址仍可直接使用；使用者回報內地可以打開。正式網域走 Google 的負載平衡器 IP，**還沒在內地手機的微信內實測**（見 [ACCEPTANCE.md](./ACCEPTANCE.md)）。不穩的話要改用其他入口（例如在香港的反向代理）。
 - 微信內分享連結時，未在微信登記的網域可能出現提示頁；是否需要做微信的網域驗證，在實測時一併確認。
-- 網域確定後要更新 `PRODUCTION_WEB_URL`，並在後台「SEO」填入正式網域。
+- 後台「SEO」的正式網域要填 `https://masterdriverapp.masterappinc.com`（在後台操作）。
 
 ## 已在正式環境驗證（2026-10-13）
 
@@ -309,11 +327,12 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 - 資料種子 Job 執行成功。
 - 經 `web` 網址的 `/api` 轉發、SPA 路徑、`robots.txt`、`admin` 網址。
 - 客服檔案：以訪客身分上傳一張圖片，寫入私有 bucket 後讀回內容完全相同；不帶憑證讀取回 401。（留下一則測試對話和一個 39 位元組的測試檔。）
+- 正式網域（2026-10-14，在開發用的電腦上以 curl 測試）：兩個網域的 `https://` 首頁與 `/api/health/ready` 都回 200；`http://` 回 301 轉到 `https://`；API 的 `PUBLIC_BASE_URL` 已是正式網址。
 
 ## 尚未驗證
 
 - 回滾腳本沒有實際執行過。
-- 正式網域、內地連線、微信與 WhatsApp 內的操作。
+- 正式網域在內地的連線，以及微信與 WhatsApp 內的操作。
 - 影片上傳（只驗證了圖片）。客服檔案清理 Job 與排程已實際觸發成功，但當時沒有過期檔案可刪。
 - 從本機推送 API 映像檔會因上傳逾時失敗（映像檔約 780 MB），部署一律由 GitHub Actions 執行。
 
