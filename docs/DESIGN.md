@@ -67,9 +67,18 @@ MasterDriver 的 UI 沿用 Master Travel 的風格，讓用戶從 MasterDriver �
 ## 品牌區隔
 
 - 色系、字型、圓角與 Master Travel 一致，屬同一品牌家族。
-- **沿用現有的 MasterApp Logo**，不另外設計 Logo（2026-10-13 決定）。
-- 區隔靠**產品名稱標示**：Logo 旁固定顯示「MasterDriver 跨境師傅幫」，其中「跨境師傅幫」要醒目，避免與 Master Travel 現有司機端「Master App Driver」（同樣使用 MasterApp 標誌、頁面標題「MasterApp｜司機端」）混淆。
-- Logo 檔案參考 Master Travel 倉庫的 `brand/favicon.svg`、`brand/logo-100-100.png`；放入本專案 `assets/` 前先確認最新的正式版本。
+- **MasterDriver 有自己的專屬 Logo**，同時**保留 MasterApp Logo** 作為母品牌（2026-10-13 決定）。採「子品牌 + 母品牌背書」：
+  - 主要位置（App 圖示、頁首、分享圖、官網首屏）用 **MasterDriver 專屬 Logo**；
+  - 頁尾、官網、關於頁標示「**by MasterApp**」並放 MasterApp Logo。
+- 現有 MasterApp Logo 的特徵（`brand/favicon.svg`）：主藍 `#285cfc` 方底、白色雲形「M」圖形、灰藍 `#56657e` 圓形裝飾、底部一輛商務車剪影。
+- **專屬 Logo 設計建議：**
+  1. 延續 MasterApp 的家族元素（主藍底、白色主圖形、灰藍點綴），一看就知道是同一家公司；
+  2. 主圖形表達 MasterDriver 自己的意思，可考慮：方向盤或司機帽（師傅）、兩個方向的箭頭（跨境、派與接）、兩手相扣或連結（幫）；
+  3. **避免和 Master Travel 司機端「Master App Driver」相似**，主圖形不要直接沿用 MasterApp 的「M」雲形；
+  4. 小尺寸也要清楚：瀏覽器分頁圖示 16 px、微信頭像、推廣圖浮水印；
+  5. 準備三個版本：彩色、單色白（放深色底與推廣圖）、單色深色；
+  6. 圖形與文字可以分開使用：「MasterDriver」英文字標、「跨境師傅幫」中文字標。
+- Logo 旁的產品名稱固定為「MasterDriver 跨境師傅幫」，其中「跨境師傅幫」要醒目，進一步與「Master App Driver」區隔。
 
 ## 設計流程
 

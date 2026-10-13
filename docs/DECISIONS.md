@@ -6,7 +6,8 @@
 
 | 日期 | 決定 |
 |---|---|
-| 2026-10-13 | 沿用現有 MasterApp Logo，不另外設計；以「MasterDriver 跨境師傅幫」名稱標示與 Master Travel 司機端區隔 |
+| 2026-10-13 | MasterDriver 需要專屬 Logo，同時保留 MasterApp Logo 作為母品牌（by MasterApp）；設計建議見 `docs/DESIGN.md` |
+| 2026-10-13 | 沿用現有 MasterApp Logo，不另外設計（已被 2026-10-13「MasterDriver 需要專屬 Logo，同時保留 MasterApp Logo」取代） |
 | 2026-10-13 | MasterDriver 設計稿由使用者製作（與 Master Travel 同一設計者），先有 Figma 設計稿再切版 |
 | 2026-10-13 | UI 沿用 Master Travel 風格（以司機端 token 為基準），規範見 `docs/DESIGN.md`；只沿用視覺數值，不複製程式；Logo 沿用 MasterApp（見上方決定） |
 | 2026-10-13 | 乘客自行找司機：不做乘客叫車平台（永遠）；「司機名錄」保留空間但先不做，第四階段評估，條件為司機自願加入、只顯示系統數據、標明平台不審核不擔保、平台不經手預約付款、先取得法律意見；名片頁資料結構先預留 |
