@@ -67,6 +67,7 @@ const ERROR_TEXT: Record<string, string> = {
   ORDER_NOT_FOUND: '找不到這張單',
   CANNOT_CLAIM_OWN_ORDER: '不能搶自己出的單',
   PROFILE_REQUIRED: '請先填寫司機資料',
+  ACCOUNT_SUSPENDED: '這個帳號已被停用，如有疑問請聯絡客服',
   TEAM_ONLY: '這張單只限車隊成員搶',
   INVALID_ORDER_STATUS: '這張單的狀態已經改變，請重新整理',
   DRIVER_PRICE_LOCKED: '已有司機接單，出單價不能再改',

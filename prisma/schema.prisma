@@ -23,6 +23,10 @@ model User {
   contactRevealMinutes Int?     @default(60)
   /// Default for new orders: whether they are also listed in the 接單池.
   poolByDefault        Boolean  @default(false)
+  /// 停用: set by the platform's staff for abuse. A suspended user cannot sign in
+  /// and every session they had stops working; their past orders stay as they are.
+  suspendedAt          DateTime?
+  suspendedReason      String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

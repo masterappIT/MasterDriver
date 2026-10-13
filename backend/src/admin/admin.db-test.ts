@@ -112,6 +112,53 @@ test('the admin sees the money marks, filters by them, and counts what is still 
   assert.equal(user.profilePage, null);
 });
 
+test('停用: a suspended user is signed out and cannot sign in until restored', async () => {
+  const boss = await superAdmin();
+  const user = await ctx.prisma.user.create({ data: { countryCode: '+852', phone: '61234567' } });
+  await ctx.developmentLogin.update({ enabled: true, code: '246810' }, 'test');
+  await ctx.auth.requestCode({ countryCode: '+852', phone: '61234567' }, undefined);
+  const { token } = await ctx.auth.verifyCode({ countryCode: '+852', phone: '61234567', code: '246810' }, undefined);
+  assert.ok(await ctx.auth.resolveSession(token));
+
+  const suspended = await ctx.adminData.suspendUser(user.id, { reason: '重複發假單' }, boss);
+  assert.ok(suspended.suspendedAt);
+  assert.equal(suspended.suspendedReason, '重複發假單');
+  assert.equal(await ctx.auth.resolveSession(token), null, 'signed out everywhere');
+  await rejectsWith(ctx.adminData.suspendUser(user.id, { reason: 'again' }, boss), 'USER_ALREADY_SUSPENDED');
+  await ctx.prisma.verificationCode.deleteMany();
+  await ctx.auth.requestCode({ countryCode: '+852', phone: '61234567' }, undefined);
+  await rejectsWith(ctx.auth.verifyCode({ countryCode: '+852', phone: '61234567', code: '246810' }, undefined), 'ACCOUNT_SUSPENDED');
+
+  await ctx.adminData.restoreUser(user.id, boss);
+  await rejectsWith(ctx.adminData.restoreUser(user.id, boss), 'USER_NOT_SUSPENDED');
+  await ctx.prisma.verificationCode.deleteMany();
+  await ctx.auth.requestCode({ countryCode: '+852', phone: '61234567' }, undefined);
+  assert.ok((await ctx.auth.verifyCode({ countryCode: '+852', phone: '61234567', code: '246810' }, undefined)).token);
+  const actions = (await ctx.prisma.adminAuditLog.findMany({ where: { targetId: user.id }, orderBy: { createdAt: 'asc' } })).map((row) => row.action);
+  assert.deepEqual(actions, ['user.suspend', 'user.restore']);
+});
+
+test('staff cancel an order for its dispatcher and correct a driver\'s details, both on the record', async () => {
+  const boss = await superAdmin();
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const order = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(order.code, driver);
+
+  const cancelled = await ctx.adminData.cancelOrder(order.id, { reason: '乘客投訴，出單者失聯' }, boss);
+  assert.equal(cancelled.status, 'CANCELLED');
+  await rejectsWith(ctx.adminData.cancelOrder(order.id, { reason: 'again' }, boss), 'INVALID_ORDER_STATUS');
+  const log = await ctx.prisma.adminAuditLog.findFirstOrThrow({ where: { action: 'order.cancel' } });
+  assert.deepEqual(log.detail, { reason: '乘客投訴，出單者失聯' });
+
+  const profile = { name: '改名師傅', vehicleOwnership: 'HK' as const, plateType: 'SINGLE' as const, hkPlate: 'XY 999', vehicleType: '埃爾法', hidePlates: false };
+  const saved = await ctx.adminData.saveUserProfile(driver, profile, boss);
+  assert.equal(saved.profile?.name, '改名師傅');
+  assert.equal(saved.profile?.hkPlate, 'XY 999');
+  const change = await ctx.prisma.adminAuditLog.findFirstOrThrow({ where: { action: 'user.profile.update' } });
+  assert.ok((change.detail as { changed: string[] }).changed.includes('name'));
+});
+
 test('sales staff see orders but not passengers', async () => {
   const boss = await superAdmin();
   const dispatcher = await createDriver(ctx);

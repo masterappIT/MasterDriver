@@ -123,6 +123,7 @@ onMounted(async () => {
   <div class="page my-page">
     <PageBack :title="t('我的名片頁')" fallback="/app/me" />
     <div v-if="error" class="notice error">{{ error }}</div>
+    <RouterLink class="my-page__guide" to="/app/guide/customers">{{ t('名片頁可以做什麼？連結放在哪裡？看教學') }}</RouterLink>
 
     <template v-if="page">
       <section class="card">
@@ -218,6 +219,12 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.my-page__guide {
+  display: block;
+  margin: 0 var(--space-xs) var(--space-md);
+  font-size: var(--font-label);
+  font-weight: 600;
+}
 .my-page__head {
   display: flex;
   align-items: center;

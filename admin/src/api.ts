@@ -24,6 +24,9 @@ const ERROR_TEXT: Record<string, string> = {
   BALANCE_WOULD_BE_NEGATIVE: '調整後點數會變成負數',
   TOPUP_MUST_BE_POSITIVE: '充值金額必須大於 0',
   USER_NOT_FOUND: '找不到這個用戶',
+  USER_ALREADY_SUSPENDED: '這個帳號已經停用',
+  USER_NOT_SUSPENDED: '這個帳號沒有被停用',
+  INVALID_ORDER_STATUS: '這張單已經完成或取消，不能再取消',
   ORDER_NOT_FOUND: '找不到這張單',
   PLAN_NOT_FOUND: '找不到這個方案',
   FEATURE_NOT_FOUND: '找不到這個功能',
@@ -57,6 +60,13 @@ const ISSUE_TEXT: Record<string, string> = {
   LINK_REQUIRED: '請填寫連結',
   NOTHING_TO_UPDATE: '沒有要更新的內容',
   TEMPLATE_NEEDS_CODE: '簡訊範本必須包含 {code}',
+  PLATE_REQUIRED: '這個車牌類型要填的車牌還沒填齊',
+  PLATE_TYPE_NOT_ALLOWED: '中國內地的車只有兩地牌',
+  HK_PLATE_INVALID: '香港車牌格式不正確',
+  MACAU_PLATE_INVALID: '澳門車牌格式必須為 AA-00-00',
+  MAINLAND_PLATE_INVALID: '內地車牌格式不正確，要寫完整，例如 粵Z·1234港',
+  HK_MACAU_PHONE_INVALID: '港澳號碼格式不正確：要含 +852 或 +853',
+  MAINLAND_PHONE_INVALID: '內地號碼格式不正確：要含 +86',
   DIGITS_ONLY: '測試號碼只能填數字',
 };
 

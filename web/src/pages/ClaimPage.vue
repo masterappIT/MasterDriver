@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
 import AppIcon from '../components/AppIcon.vue';
@@ -11,7 +11,6 @@ import JoinGroups, { type OfferedGroup } from '../components/JoinGroups.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import PlateTag from '../components/PlateTag.vue';
-import ProfileForm from '../components/ProfileForm.vue';
 import RoutePoints from '../components/RoutePoints.vue';
 import SectionHeading from '../components/SectionHeading.vue';
 import { timeUntil } from '../relative-time';
@@ -61,12 +60,13 @@ interface ClaimView {
 
 const POLL_MS = 5000;
 const route = useRoute();
+const router = useRouter();
 const code = String(route.params.code);
 const order = ref<ClaimView | null>(null);
 const error = ref('');
 const lost = ref(false);
 const busy = ref(false);
-const sheet = ref<'signIn' | 'profile' | null>(null);
+const sheet = ref<'signIn' | null>(null);
 let poller: ReturnType<typeof setInterval> | undefined;
 
 const canClaim = computed(() => order.value?.status === 'OPEN' && order.value.viewer === 'other');
@@ -105,7 +105,7 @@ async function claim() {
     return;
   }
   if (!session.profile) {
-    sheet.value = 'profile';
+    fillProfile();
     return;
   }
   busy.value = true;
@@ -115,7 +115,7 @@ async function claim() {
     lost.value = result.result === 'LOST';
     if (result.result === 'WON') toast('搶單成功！');
   } catch (e) {
-    if ((e as { code?: string }).code === 'PROFILE_REQUIRED') sheet.value = 'profile';
+    if ((e as { code?: string }).code === 'PROFILE_REQUIRED') fillProfile();
     else toast(errorText(e));
   } finally {
     busy.value = false;
@@ -128,9 +128,10 @@ async function afterSignIn() {
   if (canClaim.value) await claim();
 }
 
-async function afterProfile() {
-  sheet.value = null;
-  await claim();
+/** A first claim needs the driver's details: they are filled in on their own page, which comes back here. */
+function fillProfile() {
+  toast('第一次搶單，請先填司機資料');
+  void router.push({ path: '/app/profile', query: { next: `/o/${code}` } });
 }
 
 async function copy(text: string, done: string) {
@@ -280,9 +281,6 @@ onBeforeUnmount(() => {
 
     <BottomSheet v-if="sheet === 'signIn'" :title="t('登入後搶單')" @close="sheet = null">
       <SignInForm @signed-in="afterSignIn" />
-    </BottomSheet>
-    <BottomSheet v-if="sheet === 'profile'" :title="t('第一次搶單，請填司機資料')" @close="sheet = null">
-      <ProfileForm @saved="afterProfile" />
     </BottomSheet>
   </div>
 </template>

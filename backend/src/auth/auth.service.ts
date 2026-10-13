@@ -109,6 +109,8 @@ export class AuthService {
       update: {},
       create: { countryCode, phone, locale: defaultLocaleFor(countryCode) },
     });
+    // 停用: the code was right, but the platform has stopped this account. The same in development mode.
+    if (user.suspendedAt) throw apiError(HttpStatus.FORBIDDEN, 'ACCOUNT_SUSPENDED', 'This account has been suspended');
     const token = randomToken();
     await this.prisma.session.create({
       data: {
@@ -126,7 +128,7 @@ export class AuthService {
       where: { tokenHash: sha256(token) },
       include: { user: true },
     });
-    if (!session || session.revokedAt || session.expiresAt <= now) return null;
+    if (!session || session.revokedAt || session.expiresAt <= now || session.user.suspendedAt) return null;
     if (now.getTime() - session.lastSeenAt.getTime() > LAST_SEEN_REFRESH_MS) {
       await this.prisma.session.update({ where: { id: session.id }, data: { lastSeenAt: now } });
     }

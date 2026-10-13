@@ -11,6 +11,7 @@ interface UserRow {
   plates: string[];
   plateType: string | null;
   pagePublished: boolean;
+  suspended: boolean;
   dispatched: number;
   claimed: number;
   credits: number;
@@ -65,7 +66,7 @@ onMounted(load);
       <tbody>
         <tr v-for="user in result.items" :key="user.id">
           <td class="nowrap"><RouterLink :to="`/users/${user.id}`">{{ user.phone }}</RouterLink></td>
-          <td>{{ user.name ?? '—' }}<span v-if="user.pagePublished" class="hint">　名片頁已公開</span></td>
+          <td>{{ user.name ?? '—' }}<span v-if="user.suspended" class="users__suspended">　已停用</span><span v-if="user.pagePublished" class="hint">　名片頁已公開</span></td>
           <td>{{ user.plates.join(' / ') || '—' }}<span v-if="user.plateType" class="hint">　{{ PLATE_TYPE[user.plateType] }}</span></td>
           <td>{{ user.dispatched }}</td>
           <td>{{ user.claimed }}</td>
@@ -80,3 +81,10 @@ onMounted(load);
     <PagerBar :page="page" :page-size="result.pageSize" :total="result.total" @change="(p) => ((page = p), load())" />
   </div>
 </template>
+
+<style scoped>
+.users__suspended {
+  color: var(--color-error, #c03a3a);
+  font-weight: 700;
+}
+</style>

@@ -15,7 +15,10 @@ interface UserDetail {
   phone: string;
   locale: string;
   createdAt: string;
+  suspendedAt: string | null;
+  suspendedReason: string | null;
   profile: {
+    vehicleOwnership: string | null;
     name: string;
     hkPlate: string | null;
     macauPlate: string | null;
@@ -91,6 +94,62 @@ async function run(action: () => Promise<unknown>, done: string) {
   }
 }
 
+/** 停用: for abuse. The user is signed out everywhere and cannot sign in until restored. */
+function suspend() {
+  const reason = prompt('停用這個帳號：對方會立即被登出，之後不能再登入，直到恢復。已出的單不會自動取消。\n請寫原因（會記在操作紀錄）：')?.trim();
+  if (!reason) return;
+  return run(() => api('POST', `/users/${route.params.id}/suspend`, { reason }), '帳號已停用');
+}
+
+function restore() {
+  if (!confirm('恢復這個帳號？對方可以再登入。')) return;
+  return run(() => api('POST', `/users/${route.params.id}/restore`), '帳號已恢復');
+}
+
+/** 代改司機資料: the same fields and rules as the driver's own form. */
+const editingProfile = ref(false);
+const profileForm = reactive({
+  name: '',
+  vehicleOwnership: 'HK',
+  plateType: 'DUAL',
+  hkPlate: '',
+  macauPlate: '',
+  mainlandPlate: '',
+  vehicleType: '',
+  seats: '',
+  color: '',
+  hkMacauPhone: '',
+  mainlandPhone: '',
+  hidePlates: false,
+});
+
+function editProfile() {
+  const p = user.value?.profile;
+  Object.assign(profileForm, {
+    name: p?.name ?? '',
+    vehicleOwnership: p?.vehicleOwnership ?? 'HK',
+    plateType: p?.plateType ?? 'DUAL',
+    hkPlate: p?.hkPlate ?? '',
+    macauPlate: p?.macauPlate ?? '',
+    mainlandPlate: p?.mainlandPlate ?? '',
+    vehicleType: p?.vehicleType ?? '',
+    seats: p?.seats ? String(p.seats) : '',
+    color: p?.color ?? '',
+    hkMacauPhone: p?.hkMacauPhone ?? '',
+    mainlandPhone: p?.mainlandPhone ?? '',
+    hidePlates: p?.hidePlates ?? false,
+  });
+  editingProfile.value = true;
+}
+
+async function saveProfile() {
+  await run(
+    () => api('PUT', `/users/${route.params.id}/profile`, { ...profileForm, seats: profileForm.seats ? Number(profileForm.seats) : undefined }),
+    '司機資料已更新',
+  );
+  if (!error.value) editingProfile.value = false;
+}
+
 function changeCredits() {
   return run(async () => {
     await api('POST', `/users/${route.params.id}/credits`, {
@@ -142,7 +201,14 @@ onMounted(load);
   <div v-if="message" class="notice">{{ message }}</div>
   <template v-if="user">
     <h1>{{ user.profile?.name ?? '未填姓名' }}　<span class="muted">{{ user.phone }}</span></h1>
-    <p v-if="can.write()"><button class="button secondary" type="button" @click="contact">用客服聯絡這位用戶</button></p>
+    <div v-if="user.suspendedAt" class="notice error">
+      這個帳號已於 {{ dateTime(user.suspendedAt) }} 停用，不能登入。原因：{{ user.suspendedReason ?? '—' }}
+    </div>
+    <p v-if="can.write()" class="row">
+      <button class="button secondary" type="button" @click="contact">用客服聯絡這位用戶</button>
+      <button v-if="user.suspendedAt" class="button" type="button" @click="restore">恢復帳號</button>
+      <button v-else class="button danger" type="button" @click="suspend">停用帳號</button>
+    </p>
 
     <div class="grid">
       <div class="card">
@@ -181,6 +247,48 @@ onMounted(load);
         <span>對乘客隱藏車牌：{{ user.profile.hidePlates ? '是' : '否' }}</span>
       </div>
       <p class="hint">港澳號碼與內地號碼由司機自己填寫，沒有經過簡訊驗證；登入用的是上方的號碼。</p>
+      <p v-if="can.write() && !editingProfile"><button class="button secondary" type="button" @click="editProfile">代改司機資料</button></p>
+      <form v-if="editingProfile" class="user-profile-form" @submit.prevent="saveProfile">
+        <p class="hint">和司機自己填的表單同一套規則：車牌類型決定哪些車牌必填；內地車牌要寫完整（例如 粵Z·1234港）；號碼要含區號（+852 91234567）。修改會記在操作紀錄。</p>
+        <div class="row">
+          <label class="field">姓名或稱呼<input v-model="profileForm.name" class="input" maxlength="30" required /></label>
+          <label class="field">
+            車輛歸屬地
+            <select v-model="profileForm.vehicleOwnership" class="select">
+              <option value="HK">香港</option>
+              <option value="MACAU">澳門</option>
+              <option value="MAINLAND">中國內地</option>
+            </select>
+          </label>
+          <label class="field">
+            車牌類型
+            <select v-model="profileForm.plateType" class="select">
+              <option value="SINGLE">單牌</option>
+              <option value="DUAL">兩地牌</option>
+              <option value="TRIPLE">三地牌</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="field">香港車牌<input v-model="profileForm.hkPlate" class="input" maxlength="12" /></label>
+          <label class="field">澳門車牌<input v-model="profileForm.macauPlate" class="input" maxlength="12" placeholder="AA-00-00" /></label>
+          <label class="field">內地車牌<input v-model="profileForm.mainlandPlate" class="input" maxlength="12" placeholder="粵Z·1234港" /></label>
+        </div>
+        <div class="row">
+          <label class="field">車型<input v-model="profileForm.vehicleType" class="input" maxlength="30" required /></label>
+          <label class="field">座位<input v-model="profileForm.seats" class="input" type="number" min="1" max="60" /></label>
+          <label class="field">車色<input v-model="profileForm.color" class="input" maxlength="20" /></label>
+        </div>
+        <div class="row">
+          <label class="field">港澳號碼<input v-model="profileForm.hkMacauPhone" class="input" placeholder="+852 91234567" /></label>
+          <label class="field">內地號碼<input v-model="profileForm.mainlandPhone" class="input" placeholder="+86 13800001111" /></label>
+          <label class="field user-profile-form__check"><input v-model="profileForm.hidePlates" type="checkbox" /> 對乘客隱藏車牌</label>
+        </div>
+        <div class="row">
+          <button class="button" type="submit">儲存</button>
+          <button class="button secondary" type="button" @click="editingProfile = false">取消</button>
+        </div>
+      </form>
       <p class="hint">註冊：{{ dateTime(user.createdAt) }}　介面語言：{{ user.locale === 'zh-Hans' ? '簡體' : '繁體' }}</p>
     </div>
 
@@ -281,3 +389,17 @@ onMounted(load);
     </div>
   </template>
 </template>
+
+<style scoped>
+.user-profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+.user-profile-form__check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-sm);
+}
+</style>

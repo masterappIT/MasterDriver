@@ -49,6 +49,10 @@ export const adminAuditQuerySchema = pageQuerySchema.extend({
 export type AdminAuditQuery = z.infer<typeof adminAuditQuerySchema>;
 
 /** Manual credit change: TOPUP adds (e.g. paid by 轉數快); ADJUST corrects either way. */
+/** Why staff stopped an account or cancelled an order: kept in the audit log and, for an account, with the user. */
+export const adminReasonSchema = z.object({ reason: z.string().trim().min(1).max(200) });
+export type AdminReason = z.infer<typeof adminReasonSchema>;
+
 export const adminCreditChangeSchema = z.object({
   type: z.enum(['TOPUP', 'ADJUST']),
   amount: z

@@ -29,6 +29,29 @@ const loaded = ref(false);
 const now = ref(new Date());
 let clock: ReturnType<typeof setInterval> | undefined;
 
+/**
+ * A driver who has just joined is told once what the 名片頁 is for; the card stays until they
+ * open the guide or put it away. Remembered on this phone only.
+ */
+const GUIDE_KEY = 'md.customerGuideSeen';
+function guideSeen() {
+  try {
+    return localStorage.getItem(GUIDE_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+const showGuide = ref(!guideSeen());
+
+function closeGuide() {
+  showGuide.value = false;
+  try {
+    localStorage.setItem(GUIDE_KEY, '1');
+  } catch {
+    /* private mode: the card comes back next time */
+  }
+}
+
 const live = (order: Listed) => order.status === 'OPEN' || order.status === 'ASSIGNED';
 
 /** The end of tomorrow in Hong Kong (UTC+8), where these trips run. */
@@ -107,6 +130,16 @@ onBeforeUnmount(() => clearInterval(clock));
       </RouterLink>
     </section>
 
+    <!-- For a driver who has just joined: what the 名片頁 is for, said once. -->
+    <section v-if="showGuide" class="card home__guide">
+      <strong>{{ t('想有自己的客人？用名片頁') }}</strong>
+      <p>{{ t('一條屬於你的連結，放到朋友圈或傳給熟客，客人就能直接向你預約。') }}</p>
+      <div class="home__guide-actions">
+        <RouterLink class="button" to="/app/guide/customers" @click="closeGuide">{{ t('看怎麼用') }}</RouterLink>
+        <button class="home__guide-later" type="button" @click="closeGuide">{{ t('知道了') }}</button>
+      </div>
+    </section>
+
     <div class="home__actions">
       <RouterLink to="/app/new?paste=1" class="button secondary">{{ t('貼群文字') }}</RouterLink>
       <RouterLink to="/app/profile-page" class="button secondary">{{ t('分享名片') }}</RouterLink>
@@ -148,6 +181,35 @@ onBeforeUnmount(() => clearInterval(clock));
 </template>
 
 <style scoped>
+.home__guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  background: var(--color-tint);
+}
+.home__guide strong {
+  font-size: var(--font-body-large);
+}
+.home__guide p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+.home__guide-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-top: var(--space-xs);
+}
+.home__guide-later {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
 .home__hello {
   display: flex;
   align-items: baseline;

@@ -3,6 +3,8 @@ import {
   adminAuditQuerySchema,
   adminCreateSchema,
   adminCreditChangeSchema,
+  adminReasonSchema,
+  driverProfileSchema,
   adminLoginSchema,
   adminOrderQuerySchema,
   adminOverrideCreateSchema,
@@ -16,6 +18,8 @@ import {
   type AdminAuditQuery,
   type AdminCreate,
   type AdminCreditChange,
+  type AdminReason,
+  type DriverProfileInput,
   type AdminLogin,
   type AdminOrderQuery,
   type AdminOverrideCreate,
@@ -154,7 +158,39 @@ export class AdminController {
     return this.data.endOverride(id, overrideId, admin, request.ip);
   }
 
+  @Post('users/:id/suspend')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  suspendUser(@Param('id') id: string, @Body(new ZodPipe(adminReasonSchema)) body: AdminReason, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    return this.data.suspendUser(id, body, admin, request.ip);
+  }
+
+  @Post('users/:id/restore')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  restoreUser(@Param('id') id: string, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    return this.data.restoreUser(id, admin, request.ip);
+  }
+
+  @Put('users/:id/profile')
+  @AdminRoles(...WRITE_ROLES)
+  saveUserProfile(
+    @Param('id') id: string,
+    @Body(new ZodPipe(driverProfileSchema)) body: DriverProfileInput,
+    @CurrentAdmin() admin: AdminUser,
+    @Req() request: Request,
+  ) {
+    return this.data.saveUserProfile(id, body, admin, request.ip);
+  }
+
   // ---- orders
+
+  @Post('orders/:id/cancel')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  cancelOrder(@Param('id') id: string, @Body(new ZodPipe(adminReasonSchema)) body: AdminReason, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    return this.data.cancelOrder(id, body, admin, request.ip);
+  }
 
   @Get('orders')
   orders(@Query(new ZodPipe(adminOrderQuerySchema)) query: AdminOrderQuery, @CurrentAdmin() admin: AdminUser) {

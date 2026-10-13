@@ -44,6 +44,7 @@ onBeforeUnmount(() => {
     <div v-if="error" class="notice error">{{ error }}</div>
     <p v-if="bookings && bookings.length === 0" class="bookings__empty">
       {{ t('還沒有預約。把名片頁的連結放到朋友圈、小紅書或傳給熟客，乘客就可以在上面預約。') }}
+      <RouterLink to="/app/guide/customers">{{ t('看教學：怎麼用名片頁找客人') }}</RouterLink>
       <RouterLink to="/app/profile-page">{{ t('打開我的名片頁') }}</RouterLink>
     </p>
     <RouterLink v-for="booking in bookings ?? []" :key="booking.id" :to="`/app/bookings/${booking.id}`" class="card bookings__item">

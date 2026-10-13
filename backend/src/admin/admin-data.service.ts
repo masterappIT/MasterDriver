@@ -1,6 +1,8 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type {
   AdminCreditChange,
+  AdminReason,
+  DriverProfileInput,
   AdminOrderQuery,
   AdminOverrideCreate,
   AdminPlanFeature,
@@ -15,6 +17,7 @@ import { CreditsService } from '../billing/credits.service';
 import { apiError } from '../common/errors';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
 import { driverPriceOf, isSelfDriven, passengerPriceOf, marginOf, orderInclude } from '../orders/order-view';
+import { OrdersService } from '../orders/orders.service';
 import { PrismaService } from '../prisma.service';
 import type { AdminUser } from './admin-auth.service';
 import { AuditService, PAGE_SIZE } from './audit.service';
@@ -40,6 +43,7 @@ export class AdminDataService {
     @Inject(CreditsService) private readonly credits: CreditsService,
     @Inject(CommissionService) private readonly commission: CommissionService,
     @Inject(EntitlementsService) private readonly entitlements: EntitlementsService,
+    @Inject(OrdersService) private readonly orders: OrdersService,
   ) {}
 
   // -------------------------------------------------------------- dashboard
@@ -131,6 +135,7 @@ export class AdminDataService {
         dispatched: user._count.dispatchedOrders,
         claimed: user._count.claimedOrders,
         credits: (user.creditAccount?.balanceMinor ?? 0) / 100,
+        suspended: Boolean(user.suspendedAt),
         createdAt: user.createdAt.toISOString(),
       })),
     };
@@ -161,6 +166,9 @@ export class AdminDataService {
       phone: `${user.countryCode} ${user.phone}`,
       locale: user.locale,
       createdAt: user.createdAt.toISOString(),
+      /** 停用: when staff stopped the account, and why. */
+      suspendedAt: iso(user.suspendedAt),
+      suspendedReason: user.suspendedReason,
       profile: user.profile,
       counts: { dispatched: user._count.dispatchedOrders, claimed: user._count.claimedOrders },
       /** 名片頁, as the driver set it up; null when they never opened the editor. */
@@ -265,7 +273,75 @@ export class AdminDataService {
     return this.getUser(userId);
   }
 
+  /**
+   * 停用: stops an account for abuse. The user is signed out everywhere and cannot sign in
+   * again until restored. Their orders are left as they are; cancel those one by one if needed.
+   */
+  async suspendUser(id: string, input: AdminReason, admin: AdminUser, ip?: string, now = new Date()) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { suspendedAt: true } });
+    if (!user) throw apiError(HttpStatus.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+    if (user.suspendedAt) throw apiError(HttpStatus.CONFLICT, 'USER_ALREADY_SUSPENDED', 'The account is already suspended');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.user.update({ where: { id }, data: { suspendedAt: now, suspendedReason: input.reason } });
+      await tx.session.updateMany({ where: { userId: id, revokedAt: null }, data: { revokedAt: now } });
+      await this.audit.log({ adminId: admin.id, action: 'user.suspend', targetType: 'user', targetId: id, detail: { reason: input.reason }, ip }, tx);
+    });
+    return this.getUser(id, now);
+  }
+
+  async restoreUser(id: string, admin: AdminUser, ip?: string, now = new Date()) {
+    const restored = await this.prisma.user.updateMany({ where: { id, suspendedAt: { not: null } }, data: { suspendedAt: null, suspendedReason: null } });
+    if (restored.count === 0) throw apiError(HttpStatus.CONFLICT, 'USER_NOT_SUSPENDED', 'The account is not suspended');
+    await this.audit.log({ adminId: admin.id, action: 'user.restore', targetType: 'user', targetId: id, ip });
+    return this.getUser(id, now);
+  }
+
+  /**
+   * 代改司機資料: staff correct a driver's details for them (a mistyped plate, a wrong name),
+   * under the same rules the driver's own form follows. The log keeps which fields changed.
+   */
+  async saveUserProfile(id: string, input: DriverProfileInput, admin: AdminUser, ip?: string, now = new Date()) {
+    const user = await this.prisma.user.findUnique({ where: { id }, include: { profile: true } });
+    if (!user) throw apiError(HttpStatus.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+    const data = {
+      name: input.name,
+      vehicleOwnership: input.vehicleOwnership,
+      plateType: input.plateType,
+      hkPlate: input.hkPlate || null,
+      macauPlate: input.macauPlate || null,
+      mainlandPlate: input.mainlandPlate || null,
+      vehicleType: input.vehicleType,
+      seats: input.seats ?? null,
+      color: input.color ?? null,
+      hkMacauPhone: input.hkMacauPhone ?? null,
+      mainlandPhone: input.mainlandPhone ?? null,
+      hidePlates: input.hidePlates,
+    };
+    const before = user.profile as Record<string, unknown> | null;
+    const changed = Object.entries(data)
+      .filter(([key, value]) => (before?.[key] ?? null) !== value)
+      .map(([key]) => key);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.driverProfile.upsert({ where: { userId: id }, create: { userId: id, ...data }, update: data });
+      await this.audit.log({ adminId: admin.id, action: 'user.profile.update', targetType: 'user', targetId: id, detail: { changed }, ip }, tx);
+    });
+    return this.getUser(id, now);
+  }
+
   // ----------------------------------------------------------------- orders
+
+  /**
+   * 代為取消: staff cancel an order for its dispatcher (a complaint, an abandoned or abusive
+   * order). It runs as the dispatcher's own cancel does, so the service fee comes back the
+   * same way, and the reason goes in the log.
+   */
+  async cancelOrder(id: string, input: AdminReason, admin: AdminUser, ip?: string) {
+    const order = await this.prisma.order.findUnique({ where: { id }, select: { dispatcherId: true } });
+    if (!order) throw apiError(HttpStatus.NOT_FOUND, 'ORDER_NOT_FOUND', 'Order not found');
+    await this.orders.cancel(order.dispatcherId, id);
+    await this.audit.log({ adminId: admin.id, action: 'order.cancel', targetType: 'order', targetId: id, detail: { reason: input.reason }, ip });
+    return this.getOrder(id, admin, ip);
+  }
 
   async listOrders(query: AdminOrderQuery, role: AdminRole) {
     const q = query.q;

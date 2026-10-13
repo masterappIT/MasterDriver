@@ -2,12 +2,10 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, session, signOut } from '../api';
-import BottomSheet from '../components/BottomSheet.vue';
 import GroupInvites from '../components/GroupInvites.vue';
 import MenuRow from '../components/MenuRow.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect from '../components/RevealSelect.vue';
-import ProfileForm from '../components/ProfileForm.vue';
 import { money, plateKind } from '../format';
 import { language, setLanguage, t } from '../i18n';
 import { toast } from '../toast';
@@ -39,7 +37,6 @@ async function saveReveal(value: number | null) {
     toast('更新失敗，請再試一次');
   }
 }
-const editing = ref(false);
 const settings = ref<Settings | null>(null);
 /** The Master Travel entry; the API sends a link only to drivers putting out more than 30 trips a month. */
 const upgradeUrl = ref<string | null>(null);
@@ -84,7 +81,7 @@ onMounted(async () => {
     <header class="me__hero">
       <div class="me__name">
         <h1>{{ session.profile?.name ? t(session.profile.name) : t('未填司機資料') }}</h1>
-        <button class="me__edit" type="button" @click="editing = true">{{ session.profile ? t('編輯資料') : t('填寫') }}</button>
+        <RouterLink class="me__edit" to="/app/profile">{{ session.profile ? t('編輯資料') : t('填寫') }}</RouterLink>
       </div>
       <span class="me__phone">{{ session.user?.countryCode }} {{ session.user?.phone }}</span>
       <div v-if="session.profile" class="me__car">
@@ -96,6 +93,7 @@ onMounted(async () => {
 
     <section class="card me__group">
       <span class="section-label">{{ t('我的客源') }}</span>
+      <MenuRow to="/app/guide/customers" :title="t('怎麼用名片頁找客人')" :detail="t('名片頁可以做什麼、連結放在哪裡、客人怎樣預約')" />
       <MenuRow to="/app/profile-page" :title="t('我的名片頁')" :detail="t('放到朋友圈、小紅書或傳給熟客，乘客在上面預約')" />
       <MenuRow
         to="/app/bookings"
@@ -161,9 +159,6 @@ onMounted(async () => {
 
     <button class="me__logout" type="button" @click="logout">{{ t('登出') }}</button>
 
-    <BottomSheet v-if="editing" :title="t('司機資料')" @close="editing = false">
-      <ProfileForm @saved="(editing = false), toast('已儲存')" />
-    </BottomSheet>
   </div>
 </template>
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { api } from '../api';
+import { api, can } from '../api';
 import StatusBadge from '../components/StatusBadge.vue';
 import { dateTime, hkd, money, PLATE_TYPE } from '../format';
 
@@ -74,6 +74,26 @@ const route = useRoute();
 const order = ref<OrderDetail | null>(null);
 const error = ref('');
 
+const message = ref('');
+const busy = ref(false);
+
+/** 代為取消: for a complaint or an abandoned order. It runs as the dispatcher's own cancel, and the reason is logged. */
+async function cancelForDispatcher() {
+  const reason = prompt('代出單者取消這張單。服務費會照規則退回，接單司機和乘客打開連結會看到已取消。\n請寫原因（會記在操作紀錄）：')?.trim();
+  if (!reason) return;
+  error.value = '';
+  message.value = '';
+  busy.value = true;
+  try {
+    order.value = await api<OrderDetail>('POST', `/orders/${route.params.id}/cancel`, { reason });
+    message.value = '已取消這張單';
+  } catch (e) {
+    error.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
+
 onMounted(async () => {
   try {
     order.value = await api<OrderDetail>('GET', `/orders/${route.params.id}`);
@@ -86,8 +106,12 @@ onMounted(async () => {
 <template>
   <RouterLink to="/orders" class="hint">返回訂單</RouterLink>
   <div v-if="error" class="notice error">{{ error }}</div>
+  <div v-if="message" class="notice">{{ message }}</div>
   <template v-if="order">
     <h1>{{ order.origin }} 至 {{ order.destination }}　<StatusBadge :status="order.status" /></h1>
+    <p v-if="can.write() && (order.status === 'OPEN' || order.status === 'ASSIGNED')">
+      <button class="button danger" type="button" :disabled="busy" @click="cancelForDispatcher">代出單者取消這張單</button>
+    </p>
     <div class="card">
       <div class="row">
         <span>出發：{{ dateTime(order.pickupAt) }}</span>

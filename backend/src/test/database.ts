@@ -110,6 +110,7 @@ export async function setupDatabase() {
   const audit = new AuditService(prisma);
   const box = new SecretBox('test-encryption-key');
   const mediaStorage = new LocalMediaStorage(mkdtempSync(join(tmpdir(), 'md-support-media-')));
+  const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config);
   return {
     prisma,
     sms,
@@ -120,10 +121,10 @@ export async function setupDatabase() {
     credits,
     groupInvites: new GroupInvitesService(prisma),
     paymentMethods: new PaymentMethodsService(prisma),
-    orders: new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config),
+    orders,
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
-    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements),
+    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders),
     site: new SiteService(prisma),
     mediaStorage,
     support: new SupportService(prisma, mediaStorage, audit),
