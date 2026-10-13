@@ -173,6 +173,10 @@
    - 以 Stripe webhook 為付款結果的唯一依據，同步到本專案的訂閱紀錄；**能不能用功能仍由本專案的權益模組判斷**，全站免費期、限時免費、個別贈送都在本專案控制，不用 Stripe 的試用期取代；
    - 使用 MasterDriver 獨立的 Stripe 帳戶或獨立的產品與價格，與 Master Travel 的收款分開；金鑰與 webhook 簽章密鑰只放雲端金鑰管理服務；
    - **內地用戶多數沒有 Visa／Mastercard**：信用卡適合自動續訂；支付寶、微信支付一般不支援自動續訂，預計改為「一次付一個月或一年、到期提醒續費」。Stripe 對香港商戶開放的付款方式與續訂支援要在接入前確認；
+   - **加上 AlipayHK**（2026-10-13 決定）：預計以「一次付一個月或一年、到期提醒續費」方式收費。接入途徑二選一，接入前確認：
+     - 經 Stripe：Stripe 文件只列出單一的「Alipay」付款方式（支援港幣），沒有明確提到 AlipayHK 錢包；Alipay 的自動續訂仍屬需申請的預覽功能；
+     - 直接接 AlipayHK：參考 Master Travel 已有的 AlipayHK 收款設定做法（`docs/REUSE.md` 第 B 類），使用 MasterDriver 獨立的商戶設定；
+   - 無論哪個途徑，付款結果都同步到本專案同一套訂閱紀錄，功能開關仍由本專案的權益模組判斷；
    - 必要時保留人工開通（例如轉數快），作為補充。
 
 ## 七、升級到 Master Travel 的路徑
@@ -231,7 +235,7 @@
 | PromoAsset | 推廣素材：範本、內容、二維碼指向 |
 | SourceTag | 來源追蹤：預約或掃碼來自哪個平台 |
 | Feature / Plan / PlanFeature / Subscription / BillingPolicy | 收費控制：功能、方案、訂閱、免費期（Subscription 記錄來源：Stripe／人工／贈送，以及 Stripe 的客戶、訂閱、價格編號） |
-| StripeEvent | 已處理的 Stripe webhook 事件編號，防止重複處理 |
+| PaymentEvent | 已處理的付款通知（Stripe webhook、AlipayHK 通知）事件編號，防止重複處理 |
 | EntitlementOverride / Usage / BillingAudit | 收費控制：個別覆蓋、用量、變更紀錄 |
 | AdSlot / AdEvent | 廣告、曝光、點擊 |
 
