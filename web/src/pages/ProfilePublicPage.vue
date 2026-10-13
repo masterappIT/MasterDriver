@@ -111,7 +111,7 @@ onBeforeUnmount(() => watcher?.disconnect());
 
 <template>
   <div class="page profile">
-    <PageBack fallback="/app/profile-page" only-in-app />
+    <PageBack fallback="/app/profile-page" history only-in-app />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="page">

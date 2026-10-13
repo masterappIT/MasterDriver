@@ -17,7 +17,7 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <PageBack :title="kind === 'privacy' ? t('私隱政策') : t('服務條款')" fallback="/" />
+    <PageBack :title="kind === 'privacy' ? t('私隱政策') : t('服務條款')" fallback="/" history />
     <p v-if="text === ''" class="muted">{{ t('暫未提供') }}</p>
     <div v-else-if="text" class="card legal__text">{{ t(text) }}</div>
   </div>

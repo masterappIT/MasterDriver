@@ -21,7 +21,7 @@ function done() {
   <div class="login">
     <!-- The same panel as the home page, after the layout of Master Travel's sign-in page. -->
     <BrandPanel>
-      <template #left><PageBack fallback="/" icon-only /></template>
+      <template #left><PageBack fallback="/" history icon-only /></template>
     </BrandPanel>
 
     <main class="login__body">

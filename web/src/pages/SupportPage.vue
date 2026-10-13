@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page support">
-    <PageBack :title="t('客服')" :fallback="session.user ? '/app/me' : '/'" />
+    <PageBack :title="t('客服')" :fallback="session.user ? '/app/me' : '/'" history />
 
     <p v-if="!session.user" class="notice">
       {{ t('你尚未登入。訪客對話只保存在這個瀏覽器，清除瀏覽資料後無法找回；請在訊息裡留下電話或微信，方便我們回覆。') }}

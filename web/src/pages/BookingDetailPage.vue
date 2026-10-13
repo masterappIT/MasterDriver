@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { formatPassengerPhone, splitPassengerPhone } from '@masterdriver/shared/phone';
 import { api, errorText } from '../api';
 import { BOOKING_STATUS, bookingOpen, bookingTone, type DriverBooking } from '../booking';
 import { copyText } from '../device';
-import { money, pickup, shortTime } from '../format';
+import { loadLine, money, pickup, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
 /** One booking request: the driver quotes a price or declines, and makes it into an order once agreed. */
 const route = useRoute();
+const router = useRouter();
 const id = String(route.params.id);
 const booking = ref<DriverBooking | null>(null);
 const error = ref('');
@@ -55,12 +57,74 @@ async function copy(text: string) {
   toast((await copyText(text)) ? '已複製' : '複製失敗，請長按文字自行複製');
 }
 
+/**
+ * 這單我自己做: the request already says when, where, who and (once quoted) how much, so it becomes
+ * the driver's own trip in one step, with nothing to type again. Only a contact that is not a
+ * phone number still needs the form, where it is retyped.
+ */
+async function driveMyself() {
+  const b = booking.value;
+  if (!b) return;
+  const phone = splitPassengerPhone(b.passengerContact);
+  if (!phone) {
+    toast('乘客留的聯絡方式不是電話號碼，請在下一頁補上電話');
+    await router.push(`/app/new?booking=${b.id}`);
+    return;
+  }
+  error.value = '';
+  busy.value = true;
+  try {
+    const created = await api<{ id: string }>('POST', '/orders', {
+      pickupAt: b.pickupAt,
+      origin: b.origin,
+      destination: b.destination,
+      passengers: b.passengers,
+      luggage: b.luggage,
+      passengerName: b.passengerName ?? undefined,
+      passengerContact: formatPassengerPhone(phone.countryCode, phone.phone),
+      notes: b.notes ?? undefined,
+      ...(b.quote ? { passengerPrice: b.quote, showPassengerPrice: true } : {}),
+      selfDrive: true,
+      bookingId: b.id,
+    });
+    toast('已成單，這單你自己做');
+    await router.replace(`/app/orders/${created.id}`);
+  } catch (e) {
+    error.value = errorText(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+/**
+ * The passenger agrees or cancels on their own link at any time, so the request is read again
+ * every 10 seconds while it is open and on screen. Only the request itself is replaced: a quote
+ * being typed stays as typed.
+ */
+const REFRESH_MS = 10_000;
+let timer: ReturnType<typeof setInterval> | undefined;
+
+async function refresh() {
+  if (document.visibilityState !== 'visible' || busy.value || !booking.value || !bookingOpen(booking.value.status)) return;
+  try {
+    booking.value = await api<DriverBooking>('GET', `/me/bookings/${id}`);
+  } catch {
+    /* keep what is on screen; the next round tries again */
+  }
+}
+
 onMounted(async () => {
   try {
     fill(await api<DriverBooking>('GET', `/me/bookings/${id}`));
   } catch (e) {
     error.value = errorText(e);
   }
+  timer = setInterval(refresh, REFRESH_MS);
+  document.addEventListener('visibilitychange', refresh);
+});
+onBeforeUnmount(() => {
+  clearInterval(timer);
+  document.removeEventListener('visibilitychange', refresh);
 });
 </script>
 
@@ -75,7 +139,7 @@ onMounted(async () => {
         <span class="booking-detail__status" :class="`booking-detail__status--${bookingTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].driver) }}</span>
         <strong class="booking-detail__time">{{ pickup(booking.pickupAt) }}</strong>
         <div class="booking-detail__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
-        <p class="booking-detail__load">{{ t(`${booking.passengers}人｜${booking.luggage}件行李`) }}</p>
+        <p class="booking-detail__load">{{ t(loadLine(booking.passengers, booking.luggage)) }}</p>
         <p v-if="booking.notes" class="booking-detail__note">{{ t(booking.notes) }}</p>
         <p class="hint">
           {{ t(`${shortTime(booking.createdAt)} 從名片頁送出`) }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>
@@ -120,8 +184,12 @@ onMounted(async () => {
       </section>
 
       <template v-if="open">
-        <RouterLink class="button block large booking-detail__order" :to="`/app/new?booking=${booking.id}`">{{ t('成單：帶入出單表格') }}</RouterLink>
-        <p class="hint booking-detail__tip">{{ t('和乘客談好後按「成單」。之後可以自己做，或派到群裡。') }}</p>
+        <p v-if="booking.status === 'ACCEPTED'" class="booking-detail__agreed">{{ t('乘客已同意報價，安排行程吧') }}</p>
+        <button class="button block large booking-detail__order" type="button" :disabled="busy" @click="driveMyself">{{ t('這單我自己做') }}</button>
+        <RouterLink class="button secondary block booking-detail__order" :to="`/app/new?booking=${booking.id}`">{{ t('派給其他司機') }}</RouterLink>
+        <p class="hint booking-detail__tip">
+          {{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}
+        </p>
         <button class="booking-detail__decline" type="button" :disabled="busy" @click="decline">{{ t('婉拒這個預約') }}</button>
       </template>
       <RouterLink v-else-if="booking.orderId" class="button block" :to="`/app/orders/${booking.orderId}`">{{ t('查看這張單') }}</RouterLink>
@@ -223,6 +291,11 @@ onMounted(async () => {
 .booking-detail__quoted {
   color: var(--color-gold-ink);
   font-size: 24px;
+}
+.booking-detail__agreed {
+  margin: 0 var(--space-xs) var(--space-sm);
+  color: var(--status-confirmed);
+  font-weight: 700;
 }
 .booking-detail__order {
   margin-bottom: var(--space-sm);

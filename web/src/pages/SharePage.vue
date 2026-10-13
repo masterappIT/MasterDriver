@@ -85,7 +85,7 @@ onMounted(async () => {
 
 <template>
   <div class="page share">
-    <PageBack fallback="/app" />
+    <PageBack fallback="/app/orders?tab=dispatched" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="order && order.share">

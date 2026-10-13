@@ -84,6 +84,8 @@ interface Detail {
   /** 已結清: the dispatcher's mark that the account with the driver is settled; both see it. */
   settledAt?: string | null;
   links?: { dispatch: string; passengerConfirm: string };
+  /** Made from a passenger's booking request: their booking link already leads to the confirmation page. */
+  fromBooking?: boolean;
   share?: { dispatch: { wechat: string; whatsapp: string }; claimed: string | null; passenger: string };
 }
 
@@ -103,7 +105,7 @@ const selfDriven = computed(() => Boolean(order.value?.selfDrive) && order.value
 /** Someone else has the order: the group now needs 已派出, not the order again. */
 const taken = computed(() => order.value?.status === 'ASSIGNED' && !selfDriven.value && Boolean(order.value.share?.claimed));
 const remindPassenger = computed(
-  () => isDispatcher.value && order.value?.status === 'ASSIGNED' && !order.value.passengerConfirmedAt,
+  () => isDispatcher.value && order.value?.status === 'ASSIGNED' && !order.value.passengerConfirmedAt && !order.value.fromBooking,
 );
 
 /** 接駁: a leg can be added after the last leg of a trip, up to the limit. */
@@ -338,7 +340,7 @@ watch(id, () => {
 
 <template>
   <div class="page">
-    <PageBack :title="t('訂單詳情')" fallback="/app/orders" />
+    <PageBack :title="t('訂單詳情')" :fallback="isDispatcher ? '/app/orders?tab=dispatched' : '/app/orders'" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="order">
@@ -517,7 +519,8 @@ watch(id, () => {
       <!-- Prices: the dispatcher sees both and the spread; the driver only the driver price -->
       <section class="card">
         <template v-if="!editingPrices">
-          <div class="detail__price">
+          <!-- 這單我自己做 has no price for another driver, so the line is left out unless one was set. -->
+          <div v-if="order.driverPrice || !order.selfDrive" class="detail__price">
             <span class="section-label">{{ t('出單價') }}</span>
             <strong>{{ money(order.driverPrice) || t('沒有填') }}</strong>
           </div>

@@ -5,24 +5,35 @@ import AppIcon from './AppIcon.vue';
 
 /**
  * The top bar of a page one step inside the tool: a clear 返回 on the left, the page's title,
- * and room on the right for the page's own action. 返回 goes to the previous page when there is
- * one in the app, and otherwise to `fallback` (a link opened on its own has nothing to go back to).
+ * and room on the right for the page's own action.
+ *
+ * 返回 goes up, to the page this one belongs under (`fallback`): 訂單詳情 to 訂單, 預約詳情 to 預約,
+ * the pages of 我的 to 我的. Where the driver came from does not matter, so the same button always
+ * leads to the same place. Pages that are opened from many places and belong under none of them
+ * (客服, the terms, a link from a group) set `history` and go back to wherever the driver was,
+ * or to `fallback` when the page was opened on its own.
+ *
  * `onlyInApp` hides the bar on pages people usually open from a group link. `iconOnly` shows just a
  * round arrow, for a coloured panel such as the sign-in page's.
  */
-const props = withDefaults(defineProps<{ title?: string; fallback?: string; onlyInApp?: boolean; iconOnly?: boolean }>(), {
+const props = withDefaults(defineProps<{ title?: string; fallback?: string; history?: boolean; onlyInApp?: boolean; iconOnly?: boolean }>(), {
   title: '',
   fallback: '/app',
+  history: false,
   onlyInApp: false,
   iconOnly: false,
 });
 const router = useRouter();
 // Vue Router records the previous in-app page here; it is empty when the page was opened directly.
-const hasPrevious = typeof window !== 'undefined' && Boolean((window.history.state as { back?: unknown } | null)?.back);
+const previous = typeof window !== 'undefined' ? ((window.history.state as { back?: unknown } | null)?.back ?? null) : null;
+const hasPrevious = Boolean(previous);
+const pathOf = (address: unknown) => (typeof address === 'string' ? address.split(/[?#]/)[0] : null);
 
 function back() {
-  if (hasPrevious) router.back();
-  else void router.push(props.fallback);
+  // Stepping back in history is the same move when the page above is the one just left, and keeps its place on screen.
+  const goesUp = pathOf(previous) === pathOf(props.fallback);
+  if (hasPrevious && (props.history || goesUp)) router.back();
+  else void router.replace(props.fallback);
 }
 </script>
 

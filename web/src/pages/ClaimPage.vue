@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page claim-page">
-    <PageBack fallback="/app/pool" only-in-app />
+    <PageBack fallback="/app/pool" history only-in-app />
     <BrandHeader />
 
     <div v-if="error && !order" class="card claim-page__state">

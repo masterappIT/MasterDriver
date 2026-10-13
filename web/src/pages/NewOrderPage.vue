@@ -356,7 +356,7 @@ onMounted(async () => {
 
 <template>
   <form class="page new-order" @submit.prevent="submit">
-    <PageBack :title="afterId ? t(`加接駁段（第 ${legNumber} 段）`) : t('出單')" :fallback="afterId ? `/app/orders/${afterId}` : '/app'">
+    <PageBack :title="afterId ? t(`加接駁段（第 ${legNumber} 段）`) : t('出單')" :fallback="afterId ? `/app/orders/${afterId}` : bookingId ? `/app/bookings/${bookingId}` : '/app'" history>
       <button v-if="past.length && !afterId" class="chip new-order__copy" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
     </PageBack>
     <div v-if="error" class="notice error">{{ error }}</div>

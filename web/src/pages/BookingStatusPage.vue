@@ -4,7 +4,7 @@ import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import { BOOKING_STATUS, bookingOpen, passengerTone, type Booking } from '../booking';
 import { copyText } from '../device';
-import { money, pickup } from '../format';
+import { loadLine, money, pickup } from '../format';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
@@ -50,14 +50,20 @@ async function copyLink() {
   toast((await copyText(location.origin + location.pathname)) ? '已複製連結' : '複製失敗，請長按網址自行複製');
 }
 
+/** The driver answers later: keep the page current while the request is open, and when the passenger comes back to it. */
+function refresh() {
+  if (!document.hidden && !busy.value && booking.value && bookingOpen(booking.value.status)) void load();
+}
+
 onMounted(async () => {
   await load();
-  // The driver answers later: keep the page current while it is open.
-  poller = setInterval(() => {
-    if (!document.hidden && booking.value && bookingOpen(booking.value.status)) void load();
-  }, POLL_MS);
+  poller = setInterval(refresh, POLL_MS);
+  document.addEventListener('visibilitychange', refresh);
 });
-onBeforeUnmount(() => clearInterval(poller));
+onBeforeUnmount(() => {
+  clearInterval(poller);
+  document.removeEventListener('visibilitychange', refresh);
+});
 </script>
 
 <template>
@@ -75,7 +81,7 @@ onBeforeUnmount(() => clearInterval(poller));
         <span class="booking__status" :class="`booking__status--${passengerTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].passenger) }}</span>
         <strong class="booking__time">{{ pickup(booking.pickupAt) }}</strong>
         <div class="booking__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
-        <p class="booking__load">{{ t(`${booking.passengers}人｜${booking.luggage}件行李`) }}</p>
+        <p class="booking__load">{{ t(loadLine(booking.passengers, booking.luggage)) }}</p>
         <p v-if="booking.notes" class="booking__note">{{ t(booking.notes) }}</p>
         <p v-if="booking.driverName" class="hint booking__driver">{{ t(`預約 ${booking.driverName} 的車`) }}</p>
       </section>

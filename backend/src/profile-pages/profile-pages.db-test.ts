@@ -143,6 +143,38 @@ test('a booking goes from request to quote to agreement to an order, and the pas
   await rejectsWith(ctx.profilePages.passengerCancel(sent.code), 'BOOKING_NOT_OPEN');
 });
 
+test("這單我自己做 from a booking: one order, the driver's own, and the passenger's link leads to it", async () => {
+  const { userId, code } = await publishedPage();
+  const sent = await ctx.profilePages.createBooking(code, { ...request(), passengerContact: '+852 91234567' }, '10.0.0.9');
+  const [listed] = await ctx.profilePages.bookings(userId);
+  await ctx.profilePages.quote(userId, listed.id, { amount: 900, currency: 'HKD' });
+  await ctx.profilePages.passengerAccept(sent.code);
+
+  const order = await ctx.orders.create(userId, {
+    pickupAt: listed.pickupAt,
+    origin: listed.origin,
+    destination: listed.destination,
+    waypoints: [],
+    passengers: listed.passengers,
+    luggage: listed.luggage,
+    passengerContact: '+852 91234567',
+    passengerPrice: { amount: 900, currency: 'HKD' },
+    showPassengerPrice: true,
+    selfDrive: true,
+    bookingId: listed.id,
+  });
+  assert.equal(order.status, 'ASSIGNED');
+  assert.equal(order.selfDrive, true);
+  assert.equal(order.fromBooking, true);
+  assert.equal((await ctx.orders.create(userId, { ...sampleOrder, selfDrive: true })).fromBooking, false);
+  const after = await ctx.profilePages.passengerBooking(sent.code);
+  assert.equal(after.status, 'ORDERED');
+  assert.ok(after.confirmUrl && order.links.passengerConfirm.endsWith(after.confirmUrl));
+  const page = await ctx.orders.getForPassenger(after.confirmUrl.split('/c/')[1]);
+  assert.equal(page.price?.amount, 900);
+  assert.ok(page.driver, 'the passenger sees the driver at once');
+});
+
 test("a booking is its own page owner's: nobody else reads, answers or makes an order from it", async () => {
   const { userId, code } = await publishedPage();
   const stranger = await createDriver(ctx);

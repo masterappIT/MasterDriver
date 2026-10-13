@@ -21,6 +21,8 @@ export const orderInclude = {
   journeyHead: { include: { journeyLegs: { orderBy: { legIndex: 'asc' }, include: { claimedBy: claimerSelect } }, tripGroup: tripGroupSelect } },
   // 行程群: on the order itself, or on the first leg of its trip.
   tripGroup: tripGroupSelect,
+  // 預約: whether the order was made from a passenger's booking request.
+  booking: { select: { id: true } },
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithPeople = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
@@ -229,6 +231,8 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
           showPaymentMethods: order.showPaymentMethods,
           paidAt: order.paidAt?.toISOString() ?? null,
           links: linksOf(order, baseUrl),
+          // The passenger of a booking already has a link that leads to the confirmation page.
+          fromBooking: Boolean(order.booking),
         }
       : {}),
   };

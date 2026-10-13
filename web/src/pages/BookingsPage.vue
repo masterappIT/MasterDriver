@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { api, errorText } from '../api';
 import { BOOKING_STATUS, bookingTone, type DriverBooking } from '../booking';
-import { pickup, shortTime } from '../format';
+import { loadLine, pickup, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 
@@ -10,12 +10,31 @@ import { t } from '../i18n';
 const bookings = ref<DriverBooking[] | null>(null);
 const error = ref('');
 
-onMounted(async () => {
+async function load() {
   try {
     bookings.value = await api<DriverBooking[]>('GET', '/me/bookings');
+    error.value = '';
   } catch (e) {
-    error.value = errorText(e);
+    if (!bookings.value) error.value = errorText(e);
   }
+}
+
+/** A passenger sends, agrees or cancels at any time: read the list again every 10 seconds while it is on screen. */
+const REFRESH_MS = 10_000;
+let timer: ReturnType<typeof setInterval> | undefined;
+
+function refresh() {
+  if (document.visibilityState === 'visible') void load();
+}
+
+onMounted(() => {
+  void load();
+  timer = setInterval(refresh, REFRESH_MS);
+  document.addEventListener('visibilitychange', refresh);
+});
+onBeforeUnmount(() => {
+  clearInterval(timer);
+  document.removeEventListener('visibilitychange', refresh);
 });
 </script>
 
@@ -36,7 +55,7 @@ onMounted(async () => {
       </div>
       <div class="bookings__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
       <div class="bookings__meta">
-        {{ t(`${booking.passengerName ?? '乘客'}｜${booking.passengers}人｜${booking.luggage}件行李`) }}
+        {{ t(`${booking.passengerName ?? '乘客'}｜${loadLine(booking.passengers, booking.luggage)}`) }}
         <span>{{ t(`${shortTime(booking.createdAt)} 送出`) }}</span>
       </div>
     </RouterLink>

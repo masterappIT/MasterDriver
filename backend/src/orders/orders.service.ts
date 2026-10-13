@@ -110,7 +110,8 @@ export class OrdersService {
           if (input.bookingId) await this.takeBooking(tx, userId, input.bookingId, created.id);
           return created;
         });
-        return this.withShareTexts(order);
+        // The order was read before the booking was tied to it; say so here rather than read it again.
+        return this.withShareTexts(input.bookingId ? { ...order, booking: { id: input.bookingId } } : order);
       } catch (error) {
         // A random code collided with an existing one: try again with new codes.
         const collided = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';

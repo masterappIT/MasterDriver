@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import AppIcon from '../components/AppIcon.vue';
@@ -78,9 +78,25 @@ const busy = ref(false);
 async function load() {
   try {
     trip.value = await api<PassengerView>('GET', `/c/${confirmCode}`);
+    error.value = '';
   } catch (e) {
-    error.value = errorText(e);
+    // A failed refresh keeps what is on screen; only a first load that fails is an error.
+    if (!trip.value) error.value = errorText(e);
   }
+}
+
+/**
+ * The trip changes after the passenger opens the link (a driver takes it, the driver changes,
+ * the fare is marked received), so the page reads it again every 10 seconds while it is on
+ * screen and at once when the passenger comes back to it. Not once the trip is over.
+ */
+const REFRESH_MS = 10_000;
+let timer: ReturnType<typeof setInterval> | undefined;
+
+function refresh() {
+  const status = trip.value?.status;
+  if (document.visibilityState !== 'visible' || busy.value || status === 'COMPLETED' || status === 'CANCELLED') return;
+  void load();
 }
 
 async function confirm() {
@@ -98,7 +114,15 @@ async function copyAccount(account: string) {
   toast((await copyText(account)) ? '已複製' : '複製失敗，請長按文字自行複製');
 }
 
-onMounted(load);
+onMounted(() => {
+  void load();
+  timer = setInterval(refresh, REFRESH_MS);
+  document.addEventListener('visibilitychange', refresh);
+});
+onBeforeUnmount(() => {
+  clearInterval(timer);
+  document.removeEventListener('visibilitychange', refresh);
+});
 </script>
 
 <template>
