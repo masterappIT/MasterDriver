@@ -142,7 +142,7 @@ gcloud sql databases create master_driver --instance=masterdriver-db
 gcloud sql users create master_driver --instance=masterdriver-db --password="<自行產生的長密碼>"
 ```
 
-規格是起步用的建議值，試點期間夠用；備份時間 19:00 UTC 是香港凌晨 3 點。`--edition=enterprise` 是必要的：PostgreSQL 16 預設的版本不接受自訂規格。執行個體建立後就持續計費，還沒有流量時可以先停用（`gcloud sql instances patch masterdriver-db --activation-policy=NEVER`），部署前再改回 `ALWAYS`。
+規格是試點期間的建議值；**2026-10-13 起為了節省費用暫時降為 `db-g1-small`（共用核心，沒有服務水準保證），開始試點前要調回 `db-custom-1-3840`**（`gcloud sql instances patch masterdriver-db --tier=db-custom-1-3840`，資料庫會重啟一兩分鐘）。備份時間 19:00 UTC 是香港凌晨 3 點。`--edition=enterprise` 是必要的：PostgreSQL 16 預設的版本不接受自訂規格。執行個體建立後就持續計費，還沒有流量時可以先停用（`gcloud sql instances patch masterdriver-db --activation-policy=NEVER`），部署前再改回 `ALWAYS`。
 
 ### 4. Secret
 
@@ -296,14 +296,13 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 
 ## 已在正式環境驗證（2026-10-13）
 
-- 完整的發布流程：品質閘門、三個映像檔、資料庫備份、migration Job、API 部署與健康檢查、兩個前端。
+- 完整的發布流程：品質閘門、三個映像檔、資料庫備份、migration Job、API 部署與健康檢查、兩個前端。第一次（建立服務）與第二次（新版本先不接流量、檢查通過才切換，清理 Job 跟著換映像檔）兩條路徑都由推送 `main` 實際跑過。
 - 資料種子 Job 執行成功。
 - 經 `web` 網址的 `/api` 轉發、SPA 路徑、`robots.txt`、`admin` 網址。
 - 客服檔案：以訪客身分上傳一張圖片，寫入私有 bucket 後讀回內容完全相同；不帶憑證讀取回 401。（留下一則測試對話和一個 39 位元組的測試檔。）
 
 ## 尚未驗證
 
-- **第二次之後的部署路徑**（新版本先不接流量、檢查後才切換）還沒有實際跑過；第一次部署走的是「服務不存在，直接建立」的路徑。下一次推送到 `main` 就會驗證到。
 - 回滾腳本沒有實際執行過。
 - 正式網域、內地連線、微信與 WhatsApp 內的操作。
 - 影片上傳（只驗證了圖片）。客服檔案清理 Job 與排程已實際觸發成功，但當時沒有過期檔案可刪。
