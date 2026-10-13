@@ -52,6 +52,7 @@ MasterDriver 跨境師傅幫（簡稱「師傅幫」）是 MasterApp 旗下的�
 
 - [完整規劃](docs/PLAN.md)
 - [決定記錄與待拍板事項](docs/DECISIONS.md)
+- [視覺設計規範](docs/DESIGN.md)
 - [文件索引](docs/README.md)
 - [代理與開發規範](AGENTS.md)
 
