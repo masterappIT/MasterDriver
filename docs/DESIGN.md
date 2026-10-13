@@ -2,11 +2,33 @@
 
 MasterDriver 的 UI 沿用 Master Travel 的風格，讓用戶從 MasterDriver 升級到 Master Travel 時感覺是同一個品牌家族。
 
-- **設計參考範圍：**Master Travel 用戶端（乘客端）全部設計稿原型，Figma 檔案「EC Travel（跨境打車）」：https://www.figma.com/design/yqswcQZ9Q3E6BLTm6bFkmo/ 。MasterDriver 的設計語言、元件與版式以此為參考範圍，不超出這套設計語言另創風格。
+- **設計參考來源（2026-10-13 決定）：以 Master Travel 現有前端程式碼為準**，即已實作的乘客端（`src/`）與司機端（`driver/`）。參考其視覺數值、版式與元件做法，在本專案以 Vue 3 重寫，不 import、不複製檔案。
+- **背景資料：**Master Travel 用戶端與司機端的 Figma 原型「EC Travel（跨境打車）」（https://www.figma.com/design/yqswcQZ9Q3E6BLTm6bFkmo/ ，兩個頁面、約 341 個畫面，含登入、叫車預約、訂單、付款、司機接單、司機收入等）。以程式碼為準；程式碼沒有的畫面，才回到 Figma 查看。
 - **基準來源：** Master Travel 司機端的設計 token（`driver/lib/core/tokens/driver_tokens.dart`），輔以乘客端的車牌樣式與品牌網站的配色。
 - **只沿用視覺數值，不複製程式：** 本專案在 `web/` 以 CSS 變數重新定義同樣的數值，不 import、不複製 Master Travel 的實作（紅線 4）。
 - **Token 是唯一來源：** 程式中的顏色、間距、字號、圓角、陰影一律從 token 取值，不寫死數值。
 - 以下數值為 2026-10-13 從 Master Travel 讀取；若 Master Travel 日後調整，由我們決定是否跟進，不自動同步。
+
+## 頁面參考對照
+
+MasterDriver 的頁面與 Master Travel 現有前端最接近的實作（路徑相對於 Master Travel 倉庫）：
+
+| MasterDriver 頁面 | 參考 Master Travel |
+|---|---|
+| 搶單頁（從群裡點進來） | `driver/lib/order_invite/order_invite_page.dart`（連結接單、外部司機免註冊）、`driver/lib/order_detail_page.dart` 與 `order_detail_sections.dart` |
+| 搶到單後的畫面 | `driver/lib/order_accepted_page.dart` |
+| 首頁 | `driver/lib/home_page.dart` |
+| 我的單 | `driver/lib/order_history_page.dart`、`driver/lib/order_hall_page.dart`（列表卡片） |
+| 底部導航 | `driver/lib/floating_nav_bar.dart` |
+| 登入、驗證碼 | `src/pages/login/login.vue`、`src/pages/login/verify.vue`、`driver/lib/driver_phone_verification_dialog.dart` |
+| 發單表單（時間、地點） | `src/components/home/BookingTimePicker.vue`、`src/components/home/AddressPicker.vue`、`src/components/home/TripEditSheet.vue` |
+| 乘客確認頁、車牌顯示 | `src/pages/vehicles/trip-waiting.vue`、`src/pages/vehicles/trip-progress.vue`（港牌金色、內地牌黑底） |
+| 頁首、返回 | `src/components/common/PageNavBar.vue` |
+| 我的資料、車輛 | `driver/lib/profile_page.dart`、`driver/lib/vehicle_page.dart`、`driver/lib/add_vehicle_page.dart` |
+| 提示、彈窗 | `driver/lib/core/widgets/driver_overlays.dart` |
+| 地址顯示 | `driver/lib/core/widgets/driver_address_text.dart` |
+
+Master Travel 沒有對應的頁面（發單成功分享頁、空車廣播、名片頁、推廣素材、團隊管理、方案）由設計者另行設計，風格與上表一致。
 
 ## 顏色
 

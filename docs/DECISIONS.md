@@ -6,6 +6,7 @@
 
 | 日期 | 決定 |
 |---|---|
+| 2026-10-13 | 設計參考改以 Master Travel 現有前端程式碼為準（乘客端 `src/`、司機端 `driver/`），Figma 原型作背景資料；頁面對照見 `docs/DESIGN.md` |
 | 2026-10-13 | 設計參考範圍：Master Travel 用戶端全部設計稿原型（Figma「EC Travel（跨境打車）」），連結見 `docs/DESIGN.md` |
 | 2026-10-13 | MasterDriver 需要專屬 Logo，同時保留 MasterApp Logo 作為母品牌（by MasterApp）；設計建議見 `docs/DESIGN.md` |
 | 2026-10-13 | 沿用現有 MasterApp Logo，不另外設計（已被 2026-10-13「MasterDriver 需要專屬 Logo，同時保留 MasterApp Logo」取代） |
