@@ -6,6 +6,7 @@
 
 | 日期 | 決定 |
 |---|---|
+| 2026-10-13 | 付款通道、方案價格、收費控制、簡訊、廣告與一般設定都在平台後台配置；金鑰以 Cloud KMS 加密、只寫不讀、僅超級管理員可改並留紀錄（見 PLAN「平台後台的配置」） |
 | 2026-10-13 | 訂閱付款加上 AlipayHK：預計一次付一個月或一年、到期提醒續費；經 Stripe 或直接接 AlipayHK 於接入前確認；結果同步到同一套訂閱紀錄 |
 | 2026-10-13 | 部署使用 Google Cloud 獨立專案 `master-driver-511510`（Master Driver，已啟用帳單），與 Master Travel 的專案分開；區域預計沿用 Master Travel 的 `asia-east2`（香港）。2026-10-13 查看時尚未啟用 Cloud Run、Cloud SQL、Secret Manager、Artifact Registry，也沒有儲存空間 |
 | 2026-10-13 | 訂閱收費使用 Stripe（只在網頁購買；Stripe Checkout + Customer Portal；webhook 同步；權益仍由本專案判斷；與 Master Travel 收款分開）。內地付款方式與續訂支援待接入前確認 |
