@@ -47,11 +47,11 @@ const load = computed(() => [`${props.order.passengers}人`, `${props.order.lugg
     </div>
     <div class="order-card__foot">
       <template v-if="role === 'dispatched'">
-        {{ order.selfDrive && order.status === 'ASSIGNED' ? t('自己做') : order.driver?.name ? t(`司機：${order.driver.name}`) : t('等待司機搶單') }}
+        {{ order.selfDrive && order.status === 'ASSIGNED' ? t('你自己做') : order.driver?.name ? t(`${order.driver.name} 接了`) : t('等司機搶') }}
         <span v-if="order.driverPrice" class="order-card__foot-price">{{ money(order.driverPrice) }}</span>
       </template>
       <template v-else>
-        {{ t(`出單者：${order.dispatcherName ?? '—'}`) }}
+        {{ order.dispatcherName ? t(`${order.dispatcherName} 出的單`) : t('出單者沒有留名') }}
         <span v-if="role === 'claimed' && order.driverPrice" class="order-card__foot-price">{{ money(order.driverPrice) }}</span>
       </template>
     </div>

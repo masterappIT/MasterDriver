@@ -9,6 +9,7 @@ import { fromLocalInput, pickup, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { PLATE_NAMES, type PlateRegion } from '../journey';
+import AppIcon from '../components/AppIcon.vue';
 
 interface PastOrder {
   id: string;
@@ -176,6 +177,10 @@ function copyLast() {
   });
 }
 
+function togglePlate(region: PlateRegion) {
+  form.requiredPlates = form.requiredPlates.includes(region) ? form.requiredPlates.filter((item) => item !== region) : [...form.requiredPlates, region];
+}
+
 function fillPlace(place: string) {
   if (!form.origin) form.origin = place;
   else if (!form.destination) form.destination = place;
@@ -312,117 +317,158 @@ onMounted(async () => {
     </PageBack>
     <div v-if="error" class="notice error">{{ error }}</div>
 
-    <div v-if="previous" class="card">
-      <p class="hint new-order__previous-label">{{ t(`接在第 ${legNumber - 1} 段後面`) }}</p>
-      <strong>{{ pickup(previous.pickupAt) }}</strong>
-      <div>{{ t(`${previous.origin} 至 ${previous.destination}`) }}</div>
+    <div v-if="previous" class="new-order__previous">
+      <span class="section-label">{{ t(`接在第 ${legNumber - 1} 段後面`) }}</span>
+      <strong>{{ pickup(previous.pickupAt) }}　{{ t(`${previous.origin} 至 ${previous.destination}`) }}</strong>
       <p class="hint">{{ t('同一位乘客，已帶入接駁位置、人數、行李和乘客資料。這一段另外貼到群裡搶，平台服務費整個行程只收一次。') }}</p>
     </div>
 
     <div v-if="fromBooking" class="notice">
-      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後出單；想自己做就勾最下面的「這段我自己做」，否則填司機價派到群裡。') }}
+      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後出單；想自己做就在最下面「更多設定」打開「這段我自己做」，否則填司機價派到群裡。') }}
     </div>
 
-    <div v-if="!afterId && !fromBooking" class="card quick-line">
-      <label class="field">
-        {{ t('一句話出單') }}
-        <textarea
-          ref="lineInput"
-          v-model="line"
-          class="textarea quick-line__input"
-          maxlength="300"
-          :placeholder="t('照群裡的寫法輸入或貼上，例如：明天15:40澳門送惠州博羅灣 直車 7座')"
-        />
-      </label>
-      <button class="button secondary block" type="button" :disabled="!line.trim()" @click="fillFromLine">{{ t('自動填入下方表格') }}</button>
-      <p v-if="filledFromLine.length" class="hint quick-line__filled">
-        {{ t(`已填入：${filledFromLine.join('、')}。請核對並補齊其餘資料。`) }}
-      </p>
-    </div>
-
-    <div class="card">
-      <div v-if="!afterId" class="row new-order__mode">
-        <label class="row"><input v-model="form.transfer" type="radio" name="mode" :value="false" /> {{ t('直達（一部車到底）') }}</label>
-        <label class="row"><input v-model="form.transfer" type="radio" name="mode" :value="true" /> {{ t('接駁（中途換車）') }}</label>
+    <!-- 一句話出單: written like a message in the group, so it looks like one. -->
+    <div v-if="!afterId && !fromBooking" class="quick-line">
+      <textarea
+        ref="lineInput"
+        v-model="line"
+        class="quick-line__input"
+        maxlength="300"
+        :aria-label="t('一句話出單')"
+        :placeholder="t('照群裡的寫法貼上一句，例如：明天15:40澳門送惠州博羅灣 直車 7座')"
+      />
+      <div class="quick-line__foot">
+        <span class="hint">{{ filledFromLine.length ? t(`已填入：${filledFromLine.join('、')}。請核對下面。`) : t('一句話出單，自動填好下面') }}</span>
+        <button class="button quick-line__fill" type="button" :disabled="!line.trim()" @click="fillFromLine">{{ t('自動填入') }}</button>
       </div>
-      <p v-if="form.transfer && !afterId" class="hint new-order__add">
+    </div>
+
+    <section class="card">
+      <div v-if="!afterId" class="segment segment--block new-order__mode" role="group" :aria-label="t('直達或接駁')">
+        <button type="button" :aria-pressed="!form.transfer" @click="form.transfer = false">{{ t('直達') }}</button>
+        <button type="button" :aria-pressed="form.transfer" @click="form.transfer = true">{{ t('接駁（中途換車）') }}</button>
+      </div>
+      <p v-if="form.transfer && !afterId" class="hint new-order__explain">
         {{ t('這張單是第 1 段，目的地填接駁位置。出單後按「加接駁段」出下一段。乘客自行過關不算接駁。') }}
       </p>
-      <label class="field">{{ t('出發時間（香港時間）') }}<input v-model="form.pickupAt" class="input" type="datetime-local" required /></label>
-      <label class="field">
-        {{ afterId ? t('接駁位置（這一段的出發地）') : t('出發地') }}
-        <input v-model="form.origin" class="input" maxlength="120" :placeholder="afterId ? '' : t('例如：深圳灣口岸')" required />
-        <span v-if="previous && form.origin.trim() !== previous.destination" class="hint">
-          {{ placeLocked ? t('上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段。') : t('上一段的目的地會一起改成這個接駁位置。') }}
-        </span>
+
+      <label class="line-field">
+        <span>{{ t('出發時間（香港時間）') }}</span>
+        <input v-model="form.pickupAt" class="line-input new-order__time" type="datetime-local" required />
       </label>
-      <div v-for="(_, index) in form.waypoints" :key="index" class="field">
-        {{ t(`途經點 ${index + 1}`) }}
-        <div class="row new-order__waypoint">
-          <input v-model="form.waypoints[index]" class="input" maxlength="120" />
-          <button class="button secondary" type="button" @click="form.waypoints.splice(index, 1)">{{ t('刪除') }}</button>
-        </div>
-      </div>
-      <button v-if="form.waypoints.length < 5" class="chip new-order__add" type="button" @click="form.waypoints.push('')">{{ t('加途經點') }}</button>
-      <label class="field">
-        {{ form.transfer && !afterId ? t('接駁位置（這一段的目的地）') : t('目的地') }}
-        <input v-model="form.destination" class="input" maxlength="120" :placeholder="form.transfer && !afterId ? t('自己輸入換車的地點') : t('例如：香港國際機場')" required />
-      </label>
-      <div v-if="places.length" class="chips">
-        <span class="hint">{{ t('常用：') }}</span>
+
+      <!-- The route as dots on a line, the way the claim page shows it. -->
+      <ol class="new-order__route">
+        <li class="new-order__stop new-order__stop--origin">
+          <input
+            v-model="form.origin"
+            class="line-input"
+            maxlength="120"
+            :aria-label="afterId ? t('接駁位置（這一段的出發地）') : t('出發地')"
+            :placeholder="afterId ? t('接駁位置') : t('從哪裡出發，例如：深圳灣口岸')"
+            required
+          />
+          <span v-if="previous && form.origin.trim() !== previous.destination" class="hint">
+            {{ placeLocked ? t('上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段。') : t('上一段的目的地會一起改成這個接駁位置。') }}
+          </span>
+        </li>
+        <li v-for="(_, index) in form.waypoints" :key="index" class="new-order__stop new-order__stop--via">
+          <div class="new-order__via">
+            <input v-model="form.waypoints[index]" class="line-input" maxlength="120" :aria-label="t(`途經點 ${index + 1}`)" :placeholder="t('途經')" />
+            <button class="new-order__remove" type="button" :aria-label="t(`刪除途經點 ${index + 1}`)" @click="form.waypoints.splice(index, 1)">
+              <AppIcon name="close" :size="18" />
+            </button>
+          </div>
+        </li>
+        <li class="new-order__stop new-order__stop--destination">
+          <input
+            v-model="form.destination"
+            class="line-input"
+            maxlength="120"
+            :aria-label="form.transfer && !afterId ? t('接駁位置（這一段的目的地）') : t('目的地')"
+            :placeholder="form.transfer && !afterId ? t('在哪裡換車（接駁位置）') : t('去哪裡，例如：香港國際機場')"
+            required
+          />
+        </li>
+      </ol>
+      <div class="chips new-order__places">
+        <button v-if="form.waypoints.length < 5" class="chip" type="button" @click="form.waypoints.push('')">{{ t('加途經點') }}</button>
         <button v-for="place in places" :key="place" class="chip" type="button" @click="fillPlace(place)">{{ t(place) }}</button>
       </div>
-    </div>
+    </section>
 
-    <div class="card">
-      <div class="row">
-        <label class="field new-order__third">{{ t('人數') }}<input v-model="form.passengers" class="input" type="number" min="1" max="60" inputmode="numeric" required /></label>
-        <label class="field new-order__third">{{ t('行李') }}<input v-model="form.luggage" class="input" type="number" min="0" max="60" inputmode="numeric" /></label>
-        <label class="field new-order__third">{{ t('車型') }}<input v-model="form.vehicleType" class="input" maxlength="30" :placeholder="t('7座')" /></label>
+    <section class="card">
+      <div class="new-order__load">
+        <label class="line-field">
+          <span>{{ t('人數') }}</span>
+          <input v-model="form.passengers" class="line-input" type="number" min="1" max="60" inputmode="numeric" required />
+        </label>
+        <label class="line-field">
+          <span>{{ t('行李') }}</span>
+          <input v-model="form.luggage" class="line-input" type="number" min="0" max="60" inputmode="numeric" />
+        </label>
+        <label class="line-field">
+          <span>{{ t('車型') }}</span>
+          <input v-model="form.vehicleType" class="line-input" maxlength="30" :placeholder="t('7座')" />
+        </label>
       </div>
-      <div v-if="afterId || form.transfer" class="field">
-        {{ t('這一段需要的車牌（選填）') }}
-        <div class="row">
-          <label v-for="(name, region) in PLATE_NAMES" :key="region" class="row">
-            <input v-model="form.requiredPlates" type="checkbox" :value="region" /> {{ t(name) }}
-          </label>
+      <div v-if="afterId || form.transfer" class="line-field">
+        <span>{{ t('這一段要甚麼車牌（選填）') }}</span>
+        <div class="chips new-order__plates">
+          <button
+            v-for="(name, region) in PLATE_NAMES"
+            :key="region"
+            class="chip"
+            :class="{ 'chip--on': form.requiredPlates.includes(region) }"
+            type="button"
+            :aria-pressed="form.requiredPlates.includes(region)"
+            @click="togglePlate(region)"
+          >
+            {{ t(name) }}
+          </button>
         </div>
         <span class="hint">{{ t('只在群文字和搶單頁標明，平台不審核車牌，任何司機都可以搶。') }}</span>
       </div>
-      <label class="field">{{ t('備註') }}<textarea v-model="form.notes" class="textarea" maxlength="500" :placeholder="t('例如：需要兒童座椅')" /></label>
-    </div>
+      <label class="line-field new-order__last">
+        <span>{{ t('備註') }}</span>
+        <textarea v-model="form.notes" class="line-input" maxlength="500" :placeholder="t('例如：需要兒童座椅')" />
+      </label>
+    </section>
 
-    <div class="card">
-      <h2>{{ t('價格') }}</h2>
-      <div class="row">
-        <label class="field new-order__currency">
-          {{ t('幣種') }}
-          <select v-model="form.currency" class="select">
-            <option value="HKD">HK$</option>
-            <option value="CNY">RMB¥</option>
-            <option value="MOP">MOP$</option>
-          </select>
-        </label>
-        <label class="field new-order__price">{{ t('司機價（群裡看得到）') }}<input v-model="form.driverPrice" class="input" type="number" min="0" step="0.01" inputmode="decimal" /></label>
+    <section class="card">
+      <span class="section-label">{{ t('司機價，貼到群裡大家都看得到') }}</span>
+      <div class="amount-line">
+        <select v-model="form.currency" :aria-label="t('幣種')">
+          <option value="HKD">HK$</option>
+          <option value="CNY">RMB¥</option>
+          <option value="MOP">MOP$</option>
+        </select>
+        <input v-model="form.driverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('司機價')" :placeholder="t('司機價')" />
       </div>
-      <label class="field">{{ t('乘客價（只有你看得到）') }}<input v-model="form.passengerPrice" class="input" type="number" min="0" step="0.01" inputmode="decimal" /></label>
-      <label class="row"><input v-model="form.showPassengerPrice" type="checkbox" /> {{ t('讓乘客在確認頁看到乘客價') }}</label>
-      <p v-if="margin !== null" class="hint">{{ t(`差價：${margin}`) }}</p>
-    </div>
+      <label class="line-field new-order__passenger-price">
+        <span>{{ t('乘客價，只有你看得到') }}</span>
+        <input v-model="form.passengerPrice" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" />
+      </label>
+      <p v-if="margin !== null" class="new-order__margin">{{ t(`差價 ${margin}`) }}</p>
+      <label class="new-order__switch">
+        <span>{{ t('乘客確認頁顯示乘客價') }}</span>
+        <input v-model="form.showPassengerPrice" class="switch" type="checkbox" />
+      </label>
+    </section>
 
-    <div class="card">
-      <h2>{{ t('乘客') }} <span class="hint">{{ t('只有搶到單的司機，在你設定的時間後才看得到') }}</span></h2>
-      <label class="field">{{ t('乘客稱呼（選填）') }}<input v-model="form.passengerName" class="input" maxlength="40" /></label>
-      <div class="field">
-        <label for="passenger-phone">{{ t('乘客電話') }}</label>
+    <section class="card">
+      <span class="section-label">{{ t('乘客') }}</span>
+      <input v-model="form.passengerName" class="line-input new-order__name" maxlength="40" :aria-label="t('乘客稱呼')" :placeholder="t('稱呼（選填），例如：王小姐')" />
+      <div class="line-field new-order__last">
+        <label for="passenger-phone">{{ t('電話') }}</label>
         <div class="new-order__phone">
-          <select v-model="form.passengerCountry" class="select" :aria-label="t('區號')">
+          <select v-model="form.passengerCountry" class="new-order__country" :aria-label="t('區號')">
             <option v-for="code in COUNTRY_CODES" :key="code" :value="code">{{ code }}</option>
           </select>
           <input
             id="passenger-phone"
             v-model="form.passengerPhone"
-            class="input"
+            class="line-input"
             type="tel"
             inputmode="tel"
             autocomplete="off"
@@ -433,29 +479,47 @@ onMounted(async () => {
         </div>
         <span v-if="carriedContact" class="hint new-order__carried">{{ t(`原本留的聯絡方式是「${carriedContact}」，不是電話號碼，請向乘客要電話後填上。`) }}</span>
       </div>
-    </div>
+      <p class="hint new-order__private">{{ t('只有搶到單的司機，在你設定的時間後才看得到乘客電話。') }}</p>
+    </section>
 
     <!-- Settings most orders leave at the driver's defaults; folded so the form shows only what must be filled. -->
     <details class="card new-order__more" :open="fromBooking || form.selfDrive">
       <summary>
-        <span>{{ t('更多設定') }}</span>
-        <span class="hint">{{ t(moreSummary) }}</span>
+        <span class="new-order__more-text">
+          <strong>{{ t('更多設定') }}</strong>
+          <span class="hint">{{ t(moreSummary) }}</span>
+        </span>
+        <AppIcon name="chevron" class="new-order__more-arrow" />
       </summary>
-      <label class="field">
-        {{ t('接單司機何時看到乘客電話') }}
-        <RevealSelect v-model="form.contactRevealMinutes" />
-        <span class="hint">{{ t('在這之前，司機只能聯絡你。預設值可在「我的」修改。') }}</span>
+      <label class="new-order__switch">
+        <span>
+          {{ t('乘客電話給接單司機看') }}
+          <small>{{ t('在這之前，司機只能聯絡你') }}</small>
+        </span>
+        <RevealSelect v-model="form.contactRevealMinutes" class="select--inline" />
       </label>
-      <label class="row"><input v-model="form.selfDrive" type="checkbox" /> {{ t('這段我自己做（不放到群裡搶）') }}</label>
-      <p v-if="form.selfDrive" class="hint">
-        {{ session.profile ? t('這張單直接算你接，乘客確認頁會顯示你的車牌。之後可按「放到群裡搶」改派。') : t('請先在「我的」填寫司機資料（姓名、車牌），乘客確認頁會顯示。') }}
-      </p>
-      <template v-if="!form.selfDrive">
-        <label class="row new-order__pool"><input v-model="form.inPool" type="checkbox" /> {{ t('同時放到接單池') }}</label>
-        <p class="hint">
-          {{ t('不勾：只有拿到連結的人看得到這張單。勾選：所有登入的司機都能在「接單池」看到並搶，乘客資料仍然只有搶到的司機看得到。預設值可在「我的」修改。') }}
-        </p>
-      </template>
+      <label class="new-order__switch">
+        <span>
+          {{ t('這段我自己做') }}
+          <small>
+            {{
+              !form.selfDrive
+                ? t('不放到群裡搶')
+                : session.profile
+                  ? t('直接算你接，乘客確認頁顯示你的車牌；之後可以改派')
+                  : t('請先在「我的」填寫司機資料，乘客確認頁會顯示')
+            }}
+          </small>
+        </span>
+        <input v-model="form.selfDrive" class="switch" type="checkbox" />
+      </label>
+      <label v-if="!form.selfDrive" class="new-order__switch">
+        <span>
+          {{ t('同時放到接單池') }}
+          <small>{{ t('登入的司機都看得到並可以搶，乘客資料仍只給搶到的司機') }}</small>
+        </span>
+        <input v-model="form.inPool" class="switch" type="checkbox" />
+      </label>
     </details>
 
     <div class="action-bar">
@@ -465,68 +529,230 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.new-order__phone {
+.new-order {
+  padding-bottom: calc(100px + var(--safe-bottom));
+}
+.new-order__copy {
+  white-space: nowrap;
+}
+.new-order__previous {
+  display: flex;
+  flex-direction: column;
+  margin: 0 var(--space-xs) var(--space-lg);
+}
+.new-order__previous .section-label {
+  margin-bottom: 2px;
+}
+.new-order__previous .hint {
+  margin: var(--space-xs) 0 0;
+}
+/* 一句話出單 looks like a message bubble from the group. */
+.quick-line {
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md) var(--space-md) var(--space-sm);
+  border-radius: 4px var(--radius-card) var(--radius-card) var(--radius-card);
+  background: var(--color-tint);
+}
+.quick-line__input {
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+.quick-line__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+}
+.quick-line__fill {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 var(--space-lg);
+}
+.new-order__mode {
+  margin-bottom: var(--space-lg);
+}
+.new-order__explain {
+  margin: calc(var(--space-sm) * -1) 0 var(--space-lg);
+}
+.new-order__time {
+  font-variant-numeric: tabular-nums;
+}
+.new-order__route {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0 22px;
+  list-style: none;
+}
+/* The dotted line joining the dots. */
+.new-order__route::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 22px;
+  bottom: 22px;
+  border-left: 2px dotted var(--color-border);
+}
+.new-order__stop {
+  position: relative;
+}
+.new-order__stop::before {
+  content: '';
+  position: absolute;
+  left: -22px;
+  top: 17px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+.new-order__stop--origin::before {
+  background: var(--color-route-origin);
+}
+.new-order__stop--destination::before {
+  background: var(--color-route-destination);
+}
+.new-order__stop--via::before {
+  left: -20px;
+  top: 19px;
+  width: 8px;
+  height: 8px;
+}
+.new-order__stop .line-input {
+  font-weight: 600;
+}
+.new-order__stop .hint {
+  display: block;
+  margin-top: var(--space-xs);
+}
+.new-order__via {
+  display: flex;
+  align-items: center;
+}
+.new-order__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+.new-order__places {
+  margin-top: var(--space-md);
+}
+.new-order__load {
   display: grid;
-  grid-template-columns: 96px 1fr;
+  grid-template-columns: 1fr 1fr 1.4fr;
+  gap: var(--space-md);
+}
+.new-order__plates {
+  margin: var(--space-sm) 0 var(--space-xs);
+}
+.new-order__last {
+  margin-bottom: 0;
+}
+.new-order__passenger-price {
+  margin: var(--space-lg) 0 var(--space-sm);
+}
+.new-order__margin {
+  margin: 0 0 var(--space-sm);
+  color: var(--color-teal);
+  font-size: var(--font-label);
+  font-weight: 700;
+}
+/* A sentence on the left, its switch or choice on the right. */
+.new-order__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 48px;
+  padding: var(--space-sm) 0;
+  font-weight: 600;
+}
+.new-order__switch + .new-order__switch {
+  border-top: 1px solid var(--color-divider);
+}
+.new-order__switch > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.new-order__switch small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 400;
+}
+.new-order__phone {
+  display: flex;
+  align-items: center;
   gap: var(--space-sm);
 }
+.new-order__country {
+  flex-shrink: 0;
+  min-height: 34px;
+  padding: 0 var(--space-sm);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+  font: inherit;
+  font-weight: 700;
+}
+.new-order__phone .line-input {
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.new-order__name {
+  margin-bottom: var(--space-lg);
+}
+.new-order__private {
+  margin: var(--space-md) 0 0;
+}
 .new-order__carried {
+  display: block;
+  margin-top: var(--space-xs);
   color: var(--color-gold-ink);
 }
 .new-order__more summary {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: var(--space-sm);
   cursor: pointer;
-  font-weight: 600;
   list-style: none;
 }
 .new-order__more summary::-webkit-details-marker {
   display: none;
 }
+.new-order__more-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.new-order__more-arrow {
+  color: var(--color-text-muted);
+  transition: transform 0.15s;
+}
+.new-order__more[open] .new-order__more-arrow {
+  transform: rotate(90deg);
+}
 .new-order__more[open] summary {
-  margin-bottom: var(--space-md);
-}
-.new-order__more summary .hint {
-  font-weight: 400;
-}
-.new-order__pool {
-  margin-top: var(--space-md);
-}
-.new-order {
-  padding-bottom: calc(100px + var(--safe-bottom));
-}
-.quick-line__input {
-  min-height: 64px;
-}
-.quick-line__filled {
-  margin: var(--space-sm) 0 0;
-}
-.new-order__copy {
-  white-space: nowrap;
-}
-.new-order__waypoint {
-  flex-wrap: nowrap;
-}
-.new-order__add {
-  margin-bottom: var(--space-md);
-}
-.new-order__previous-label {
-  margin: 0 0 var(--space-xs);
-}
-.new-order__mode {
-  gap: var(--space-lg);
-  margin-bottom: var(--space-md);
-}
-.new-order__third {
-  flex: 1;
-  min-width: 0;
-}
-.new-order__currency {
-  width: 100px;
-}
-.new-order__price {
-  flex: 1;
-  min-width: 0;
+  margin-bottom: var(--space-sm);
 }
 </style>

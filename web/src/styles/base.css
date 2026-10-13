@@ -246,7 +246,8 @@ textarea.line-input {
   display: block;
   margin-bottom: var(--space-lg);
 }
-.line-field > span:first-child {
+.line-field > span:first-child,
+.line-field > label:first-child {
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
   font-weight: 600;
@@ -283,6 +284,70 @@ input[type='checkbox'].switch:checked {
 }
 input[type='checkbox'].switch:checked::after {
   transform: translateX(18px);
+}
+
+/* Two or three choices side by side in one capsule (直達／接駁, 繁體／简体). */
+.segment {
+  display: inline-flex;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--color-divider);
+}
+.segment > button {
+  flex: 1;
+  min-height: 34px;
+  padding: 0 var(--space-md);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.segment > button[aria-pressed='true'] {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgba(20, 32, 51, 0.12);
+}
+.segment.segment--block {
+  display: flex;
+  width: 100%;
+}
+
+/* A price as people say it: a currency capsule, then a large gold number on a line. */
+.amount-line {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  border-bottom: 2px solid var(--color-border);
+}
+.amount-line:focus-within {
+  border-bottom-color: var(--color-primary);
+}
+.amount-line > select {
+  min-height: 34px;
+  padding: 0 var(--space-sm);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font: inherit;
+  font-weight: 700;
+}
+.amount-line > input {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  border: none;
+  background: transparent;
+  color: var(--color-gold-ink);
+  font: inherit;
+  font-size: 28px;
+  font-weight: 800;
+  outline: none;
 }
 
 /* The small grey words above a group of lines, instead of a boxed heading. */

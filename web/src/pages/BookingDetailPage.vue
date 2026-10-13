@@ -93,15 +93,14 @@ onMounted(async () => {
 
       <form v-if="open" class="card" @submit.prevent="sendQuote">
         <span class="section-label">{{ booking.quote ? t('修改報價') : t('你的報價') }}</span>
-        <div class="booking-detail__price">
-          <select v-model="quote.currency" class="booking-detail__currency" :aria-label="t('幣種')">
+        <div class="amount-line booking-detail__price">
+          <select v-model="quote.currency" :aria-label="t('幣種')">
             <option value="HKD">HK$</option>
             <option value="CNY">RMB¥</option>
             <option value="MOP">MOP$</option>
           </select>
           <input
             v-model="quote.amount"
-            class="booking-detail__amount"
             type="number"
             min="0"
             step="0.01"
@@ -203,38 +202,8 @@ onMounted(async () => {
 .booking-detail__tip {
   margin: 0 var(--space-xs) var(--space-lg);
 }
-/* The price reads like the price on a claim page: a currency capsule, then the number on a line. */
 .booking-detail__price {
-  display: flex;
-  align-items: center;
-  gap: var(--space-sm);
   margin-bottom: var(--space-md);
-  border-bottom: 2px solid var(--color-border);
-}
-.booking-detail__price:focus-within {
-  border-bottom-color: var(--color-primary);
-}
-.booking-detail__currency {
-  min-height: 34px;
-  padding: 0 var(--space-sm);
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-gold-tint);
-  color: var(--color-gold-ink);
-  font: inherit;
-  font-weight: 700;
-}
-.booking-detail__amount {
-  flex: 1;
-  min-width: 0;
-  min-height: 52px;
-  border: none;
-  background: transparent;
-  color: var(--color-gold-ink);
-  font: inherit;
-  font-size: 28px;
-  font-weight: 800;
-  outline: none;
 }
 .booking-detail__quote-note {
   width: 100%;

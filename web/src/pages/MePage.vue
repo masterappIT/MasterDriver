@@ -144,9 +144,9 @@ onMounted(async () => {
       <MenuRow to="/support" :title="t('聯絡客服')" :detail="supportContacts || t('文字、圖片、影片都可以傳')" :count="unread.support" />
       <div class="me__line">
         <span class="me__line-text">{{ t('介面語言') }}</span>
-        <span class="me__segment" role="group">
-          <button type="button" :class="{ 'me__segment--on': language === 'zh-Hant' }" @click="setLanguage('zh-Hant')">繁體</button>
-          <button type="button" :class="{ 'me__segment--on': language === 'zh-Hans' }" @click="setLanguage('zh-Hans')">简体</button>
+        <span class="segment" role="group" :aria-label="t('介面語言')">
+          <button type="button" :aria-pressed="language === 'zh-Hant'" @click="setLanguage('zh-Hant')">繁體</button>
+          <button type="button" :aria-pressed="language === 'zh-Hans'" @click="setLanguage('zh-Hans')">简体</button>
         </span>
       </div>
     </section>
@@ -246,29 +246,6 @@ onMounted(async () => {
   font-size: 18px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-.me__segment {
-  display: inline-flex;
-  flex-shrink: 0;
-  padding: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--color-divider);
-}
-.me__segment button {
-  min-height: 30px;
-  padding: 0 var(--space-md);
-  border: none;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.me__segment button.me__segment--on {
-  background: var(--color-surface);
-  color: var(--color-text);
-  box-shadow: 0 1px 3px rgba(20, 32, 51, 0.12);
 }
 .me__upgrade {
   display: flex;

@@ -226,22 +226,20 @@ watch(id, () => {
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
       </ol>
 
+      <!-- The trip in the order of the group text: time, route, load, then what must be noticed. -->
       <section class="card">
         <div class="detail__top">
-          <strong>
-            {{ pickup(order.pickupAt) }}
-            <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
-          </strong>
+          <strong class="detail__time">{{ pickup(order.pickupAt) }}</strong>
           <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
         </div>
-        <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" /></div>
-        <p v-if="order.journey" class="muted">{{ t(`接駁位置：${order.journey.transferPlaces.join('、')}`) }}</p>
-        <p v-if="order.requiredPlates.length" class="muted">{{ t(plateRequirement(order.requiredPlates)) }}</p>
-        <p v-if="order.waypoints.length" class="muted">{{ t(`途經：${order.waypoints.join('、')}`) }}</p>
-        <p class="muted">
-          {{ t(`${order.passengers}人・${order.luggage}件行李`) }}<template v-if="order.vehicleType">・{{ t(order.vehicleType) }}</template>
-        </p>
-        <p v-if="order.notes">{{ t(`備註：${order.notes}`) }}</p>
+        <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" /></div>
+        <div class="detail__meta">
+          <span>{{ t([`${order.passengers}人`, `${order.luggage}件行李`, order.vehicleType].filter(Boolean).join('｜')) }}</span>
+          <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
+          <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
+        </div>
+        <p v-if="order.journey" class="detail__line">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
+        <p v-if="order.notes" class="detail__note">{{ t(order.notes) }}</p>
       </section>
 
       <div v-if="order.status === 'CANCELLED' && otherLiveLegs.length" class="notice">
@@ -250,128 +248,145 @@ watch(id, () => {
 
       <!-- 接駁: every leg of the trip -->
       <section v-if="order.journey" class="card">
-        <h2>{{ t(`接駁行程（${order.journey.legCount} 段）`) }}</h2>
+        <span class="section-label">{{ t(`整個接駁行程，共 ${order.journey.legCount} 段`) }}</span>
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
         <RouterLink v-if="canAddLeg" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
       </section>
+
       <section v-else-if="canAddLeg" class="card">
-        <p class="hint detail__leg-hint">{{ t('乘客中途要換車？加一段接駁，另外派給下一段的司機。乘客自行過關不算接駁，下一程請另外出單。') }}</p>
+        <p class="detail__line detail__leg-hint">{{ t('乘客中途要換車？加一段接駁，另外派給下一段的司機。乘客自行過關不算接駁，下一程請另外出單。') }}</p>
         <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
       </section>
 
       <!-- Dispatcher: texts to paste into groups and to the passenger -->
       <section v-if="isDispatcher && order.share && live" class="card">
         <template v-if="!selfDriven">
-          <h2>{{ t('要貼的文字') }}</h2>
+          <span class="section-label">{{ t('貼到群裡') }}</span>
           <pre class="detail__share">{{ t(order.share.dispatch.wechat) }}</pre>
-          <div class="detail__pair detail__pair--stack">
-            <button class="button" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">{{ t('複製到微信群') }}</button>
-            <button class="button" type="button" @click="copy(order.share.dispatch.whatsapp, '已複製，貼到 WhatsApp 群吧')">{{ t('複製到 WhatsApp') }}</button>
+          <div class="detail__stack">
+            <button class="button" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">
+              <AppIcon name="copy" :size="18" />{{ t('複製到微信群') }}
+            </button>
+            <button class="button" type="button" @click="copy(order.share.dispatch.whatsapp, '已複製，貼到 WhatsApp 群吧')">
+              <AppIcon name="copy" :size="18" />{{ t('複製到 WhatsApp') }}
+            </button>
           </div>
           <a v-if="!inWeChat" class="detail__wa" :href="whatsappLink(t(order.share.dispatch.whatsapp))" target="_blank" rel="noopener">
             {{ t('直接用 WhatsApp 傳送') }}
           </a>
-          <div v-if="order.status === 'OPEN'" class="detail__gap">
-            <p class="hint">
-              {{ order.inPool ? t('這張單也在接單池，所有登入的司機都看得到並可以搶。') : t('這張單只有拿到連結的人看得到。') }}
-            </p>
-            <button class="button secondary block" type="button" :disabled="busy" @click="setPool(!order.inPool)">
-              {{ order.inPool ? t('從接單池取出') : t('同時放到接單池') }}
-            </button>
-          </div>
+          <label v-if="order.status === 'OPEN'" class="detail__switch detail__divided">
+            <span>
+              {{ t('放到接單池') }}
+              <small>{{ order.inPool ? t('所有登入的司機都看得到並可以搶') : t('現在只有拿到連結的人看得到') }}</small>
+            </span>
+            <input class="switch" type="checkbox" :checked="order.inPool" :disabled="busy" @change="setPool(!order.inPool)" />
+          </label>
         </template>
-        <p v-else class="hint">{{ t('這段你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
-        <button class="button secondary block detail__gap" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
-          {{ t('複製給乘客的確認訊息') }}
-        </button>
-        <button v-if="order.share.claimed && !selfDriven" class="button secondary block detail__gap" type="button" @click="copy(order.share.claimed, '已複製，貼回群裡吧')">
-          {{ t('複製「已派出」訊息貼回群') }}
-        </button>
+        <p v-else class="detail__line">{{ t('這段你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
+        <div class="detail__links" :class="{ 'detail__divided': !selfDriven }">
+          <button class="detail__link" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
+            <AppIcon name="copy" :size="18" />{{ t('複製給乘客的確認訊息') }}
+          </button>
+          <button v-if="order.share.claimed && !selfDriven" class="detail__link" type="button" @click="copy(order.share.claimed, '已複製，貼回群裡吧')">
+            <AppIcon name="copy" :size="18" />{{ t('複製「已派出」訊息貼回群') }}
+          </button>
+        </div>
       </section>
 
       <!-- Prices: the dispatcher sees both and the spread; the driver only the driver price -->
       <section class="card">
-        <h2>{{ t('價格') }}</h2>
         <template v-if="!editingPrices">
-          <p>{{ t('司機價') }}：<strong>{{ money(order.driverPrice) || '—' }}</strong></p>
+          <div class="detail__price">
+            <span class="section-label">{{ t('司機價') }}</span>
+            <strong>{{ money(order.driverPrice) || t('沒有填') }}</strong>
+          </div>
           <template v-if="isDispatcher">
-            <p>{{ t('乘客價') }}：<strong>{{ money(order.passengerPrice) || '—' }}</strong>　<span class="hint">{{ order.showPassengerPrice ? t('乘客看得到') : t('乘客看不到') }}</span></p>
-            <p v-if="order.margin">{{ t('差價') }}：<strong>{{ money(order.margin) }}</strong></p>
-            <p v-if="order.serviceFee" class="hint">
-              {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}（整個接駁行程只收一次，全部段都取消才退回）`) : t(`平台服務費 HK$${order.serviceFee}（取消會退回）`) }}
+            <p class="detail__line">
+              {{ t(`乘客價 ${money(order.passengerPrice) || '沒有填'}`) }}<template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
             </p>
-            <div v-if="live" class="row">
-              <button class="button secondary" type="button" @click="editPrices">{{ t('修改價格') }}</button>
-              <button class="button secondary" type="button" :disabled="busy" @click="patchPrices({ showPassengerPrice: !order.showPassengerPrice }, '已更新')">
-                {{ order.showPassengerPrice ? t('不讓乘客看到價格') : t('讓乘客看到價格') }}
-              </button>
-            </div>
+            <p v-if="order.serviceFee" class="hint detail__fee">
+              {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整個接駁行程只收一次，全部段都取消才退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
+            </p>
+            <template v-if="live">
+              <label class="detail__switch detail__divided">
+                <span>{{ t('乘客確認頁顯示乘客價') }}</span>
+                <input
+                  class="switch"
+                  type="checkbox"
+                  :checked="order.showPassengerPrice"
+                  :disabled="busy"
+                  @change="patchPrices({ showPassengerPrice: !order.showPassengerPrice }, '已更新')"
+                />
+              </label>
+              <button class="button secondary block detail__gap" type="button" @click="editPrices">{{ t('修改價格') }}</button>
+            </template>
           </template>
         </template>
         <form v-else @submit.prevent="savePrices">
-          <label class="field">
-            {{ t('幣種') }}
-            <select v-model="prices.currency" class="select">
+          <span class="section-label">{{ order.status === 'OPEN' ? t('司機價') : t('司機價（已有司機接單，不能再改）') }}</span>
+          <div class="amount-line detail__gap-bottom">
+            <select v-model="prices.currency" :aria-label="t('幣種')">
               <option value="HKD">HK$</option>
               <option value="CNY">RMB¥</option>
               <option value="MOP">MOP$</option>
             </select>
+            <input v-model="prices.driver" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('司機價')" :disabled="order.status !== 'OPEN'" />
+          </div>
+          <label class="line-field">
+            <span>{{ t('乘客價，只有你看得到') }}</span>
+            <input v-model="prices.passenger" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" />
           </label>
-          <label class="field">
-            {{ t('司機價') }}
-            <input v-model="prices.driver" class="input" type="number" min="0" step="0.01" :disabled="order.status !== 'OPEN'" />
-            <span v-if="order.status !== 'OPEN'" class="hint">{{ t('已有司機接單，司機價不能再改') }}</span>
-          </label>
-          <label class="field">{{ t('乘客價') }}<input v-model="prices.passenger" class="input" type="number" min="0" step="0.01" /></label>
-          <div class="row">
-            <button class="button" type="submit" :disabled="busy">{{ t('儲存') }}</button>
+          <div class="detail__pair">
             <button class="button secondary" type="button" @click="editingPrices = false">{{ t('取消') }}</button>
+            <button class="button" type="submit" :disabled="busy">{{ t('儲存') }}</button>
           </div>
         </form>
       </section>
 
       <section v-if="order.driver" class="card">
-        <h2>{{ selfDriven ? t('這段你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</h2>
-        <p><strong>{{ order.driver.name ? t(order.driver.name) : '—' }}</strong>　<span class="hint">{{ t(`${shortTime(order.claimedAt)} 搶到`) }}</span></p>
+        <span class="section-label">{{ selfDriven ? t('這段你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
+        <div class="detail__person">
+          <strong>{{ order.driver.name ? t(order.driver.name) : t('沒有留名') }}</strong>
+          <span class="hint">{{ t(`${shortTime(order.claimedAt)} 搶到`) }}</span>
+        </div>
         <PlateTag :hk="order.driver.hkPlate" :macau="order.driver.macauPlate" :mainland="order.driver.mainlandPlate" />
-        <div v-if="isDispatcher && !selfDriven" class="row detail__gap">
-          <a class="button secondary" :href="`tel:${order.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
+        <div v-if="isDispatcher && !selfDriven" class="detail__pair detail__gap">
+          <a class="button secondary" :href="`tel:${order.driver.phone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電司機') }}</a>
           <button class="button secondary" type="button" @click="copy(order.driver.phone, '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
       </section>
 
       <section class="card">
-        <h2>{{ t('乘客') }}</h2>
-        <p v-if="order.passengerContact">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}：<strong>{{ order.passengerContact }}</strong></p>
-        <p v-else class="notice">{{ t(`乘客電話將於 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡出單者。`) }}</p>
-        <div v-if="isDispatcher" class="detail__reveal">
+        <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
+        <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
+        <p v-else class="detail__waiting">{{ t(`乘客電話 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡出單者。`) }}</p>
+        <p class="detail__confirmed" :class="{ 'detail__confirmed--yes': order.passengerConfirmedAt }">
+          {{ order.passengerConfirmedAt ? t(`乘客 ${shortTime(order.passengerConfirmedAt)} 確認了行程`) : t('乘客還沒確認') }}
+        </p>
+        <div v-if="order.passengerContact" class="detail__pair detail__gap">
+          <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電乘客') }}</a>
+          <button class="button secondary" type="button" @click="copy(order.passengerContact, '已複製')">{{ t('複製號碼') }}</button>
+        </div>
+        <div v-if="isDispatcher" class="detail__divided detail__reveal">
           <template v-if="!editingReveal">
-            <span class="hint">{{ t(`接單司機看到乘客電話：${revealLabel(order.contactRevealMinutes ?? null)}`) }}</span>
+            <span class="detail__reveal-text">{{ order.contactRevealMinutes == null ? t('接單司機搶到就看到乘客電話') : t(`接單司機${revealLabel(order.contactRevealMinutes)}看到乘客電話`) }}</span>
             <button v-if="live" class="chip" type="button" @click="editReveal">{{ t('修改') }}</button>
           </template>
           <template v-else>
-            <RevealSelect v-model="reveal" />
-            <div class="row">
-              <button class="button" type="button" :disabled="busy" @click="saveReveal">{{ t('儲存') }}</button>
-              <button class="button secondary" type="button" @click="editingReveal = false">{{ t('取消') }}</button>
-            </div>
+            <RevealSelect v-model="reveal" class="select--inline" />
+            <button class="chip" type="button" @click="editingReveal = false">{{ t('取消') }}</button>
+            <button class="chip chip--on" type="button" :disabled="busy" @click="saveReveal">{{ t('儲存') }}</button>
           </template>
-        </div>
-        <p class="hint">
-          {{ order.passengerConfirmedAt ? t(`乘客已於 ${shortTime(order.passengerConfirmedAt)} 確認行程`) : t('乘客尚未確認') }}
-        </p>
-        <div v-if="order.passengerContact" class="row">
-          <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`">{{ t('致電乘客') }}</a>
-          <button class="button secondary" type="button" @click="copy(order.passengerContact, '已複製')">{{ t('複製') }}</button>
         </div>
       </section>
 
-      <section v-if="live" class="card row">
-        <button v-if="order.status === 'ASSIGNED'" class="button" type="button" :disabled="busy" @click="ask('complete', '已完成', '確定這趟行程已完成？', '標記完成')">{{ t('標記完成') }}</button>
+      <!-- What can still be done, least drastic first; cancelling is a quiet red link. -->
+      <section v-if="live" class="detail__actions">
+        <button v-if="order.status === 'ASSIGNED'" class="button block large" type="button" :disabled="busy" @click="ask('complete', '已完成', '確定這趟行程已完成？', '標記完成')">{{ t('標記完成') }}</button>
         <template v-if="isDispatcher">
           <button
             v-if="order.status === 'ASSIGNED'"
-            class="button secondary"
+            class="button secondary block"
             type="button"
             :disabled="busy"
             @click="
@@ -382,7 +397,7 @@ watch(id, () => {
           >
             {{ selfDriven ? t('放到群裡搶') : t('改派') }}
           </button>
-          <button class="button secondary" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? '取消這一段' : '取消這張單', cancelNote)">
+          <button class="detail__cancel" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? '取消這一段' : '取消這張單', cancelNote)">
             {{ order.journey ? t('取消這一段') : t('取消這張單') }}
           </button>
         </template>
@@ -422,14 +437,53 @@ watch(id, () => {
   color: var(--color-text);
   font-weight: 700;
 }
-.detail__pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.detail__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: var(--space-sm);
 }
-/* The two copy buttons get a full row each so "複製到 WhatsApp" never wraps. */
-.detail__pair--stack {
-  grid-template-columns: 1fr;
+.detail__time {
+  font-size: var(--font-body-large);
+  font-variant-numeric: tabular-nums;
+}
+.detail__route {
+  margin: var(--space-md) 0;
+}
+.detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  color: var(--color-label);
+  font-size: var(--font-label);
+}
+.detail__line {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-text-secondary);
+}
+.detail__note {
+  margin: var(--space-md) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-input);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  white-space: pre-wrap;
+}
+.detail__share {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-md);
+  border-radius: 4px 18px 18px 18px;
+  background: var(--color-tint);
+  font: inherit;
+  font-size: var(--font-label);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.detail__stack {
+  display: grid;
+  gap: var(--space-sm);
 }
 .detail__wa {
   display: block;
@@ -437,41 +491,141 @@ watch(id, () => {
   text-align: center;
   font-size: var(--font-label);
 }
+/* A thin line between the parts of one card, instead of another box. */
+.detail__divided {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-divider);
+}
+.detail__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  font-weight: 600;
+}
+.detail__switch > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.detail__switch small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 400;
+}
+.detail__links {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+.detail__links:not(.detail__divided) {
+  margin-top: var(--space-md);
+}
+.detail__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 40px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.detail__leg-hint {
+  margin: 0 0 var(--space-md);
+}
+.detail__price {
+  display: flex;
+  flex-direction: column;
+}
+.detail__price .section-label {
+  margin-bottom: 0;
+}
+.detail__price strong {
+  color: var(--color-gold-ink);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+.detail__fee {
+  margin: var(--space-xs) 0 0;
+}
+.detail__gap {
+  margin-top: var(--space-md);
+}
+.detail__gap-bottom {
+  margin-bottom: var(--space-lg);
+}
+.detail__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+.detail__person {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.detail__person strong {
+  font-size: 18px;
+}
+.detail__phone {
+  display: block;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.detail__waiting {
+  margin: 0;
+  color: var(--color-gold-ink);
+  font-weight: 600;
+}
+.detail__confirmed {
+  margin: var(--space-xs) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+}
+.detail__confirmed--yes {
+  color: var(--status-confirmed);
+  font-weight: 700;
+}
+.detail__reveal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.detail__reveal-text {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+}
+.detail__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+.detail__cancel {
+  min-height: 44px;
+  border: none;
+  background: none;
+  color: var(--color-error);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
 .detail__question {
   margin: 0 0 var(--space-sm);
   font-weight: 600;
 }
 .detail__question + .hint {
   margin: 0 0 var(--space-lg);
-}
-.detail__top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.detail__route {
-  margin: var(--space-md) 0;
-}
-.detail__share {
-  white-space: pre-wrap;
-  word-break: break-all;
-  font: inherit;
-  background: var(--color-background);
-  border-radius: var(--radius-input);
-  padding: var(--space-md);
-  margin: 0 0 var(--space-md);
-}
-.detail__reveal {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-sm);
-  align-items: center;
-  margin-bottom: var(--space-md);
-}
-.detail__gap {
-  margin-top: var(--space-sm);
-}
-.detail__leg-hint {
-  margin: 0 0 var(--space-sm);
 }
 </style>

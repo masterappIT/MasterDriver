@@ -152,12 +152,12 @@ onMounted(async () => {
   font-size: var(--font-caption);
   font-weight: 600;
 }
-/* The text exactly as it will be pasted. */
+/* The text exactly as it will be pasted, as a message bubble in the group. */
 .share__text {
   margin: 0 0 var(--space-md);
   padding: var(--space-md);
-  border-radius: var(--radius-input);
-  background: var(--color-background);
+  border-radius: 4px 18px 18px 18px;
+  background: var(--color-tint);
   font: inherit;
   font-size: var(--font-label);
   line-height: 1.6;
