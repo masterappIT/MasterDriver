@@ -6,8 +6,9 @@
 
 | 日期 | 決定 |
 |---|---|
+| 2026-10-13 | 沿用現有 MasterApp Logo，不另外設計；以「MasterDriver 跨境師傅幫」名稱標示與 Master Travel 司機端區隔 |
 | 2026-10-13 | MasterDriver 設計稿由使用者製作（與 Master Travel 同一設計者），先有 Figma 設計稿再切版 |
-| 2026-10-13 | UI 沿用 Master Travel 風格（以司機端 token 為基準），規範見 `docs/DESIGN.md`；只沿用視覺數值，不複製程式；MasterDriver 保有自己的 Logo 與名稱標示 |
+| 2026-10-13 | UI 沿用 Master Travel 風格（以司機端 token 為基準），規範見 `docs/DESIGN.md`；只沿用視覺數值，不複製程式；Logo 沿用 MasterApp（見上方決定） |
 | 2026-10-13 | 乘客自行找司機：不做乘客叫車平台（永遠）；「司機名錄」保留空間但先不做，第四階段評估，條件為司機自願加入、只顯示系統數據、標明平台不審核不擔保、平台不經手預約付款、先取得法律意見；名片頁資料結構先預留 |
 | 2026-10-13 | 不使用 uni-app。網頁用 Vue 3 + Vite；之後小程序用原生、App 先用 Capacitor 包網頁；各端共用同一套 API 與 `shared/` 契約 |
 | 2026-10-13 | 先做網頁；之後會考慮 MasterDriver 自己的 App 和微信小程序。第一版的後端與前端要為此預留（API 優先、前端技術可延伸） |

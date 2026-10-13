@@ -67,7 +67,9 @@ MasterDriver 的 UI 沿用 Master Travel 的風格，讓用戶從 MasterDriver �
 ## 品牌區隔
 
 - 色系、字型、圓角與 Master Travel 一致，屬同一品牌家族。
-- MasterDriver 必須有**自己的 Logo 與名稱標示**，放在頁首與官網，避免與 Master Travel 現有司機端「Master App Driver」混淆。
+- **沿用現有的 MasterApp Logo**，不另外設計 Logo（2026-10-13 決定）。
+- 區隔靠**產品名稱標示**：Logo 旁固定顯示「MasterDriver 跨境師傅幫」，其中「跨境師傅幫」要醒目，避免與 Master Travel 現有司機端「Master App Driver」（同樣使用 MasterApp 標誌、頁面標題「MasterApp｜司機端」）混淆。
+- Logo 檔案參考 Master Travel 倉庫的 `brand/favicon.svg`、`brand/logo-100-100.png`；放入本專案 `assets/` 前先確認最新的正式版本。
 
 ## 設計流程
 
