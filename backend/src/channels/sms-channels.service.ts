@@ -54,7 +54,8 @@ export class SmsChannelsService implements SmsProvider {
     return this.prisma.smsChannel.upsert({
       where: { route },
       update: {},
-      create: { route, endpoint: SMS253_DEFAULT_ENDPOINT, template: SMS253_DEFAULT_TEMPLATE },
+      // Like Master Travel, only the domestic account has a default endpoint; the international one is entered by hand.
+      create: { route, endpoint: route === 'DOMESTIC' ? SMS253_DEFAULT_ENDPOINT : '', template: SMS253_DEFAULT_TEMPLATE },
     });
   }
 
@@ -65,7 +66,8 @@ export class SmsChannelsService implements SmsProvider {
   async save(route: SmsRoute, input: SmsChannelUpdate, actor: string) {
     const current = await this.channel(route);
     const { password, ...rest } = input;
-    const willHaveAccount = (input.account ?? current.account) !== '' && Boolean(password || current.passwordEnc);
+    const willHaveAccount =
+      (input.account ?? current.account) !== '' && (input.endpoint ?? current.endpoint) !== '' && Boolean(password || current.passwordEnc);
     if (input.enabled && !willHaveAccount) {
       throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the account and password before enabling');
     }
@@ -81,7 +83,7 @@ export class SmsChannelsService implements SmsProvider {
   }
 
   private credentials(row: SmsChannel) {
-    if (!row.account || !row.passwordEnc) return null;
+    if (!row.endpoint || !row.account || !row.passwordEnc) return null;
     return { account: row.account, password: this.box.open(row.passwordEnc) };
   }
 
@@ -114,7 +116,8 @@ export class SmsChannelsService implements SmsProvider {
     const target = (phone ?? row.testPhone).replace(/\D/g, '');
     if (!target) throw apiError(HttpStatus.BAD_REQUEST, 'SMS_TEST_PHONE_REQUIRED', 'Enter a test phone number');
     const countryCode = route === 'DOMESTIC' ? '+86' : target.startsWith('853') ? '+853' : '+852';
-    const local = route === 'DOMESTIC' ? target : target.replace(/^(852|853)/, '');
+    // The test number is entered with its country code; strip it for the 253 request.
+    const local = route === 'DOMESTIC' ? target.replace(/^86(?=1\d{10}$)/, '') : target.replace(/^(852|853)/, '');
     return this.send(row, countryCode, local, randomSixDigits(), 'TEST');
   }
 

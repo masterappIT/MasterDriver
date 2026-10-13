@@ -29,6 +29,17 @@ const ERROR_TEXT: Record<string, string> = {
   FEATURE_NOT_FOUND: '找不到這個功能',
   AD_NOT_FOUND: '找不到這則廣告',
   SEO_PAGE_NOT_FOUND: '找不到這個頁面設定',
+  STRIPE_CONFIG_INVALID: 'Stripe 設定不正確：請確認金鑰和環境相符（測試用 pk_test／sk_test，正式用 pk_live／sk_live），並至少選一種付款方式',
+  ALIPAYHK_GATEWAY_HTTPS: '支付網關必須以 https:// 開頭',
+  ALIPAYHK_PARTNER_FORMAT: '商戶 ID 必須是 2160 開頭的 16 位數字',
+  ALIPAYHK_KEYS_REQUIRED: '第一次設定必須填寫私鑰和公鑰',
+  ALIPAYHK_PRIVATE_KEY_FORMAT: '私鑰格式不正確（需要 PKCS8 PEM）',
+  ALIPAYHK_PUBLIC_KEY_FORMAT: '公鑰格式不正確（需要 SPKI PEM）',
+  ALIPAYHK_CALLBACK_HTTPS: '通知和返回地址必須以 https:// 開頭',
+  CHANNEL_NOT_SAVED: '請先儲存設定',
+  CHANNEL_NOT_TESTED: '請先通過檢查再啟用',
+  SMS_ACCOUNT_REQUIRED: '請先填寫接口網址、帳號和密碼',
+  SMS_TEST_PHONE_REQUIRED: '請先填寫測試號碼',
 };
 
 /** Field-level reasons the API gives for VALIDATION_FAILED. */
@@ -37,6 +48,8 @@ const ISSUE_TEXT: Record<string, string> = {
   PLAIN_TOKEN_REQUIRED: '驗證碼和統計 ID 只能填代碼本身，不要貼整段程式碼',
   NO_TRAILING_SLASH: '正式網域結尾不要加 /',
   LINK_REQUIRED: '請填寫連結',
+  TEMPLATE_NEEDS_CODE: '簡訊範本必須包含 {code}',
+  DIGITS_ONLY: '測試號碼只能填數字',
 };
 
 export class ApiError extends Error {

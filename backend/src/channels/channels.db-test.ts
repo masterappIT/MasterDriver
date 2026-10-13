@@ -106,7 +106,7 @@ test('a rejected SMS fails the request; an unconfigured route refuses outside de
 test('a channel cannot be enabled without credentials, and templates need {code}', async () => {
   await rejectsWith(ctx.smsChannels.save('INTERNATIONAL', { enabled: true }, 'test'), 'SMS_ACCOUNT_REQUIRED');
   ctx.smsChannels.fetchImpl = stubFetch({ code: '0', balance: '1234' }).impl;
-  await ctx.smsChannels.save('INTERNATIONAL', { account: 'hk', password: 'pw' }, 'test');
+  await ctx.smsChannels.save('INTERNATIONAL', { endpoint: 'https://intapi.253.com', account: 'hk', password: 'pw' }, 'test');
   const result = await ctx.smsChannels.testConnection('INTERNATIONAL');
   assert.equal(result.status, 'success');
   assert.ok(result.message.includes('1234'));

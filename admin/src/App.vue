@@ -17,6 +17,8 @@ const NAV: { to: string; label: string; roles?: AdminRole[] }[] = [
   { to: '/seo', label: 'SEO', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/settings/general', label: '一般設定', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/settings/development-login', label: '登入配置', roles: ['SUPER_ADMIN', 'OPERATOR'] },
+  { to: '/payment-channels', label: '付款通道', roles: ['SUPER_ADMIN', 'OPERATOR'] },
+  { to: '/sms-channels', label: '簡訊通道', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/accounts', label: '後台帳號', roles: ['SUPER_ADMIN'] },
   { to: '/audit', label: '操作紀錄', roles: ['SUPER_ADMIN'] },
 ];

@@ -41,6 +41,15 @@ const ACTION: Record<string, string> = {
   'ads.update': '修改廣告',
   'ads.delete': '刪除廣告',
   'leads.update': '更新潛在客戶跟進',
+  'channels.stripe.save': '修改 Stripe 設定',
+  'channels.stripe.test': '檢查 Stripe 連線',
+  'channels.alipayhk.save': '修改 AlipayHK 設定',
+  'channels.alipayhk.test': '檢查 AlipayHK 金鑰',
+  'channels.payment.enable': '啟用付款通道',
+  'channels.payment.disable': '停用付款通道',
+  'channels.sms.save': '修改簡訊通道',
+  'channels.sms.test': '檢查簡訊連線',
+  'channels.sms.testSend': '發送測試簡訊',
 };
 
 const action = ref('');
