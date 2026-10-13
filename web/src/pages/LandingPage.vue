@@ -23,19 +23,52 @@ const SAMPLE = {
 };
 
 /**
- * What the tool changes, each said in one line: the first part plainly, the second part
- * (`mark`) is what to remember. Written as sentences, not as a grid of features.
+ * What the tool does that a group alone cannot, each as something to try rather than read:
+ * a tab picks the point, and the picture under it answers to taps.
  */
-const LINES = [
-  { text: '照樣在群裡出單、聊天、搶單，', mark: '只是多了一條連結。' },
-  { text: '不用開公司、不用建車隊，', mark: '一個人就能用。' },
-  {
-    text: '乘客是你的客人：電話到出發前才給接單司機，',
-    mark: '行程結束就收回。',
-  },
-  { text: '出單價給群裡看，', mark: '乘客價只有你知道。' },
-  { text: '中途換車分段派，', mark: '乘客只收到一條連結。' },
+type Point = 'link' | 'phone' | 'price' | 'data' | 'transfer';
+const POINT_TABS: { value: Point; label: string }[] = [
+  { value: 'link', label: '一條連結' },
+  { value: 'phone', label: '客人電話' },
+  { value: 'price', label: '兩個價錢' },
+  { value: 'data', label: '資料安全' },
+  { value: 'transfer', label: '接駁' },
 ];
+const point = ref<Point>('link');
+
+/** 一條連結: the same link in every group; once one driver has it, every group shows it taken. */
+const GROUPS = ['微信群 A', '微信群 B', 'WhatsApp 群'];
+const linkTaken = ref(false);
+
+/** 客人電話: what the driver who took the order sees of the passenger's phone, by moment. */
+const MOMENTS = [
+  { label: '剛搶到', shows: '到時間才顯示', open: false },
+  { label: '出發前', shows: '+852 9123 4567', open: true },
+  { label: '行程結束', shows: '已收回', open: false },
+];
+const moment = ref(0);
+
+/** 兩個價錢: who sees which. */
+const VIEWERS = [
+  { label: '群裡', amount: 'HK$850', note: '出單價' },
+  { label: '乘客', amount: 'HK$1,000', note: '乘客價' },
+  { label: '只有你', amount: 'HK$150', note: '差價' },
+];
+const viewer = ref(0);
+
+/**
+ * 資料安全: who sees the passengers of the orders you put out. Only what the tool really does:
+ * the 客人通訊錄 is the dispatcher's alone, and a driver gets one order's passenger for one trip.
+ */
+const KEEPERS = [
+  { label: '你', sees: '全部客人', note: '客人通訊錄只有你打得開' },
+  { label: '接單司機', sees: '只有這一單的乘客', note: '到時間才顯示，行程結束就收回' },
+  { label: '其他司機', sees: '看不到', note: '沒搶到的人看不到乘客資料' },
+];
+const keeper = ref(0);
+
+/** 接駁: two legs for you, one link for the passenger. */
+const passengerSide = ref(false);
 
 /**
  * The story plays by itself once it is on screen, and every tap moves it on, so the page can be
@@ -47,8 +80,8 @@ const SCENE_MS = 1900;
 const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const scene = ref(still || !('IntersectionObserver' in window) ? LAST_SCENE : 0);
 const story = ref<HTMLElement | null>(null);
-const lines = ref<HTMLElement | null>(null);
-const linesShown = ref(still || !('IntersectionObserver' in window));
+const points = ref<HTMLElement | null>(null);
+const pointsShown = ref(still || !('IntersectionObserver' in window));
 let timer: ReturnType<typeof setTimeout> | undefined;
 let watcher: IntersectionObserver | undefined;
 
@@ -85,14 +118,14 @@ onMounted(async () => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
           if (entry.target === story.value) play();
-          else linesShown.value = true;
+          else pointsShown.value = true;
           watcher?.unobserve(entry.target);
         }
       },
       { threshold: 0.3 },
     );
     if (story.value) watcher.observe(story.value);
-    if (lines.value) watcher.observe(lines.value);
+    if (points.value) watcher.observe(points.value);
   }
   const [terms, privacy] = await Promise.all([
     api<{ text: string }>('GET', '/public/terms').catch(() => ({ text: '' })),
@@ -180,16 +213,82 @@ onMounted(async () => {
         </p>
       </section>
 
-      <!-- What changes, as sentences to read down the page; they come in one after another. -->
-      <section ref="lines" class="landing__lines" :class="{ 'landing__lines--on': linesShown }">
-        <p v-for="(line, index) in LINES" :key="line.mark" :style="{ transitionDelay: `${index * 120}ms` }">
-          {{ t(line.text) }}<strong>{{ t(line.mark) }}</strong>
-        </p>
+      <!-- What a group alone cannot do: pick a point, then try it. -->
+      <section ref="points" class="landing__points-play" :class="{ 'landing__points-play--on': pointsShown }">
+        <div class="landing__tabs" role="tablist">
+          <button v-for="tab in POINT_TABS" :key="tab.value" type="button" role="tab" :aria-selected="point === tab.value" @click="point = tab.value">
+            {{ t(tab.label) }}
+          </button>
+        </div>
+
+        <!-- 一條連結 -->
+        <div v-if="point === 'link'" class="landing__stage">
+          <p class="landing__claim">{{ t('貼到幾個群都是同一條') }}</p>
+          <div class="landing__groups">
+            <span v-for="group in GROUPS" :key="group" class="landing__group" :class="{ 'landing__group--taken': linkTaken }">
+              <small>{{ t(group) }}</small>{{ linkTaken ? t('已被接走') : t('有單') }}
+            </span>
+          </div>
+          <button class="landing__try" type="button" @click="linkTaken = !linkTaken">{{ linkTaken ? t('再來一次') : t('一位司機搶到') }}</button>
+        </div>
+
+        <!-- 客人電話 -->
+        <div v-else-if="point === 'phone'" class="landing__stage">
+          <p class="landing__claim">{{ t('乘客是你的客人') }}</p>
+          <div class="landing__reveal" :class="{ 'landing__reveal--open': MOMENTS[moment].open }">
+            <small>{{ t('接單司機看到的乘客電話') }}</small>
+            <strong>{{ t(MOMENTS[moment].shows) }}</strong>
+          </div>
+          <div class="segment segment--block">
+            <button v-for="(item, index) in MOMENTS" :key="item.label" type="button" :aria-pressed="moment === index" @click="moment = index">{{ t(item.label) }}</button>
+          </div>
+        </div>
+
+        <!-- 兩個價錢 -->
+        <div v-else-if="point === 'price'" class="landing__stage">
+          <p class="landing__claim">{{ t('賺多少，只有你知道') }}</p>
+          <div class="landing__amount">
+            <small>{{ t(VIEWERS[viewer].note) }}</small>
+            <strong>{{ VIEWERS[viewer].amount }}</strong>
+          </div>
+          <div class="segment segment--block">
+            <button v-for="(item, index) in VIEWERS" :key="item.label" type="button" :aria-pressed="viewer === index" @click="viewer = index">{{ t(item.label) }}</button>
+          </div>
+        </div>
+
+        <!-- 資料安全 -->
+        <div v-else-if="point === 'data'" class="landing__stage">
+          <p class="landing__claim">{{ t('客人資料，你自己管') }}</p>
+          <div class="landing__reveal" :class="{ 'landing__reveal--open': keeper === 0 }">
+            <small>{{ t(KEEPERS[keeper].note) }}</small>
+            <strong>{{ t(KEEPERS[keeper].sees) }}</strong>
+          </div>
+          <div class="segment segment--block">
+            <button v-for="(item, index) in KEEPERS" :key="item.label" type="button" :aria-pressed="keeper === index" @click="keeper = index">{{ t(item.label) }}</button>
+          </div>
+          <p class="landing__promise">{{ t('電話幾時給司機、車牌給不給乘客看，都由你決定。平台不把你的客人派給別人。') }}</p>
+        </div>
+
+        <!-- 接駁 -->
+        <div v-else class="landing__stage">
+          <p class="landing__claim">{{ t('中途換車，分段派') }}</p>
+          <div v-if="!passengerSide" class="landing__legs">
+            <span class="landing__leg"><small>{{ t('第 1 段') }}</small>{{ t('深圳 至 口岸') }}<em>{{ t('李師傅') }}</em></span>
+            <span class="landing__leg"><small>{{ t('第 2 段') }}</small>{{ t('口岸 至 機場') }}<em>{{ t('何師傅') }}</em></span>
+          </div>
+          <div v-else class="landing__legs landing__legs--one">
+            <span class="landing__leg"><small>{{ t('一條連結') }}</small>{{ t('深圳 至 機場，兩位司機') }}<em>{{ t('確認一次') }}</em></span>
+          </div>
+          <div class="segment segment--block">
+            <button type="button" :aria-pressed="!passengerSide" @click="passengerSide = false">{{ t('你派的') }}</button>
+            <button type="button" :aria-pressed="passengerSide" @click="passengerSide = true">{{ t('乘客看到的') }}</button>
+          </div>
+        </div>
       </section>
 
       <section class="landing__close">
-        <p class="landing__fee">{{ t('目前免費。') }}<br />{{ t('接單和乘客確認永遠免費。') }}</p>
-        <RouterLink class="landing__go" to="/login">{{ t('用手機號碼登入，馬上出第一張單') }}</RouterLink>
+        <p class="landing__fee">{{ t('免費。一個人就能用。') }}</p>
+        <RouterLink class="landing__go" to="/login">{{ t('用手機號碼登入') }}</RouterLink>
       </section>
 
       <!-- For fleets and companies only: where the tool leads, said once, as a line and not a button. -->
@@ -211,6 +310,7 @@ onMounted(async () => {
         <p>
           {{ t('本工具只協助司機之間派單和聯絡；車費、行程和服務由司機與乘客自行約定，平台不定價、不經手車費。') }}
         </p>
+        <p class="landing__copyright">© 2026 IM MASTER INC. LIMITED All Rights Reserved.</p>
       </footer>
     </main>
   </div>
@@ -428,41 +528,183 @@ onMounted(async () => {
   font-size: var(--font-caption);
 }
 
-/* Sentences, large, one under another: the last words of each are what to remember. */
-.landing__lines {
+/* The points: tabs to pick one, and a stage that answers to taps. It rises in when reached. */
+.landing__points-play {
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
-}
-.landing__lines p {
-  margin: 0;
   opacity: 0;
-  transform: translateY(12px);
+  transform: translateY(14px);
   transition:
     opacity 0.5s ease,
     transform 0.5s ease;
-  color: var(--color-text-secondary);
-  font-size: 19px;
-  line-height: 1.6;
-  text-wrap: pretty;
 }
-.landing__lines--on p {
+.landing__points-play--on {
   opacity: 1;
   transform: none;
 }
+.landing__tabs {
+  display: flex;
+  gap: var(--space-sm);
+  margin: 0 calc(var(--space-xl) * -1);
+  padding: 0 var(--space-xl);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.landing__tabs::-webkit-scrollbar {
+  display: none;
+}
+.landing__tabs button {
+  flex-shrink: 0;
+  min-height: 38px;
+  padding: 0 var(--space-lg);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+.landing__tabs button[aria-selected='true'] {
+  background: var(--color-text);
+  color: var(--color-on-primary);
+}
+.landing__stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  /* About the height of most stages, so the page below hardly moves between tabs. */
+  min-height: 216px;
+  animation: landing-stage 0.35s ease;
+}
+@keyframes landing-stage {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.landing__claim {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.landing__stage small {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 600;
+}
+/* 一條連結: the groups, side by side, all changing at once. */
+.landing__groups {
+  display: flex;
+  gap: var(--space-sm);
+}
+.landing__group {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-md);
+  border-radius: 16px;
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-weight: 700;
+  transition:
+    background 0.3s ease,
+    color 0.3s ease;
+}
+.landing__group--taken {
+  background: var(--color-divider);
+  color: var(--color-text-secondary);
+}
+.landing__group:nth-child(2) {
+  transition-delay: 0.12s;
+}
+.landing__group:nth-child(3) {
+  transition-delay: 0.24s;
+}
+/* Something to press inside a stage: outlined, so 開始使用 stays the page's one button. */
+.landing__try {
+  align-self: flex-start;
+  min-height: 38px;
+  padding: 0 var(--space-lg);
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.landing__try:active {
+  transform: scale(0.97);
+}
+/* 客人電話 and 兩個價錢: one large value that changes with the choice under it. */
+.landing__reveal,
+.landing__amount {
+  padding: var(--space-lg);
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+.landing__reveal strong,
+.landing__amount strong {
+  display: block;
+  margin-top: var(--space-xs);
+  font-size: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.landing__reveal strong {
+  color: var(--color-text-muted);
+  transition: color 0.3s ease;
+}
+.landing__reveal--open strong {
+  color: var(--color-text);
+}
+.landing__amount strong {
+  color: var(--color-gold-ink);
+}
+/* 資料安全: one plain line of what is promised, under the picture. */
+.landing__promise {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+  line-height: 1.6;
+}
+/* 接駁: two legs for the dispatcher, one line for the passenger. */
+.landing__legs {
+  display: flex;
+  gap: var(--space-sm);
+}
+.landing__leg {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-md);
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-weight: 700;
+}
+.landing__leg em {
+  display: block;
+  margin-top: var(--space-xs);
+  color: var(--color-teal);
+  font-size: var(--font-label);
+  font-style: normal;
+}
 @media (prefers-reduced-motion: reduce) {
   .landing__scene,
-  .landing__lines p {
+  .landing__points-play {
     transition: none;
   }
-  .landing__link--ask {
+  .landing__link--ask,
+  .landing__stage {
     animation: none;
   }
 }
-.landing__lines strong {
-  color: var(--color-text);
-}
-
 .landing__close {
   display: flex;
   flex-direction: column;
