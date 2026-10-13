@@ -34,6 +34,13 @@ const ACTION: Record<string, string> = {
   'billing.serviceFee': '修改平台服務費',
   'settings.developmentLogin': '修改開發模式登入',
   'order.viewPassenger': '查看乘客資料',
+  'settings.general': '修改一般設定',
+  'seo.site': '修改 SEO 網站設定',
+  'seo.page': '修改頁面 SEO',
+  'ads.create': '新增廣告',
+  'ads.update': '修改廣告',
+  'ads.delete': '刪除廣告',
+  'leads.update': '更新潛在客戶跟進',
 };
 
 const action = ref('');

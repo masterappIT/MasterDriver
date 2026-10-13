@@ -10,15 +10,19 @@ const NAV: { to: string; label: string; roles?: AdminRole[] }[] = [
   { to: '/', label: '總覽' },
   { to: '/users', label: '用戶' },
   { to: '/orders', label: '訂單' },
+  { to: '/leads', label: '潛在客戶' },
   { to: '/billing', label: '收費控制', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/service-fee', label: '平台服務費', roles: ['SUPER_ADMIN', 'OPERATOR'] },
+  { to: '/ads', label: '廣告欄位', roles: ['SUPER_ADMIN', 'OPERATOR'] },
+  { to: '/seo', label: 'SEO', roles: ['SUPER_ADMIN', 'OPERATOR'] },
+  { to: '/settings/general', label: '一般設定', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/settings/development-login', label: '登入配置', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/accounts', label: '後台帳號', roles: ['SUPER_ADMIN'] },
   { to: '/audit', label: '操作紀錄', roles: ['SUPER_ADMIN'] },
 ];
 
 const nav = computed(() => NAV.filter((item) => !item.roles || (session.admin && item.roles.includes(session.admin.role))));
-const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path.startsWith(to));
+const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path === to || route.path.startsWith(`${to}/`));
 
 async function logout() {
   await api('POST', '/auth/logout').catch(() => undefined);

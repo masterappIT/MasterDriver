@@ -44,7 +44,8 @@ npm run dev:admin
 
 - 第一個超級管理員用指令建立，畫面只顯示一次一次性密碼，登入後請到「修改密碼」更換。之後的帳號在「後台帳號」頁建立。
 - 後台在 `http://localhost:5181`，開發時把 `/api` 轉到本機 API。
-- 角色：超級管理員（全部）、營運（收費控制、充值、贈送，可看開發模式登入但不能改）、銷售（只能查看，看不到乘客資料）。
+- 角色：超級管理員（全部）、營運（收費控制、充值、贈送、廣告、SEO、一般設定，可看開發模式登入但不能改）、銷售（只能查看，看不到乘客資料；可以更新潛在客戶的跟進狀態）。
+- 頁面：總覽、用戶、訂單、潛在客戶、收費控制、平台服務費、廣告欄位、SEO、一般設定、登入配置、後台帳號、操作紀錄、修改密碼。
 - 安全：後台帳號與司機帳號分開；登入 cookie 只在 `/api/admin` 下有效（httpOnly、SameSite=Strict）；每個後台請求必須帶 `x-md-admin: 1`；同一帳號 15 分鐘內失敗 5 次即暫停登入；所有修改與查看乘客資料都寫入操作紀錄。
 
 ## 平台服務費與點數（後台完成前用指令）
@@ -79,6 +80,18 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET /api/me/credits` | 要 | 點數餘額、最近紀錄、目前每單服務費（是否免收） |
 | `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現） |
 | `POST /api/c/:confirmCode/confirm` | — | 乘客按確認 |
+
+### 公開資料（司機端與公開頁面用，不用登入）
+
+| 方法與路徑 | 用途 |
+|---|---|
+| `GET /api/public/settings` | 升級連結、客服聯絡、公告（只在開啟時） |
+| `GET /api/public/terms`、`/api/public/privacy` | 服務條款、私隱政策 |
+| `GET /api/public/seo/HOME`、`/PROFILE` | 頁面標題、描述、分享圖、robots、網站驗證碼、百度統計 ID |
+| `GET /api/public/robots.txt` | 未開放收錄時封鎖全站；開放後仍封鎖搶單頁、乘客頁、司機端、後台與 API |
+| `GET /api/public/ads?position=CLAIM_PAGE\|HOME\|MY_ORDERS` | 正在顯示的廣告（每位置最多 3 則） |
+| `POST /api/public/ads/impressions` | 記錄曝光（每次最多 10 則） |
+| `GET /api/public/ads/:id/click` | 記錄點擊並轉到後台設定的連結 |
 
 登入後的 token 可放在 `Authorization: Bearer <token>`，或使用驗證時設定的 `md_session` cookie。
 

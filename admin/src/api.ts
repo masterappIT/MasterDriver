@@ -27,14 +27,26 @@ const ERROR_TEXT: Record<string, string> = {
   ORDER_NOT_FOUND: '找不到這張單',
   PLAN_NOT_FOUND: '找不到這個方案',
   FEATURE_NOT_FOUND: '找不到這個功能',
+  AD_NOT_FOUND: '找不到這則廣告',
+  SEO_PAGE_NOT_FOUND: '找不到這個頁面設定',
+};
+
+/** Field-level reasons the API gives for VALIDATION_FAILED. */
+const ISSUE_TEXT: Record<string, string> = {
+  HTTPS_URL_REQUIRED: '連結必須以 https:// 開頭',
+  PLAIN_TOKEN_REQUIRED: '驗證碼和統計 ID 只能填代碼本身，不要貼整段程式碼',
+  NO_TRAILING_SLASH: '正式網域結尾不要加 /',
+  LINK_REQUIRED: '請填寫連結',
 };
 
 export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    issues: { message: string }[] = [],
   ) {
-    super(ERROR_TEXT[code] ?? `操作失敗（${code}）`);
+    const reasons = [...new Set(issues.map((issue) => ISSUE_TEXT[issue.message]).filter(Boolean))];
+    super(reasons.length > 0 ? reasons.join('；') : (ERROR_TEXT[code] ?? `操作失敗（${code}）`));
   }
 }
 
@@ -52,7 +64,7 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401) session.admin = null;
-    throw new ApiError(response.status, data.code ?? 'UNKNOWN');
+    throw new ApiError(response.status, data.code ?? 'UNKNOWN', data.issues);
   }
   return data as T;
 }
