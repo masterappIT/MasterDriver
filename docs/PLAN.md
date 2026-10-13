@@ -314,6 +314,7 @@
 | PaymentChannel | 付款通道設定（Stripe、AlipayHK，各分測試與正式環境）；金鑰欄位以 AES-256-GCM 加密 |
 | PlanPrice | 方案在各付款方式、期數、幣種下的價格與 Stripe 價格編號 |
 | SmsChannel / SmsMessage | 253 國內、國際簡訊帳號（密碼加密）；發送結果紀錄（不含簡訊內容） |
+| Notification | 站內通知：對象、種類、所關的訂單或預約、路線與上車時間、已讀時間（2026-10-14）；用戶的 notificationsOff 記錄關掉的通知類別 |
 | AppSetting | 一般設定：升級入口連結、客服聯絡、條款、公告 |
 | SeoSetting | 各頁類型的標題、描述、關鍵字、分享圖範本；網站驗證碼、統計代碼、robots、sitemap、canonical 網域 |
 

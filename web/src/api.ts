@@ -38,7 +38,7 @@ export const session = reactive<{ user: User | null; profile: Profile | null; ch
  * The sign-in token lives in an httpOnly cookie set by the API and, as a
  * fallback, in localStorage: the WeChat browser sometimes clears one of them.
  */
-function storedToken() {
+export function storedToken() {
   try {
     return localStorage.getItem(TOKEN_KEY);
   } catch {

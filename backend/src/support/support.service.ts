@@ -6,6 +6,7 @@ import { AuditService, PAGE_SIZE } from '../admin/audit.service';
 import { randomCode, randomToken, sha256 } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma.service';
 import { sniffMedia } from './media-file';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
@@ -61,6 +62,7 @@ export class SupportService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MEDIA_STORAGE) private readonly storage: MediaStorage,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   // ------------------------------------------------------- users and guests
@@ -105,6 +107,7 @@ export class SupportService {
     if (conversation.unreadByParticipant > 0) {
       await this.prisma.supportConversation.update({ where: { id: conversation.id }, data: { unreadByParticipant: 0 } });
     }
+    if (participant.type === 'USER') await this.notifications.supportRead(participant.userId);
     return { ...page, uploads: this.uploadRules(participant) };
   }
 
@@ -219,6 +222,7 @@ export class SupportService {
     await this.requireConversation(conversationId);
     const message = await this.post(conversationId, staff.id, { kind: 'TEXT', text: body.text }, body.clientMessageId, now);
     await this.logReply(conversationId, staff, 'TEXT', ip);
+    await this.tellUser(conversationId);
     return toMessage(message, true);
   }
 
@@ -226,6 +230,7 @@ export class SupportService {
     await this.requireConversation(conversationId);
     const message = await this.postMedia(conversationId, staff.id, bytes, clientMessageId, true, now);
     await this.logReply(conversationId, staff, message.kind, ip);
+    await this.tellUser(conversationId);
     return toMessage(message, true);
   }
 
@@ -397,6 +402,12 @@ export class SupportService {
     const bytes = media ? await this.storage.read(media.storageKey) : null;
     if (!media || !bytes) throw this.mediaNotFound();
     return { mime: media.mimeType, bytes };
+  }
+
+  /** A signed-up user is notified of a reply; a guest has nothing to be notified in. */
+  private async tellUser(conversationId: string) {
+    const conversation = await this.prisma.supportConversation.findUnique({ where: { id: conversationId }, select: { userId: true } });
+    if (conversation?.userId) await this.notifications.send({ userId: conversation.userId, kind: 'SUPPORT_REPLY', group: 'SUPPORT' });
   }
 
   private logReply(conversationId: string, staff: Staff, kind: string, ip?: string) {

@@ -11,7 +11,7 @@ import {
   type PoolUpdate,
   type UpdateOrderPricesInput,
 } from '@masterdriver/shared';
-import { Prisma, type OrderStatus } from '../../generated/prisma';
+import { Prisma, type NotificationKind, type OrderStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
@@ -20,6 +20,7 @@ import { CreditsService } from '../billing/credits.service';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
 import { GroupInvitesService, WECHAT_GROUP_QR_DAYS } from '../groups/group-invites.service';
 import { decodeQrImage } from '../groups/qr-image';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { PrismaService } from '../prisma.service';
 import { contactRevealAt, orderInclude, legsOf, passengerPriceOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
@@ -47,6 +48,7 @@ export class OrdersService {
     @Inject(GroupInvitesService) private readonly groupInvites: GroupInvitesService,
     @Inject(PaymentMethodsService) private readonly paymentMethods: PaymentMethodsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   async create(userId: string, input: CreateOrderInput, now = new Date()) {
@@ -230,6 +232,7 @@ export class OrdersService {
     });
     const result: ClaimResult = updated.count === 1 ? 'WON' : 'LOST';
     await this.prisma.orderClaim.create({ data: { orderId: order.id, driverId: userId, result } });
+    if (result === 'WON') await this.tell(order.id, 'ORDER_CLAIMED', 'dispatcher');
     return this.claimResult(result, code, userId);
   }
 
@@ -239,28 +242,43 @@ export class OrdersService {
    * its legs is cancelled; the other legs are never cancelled automatically.
    */
   async cancel(userId: string, id: string, now = new Date()) {
-    return this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', async (tx) => {
+    const view = await this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', async (tx) => {
       const { journeyId } = await tx.order.findUniqueOrThrow({ where: { id }, select: { journeyId: true } });
       if (!journeyId) return this.credits.refundOrder(tx, id);
       await this.lockJourney(tx, journeyId);
       const live = await tx.order.count({ where: { journeyId, status: { not: 'CANCELLED' } } });
       if (live === 0) await this.credits.refundOrder(tx, journeyId);
     });
+    await this.tell(id, 'ORDER_CANCELLED', 'driver');
+    return view;
+  }
+
+  /** 代為取消 by the platform's staff: the dispatcher's own cancel, and the dispatcher is told. */
+  async cancelForStaff(dispatcherId: string, id: string, now = new Date()) {
+    const view = await this.cancel(dispatcherId, id, now);
+    await this.tell(id, 'ORDER_CANCELLED_BY_STAFF', 'dispatcher');
+    return view;
   }
 
   /** "改派": take the order back from the driver and open it for claiming again. */
   async reopen(userId: string, id: string) {
-    return this.transition(
+    const before = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { claimedById: true } });
+    const view = await this.transition(
       userId,
       id,
       ['ASSIGNED'],
       { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null },
       'dispatcher',
     );
+    await this.tell(id, 'ORDER_REOPENED', 'driver', before?.claimedById);
+    return view;
   }
 
+  /** Either side marks the trip done; the other side is told. */
   async complete(userId: string, id: string, now = new Date()) {
-    return this.transition(userId, id, ['ASSIGNED'], { status: 'COMPLETED', completedAt: now }, 'participant');
+    const view = await this.transition(userId, id, ['ASSIGNED'], { status: 'COMPLETED', completedAt: now }, 'participant');
+    await this.tell(id, 'ORDER_COMPLETED', view.viewer === 'dispatcher' ? 'driver' : 'dispatcher');
+    return view;
   }
 
   /**
@@ -337,6 +355,7 @@ export class OrdersService {
     if (!order) throw this.notFound();
     if (order.status !== 'COMPLETED' || !order.claimedById || order.claimedById === order.dispatcherId) throw this.invalidStatus();
     await this.prisma.order.update({ where: { id }, data: { settledAt: input.settled ? now : null } });
+    if (input.settled) await this.tell(id, 'ORDER_SETTLED', 'driver');
     return this.getForParticipant(userId, id);
   }
 
@@ -426,10 +445,12 @@ export class OrdersService {
     const trip: Prisma.OrderWhereInput = order.journeyId ? { journeyId: order.journeyId } : { id: order.id };
     const live = await this.prisma.order.count({ where: { ...trip, status: { not: 'CANCELLED' } } });
     if (live === 0) throw this.invalidStatus();
-    await this.prisma.order.updateMany({
+    const confirmed = await this.prisma.order.updateMany({
       where: { ...trip, status: { in: ['OPEN', 'ASSIGNED'] }, passengerConfirmedAt: null },
       data: { passengerConfirmedAt: now },
     });
+    // Once for the trip, on the leg whose link the passenger has.
+    if (confirmed.count > 0) await this.tell(order.id, 'ORDER_CONFIRMED', 'dispatcher');
     return this.getForPassenger(confirmCode);
   }
 
@@ -497,6 +518,25 @@ export class OrdersService {
    */
   private async lockJourney(tx: Prisma.TransactionClient, journeyId: string) {
     await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${journeyId} FOR UPDATE`;
+  }
+
+  /**
+   * Tells the dispatcher or the driver of an order what happened to it. A driver is told only
+   * when they are not the dispatcher (這單我自己做 has nobody else to tell). `driverId` names a
+   * driver the order no longer has (改派).
+   */
+  private async tell(orderId: string, kind: NotificationKind, to: 'dispatcher' | 'driver', driverId?: string | null) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, origin: true, destination: true, pickupAt: true, dispatcherId: true, claimedById: true },
+    });
+    if (!order) return;
+    if (to === 'dispatcher') {
+      return this.notifications.send({ userId: order.dispatcherId, kind, group: 'DISPATCHED', order });
+    }
+    const driver = driverId === undefined ? order.claimedById : driverId;
+    if (!driver || driver === order.dispatcherId) return;
+    await this.notifications.send({ userId: driver, kind, group: 'CLAIMED', order });
   }
 
   private async requireProfile(db: Prisma.TransactionClient, userId: string) {

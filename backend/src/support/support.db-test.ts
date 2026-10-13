@@ -130,7 +130,7 @@ test('what is not a picture or video, or is too large, is refused and nothing is
 });
 
 test('without storage, pictures are refused and text still works', async () => {
-  const support = new SupportService(ctx.prisma, new UnavailableMediaStorage(), ctx.audit);
+  const support = new SupportService(ctx.prisma, new UnavailableMediaStorage(), ctx.audit, ctx.notifications);
   const user = asUser(await createDriver(ctx));
   await rejectsWith(support.sendMedia(user, jpeg(), cid()), 'SUPPORT_MEDIA_UNAVAILABLE');
   await support.sendText(user, text('只有文字'));

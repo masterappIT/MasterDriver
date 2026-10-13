@@ -333,12 +333,12 @@ export class AdminDataService {
   /**
    * 代為取消: staff cancel an order for its dispatcher (a complaint, an abandoned or abusive
    * order). It runs as the dispatcher's own cancel does, so the service fee comes back the
-   * same way, and the reason goes in the log.
+   * same way, and the reason goes in the log. The dispatcher and the driver are both notified.
    */
   async cancelOrder(id: string, input: AdminReason, admin: AdminUser, ip?: string) {
     const order = await this.prisma.order.findUnique({ where: { id }, select: { dispatcherId: true } });
     if (!order) throw apiError(HttpStatus.NOT_FOUND, 'ORDER_NOT_FOUND', 'Order not found');
-    await this.orders.cancel(order.dispatcherId, id);
+    await this.orders.cancelForStaff(order.dispatcherId, id);
     await this.audit.log({ adminId: admin.id, action: 'order.cancel', targetType: 'order', targetId: id, detail: { reason: input.reason }, ip });
     return this.getOrder(id, admin, ip);
   }

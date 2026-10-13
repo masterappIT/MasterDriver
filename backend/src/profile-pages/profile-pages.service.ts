@@ -5,6 +5,7 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import { sniffMedia } from '../support/media-file';
@@ -37,6 +38,7 @@ export class ProfilePagesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MEDIA_STORAGE) private readonly storage: MediaStorage,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
   // ------------------------------------------------------------ the owner
@@ -127,7 +129,7 @@ export class ProfilePagesService {
   }
 
   async createBooking(code: string, input: BookingCreate, ip: string | undefined, now = new Date()) {
-    const page = await this.prisma.profilePage.findUnique({ where: { code }, select: { id: true, published: true } });
+    const page = await this.prisma.profilePage.findUnique({ where: { code }, select: { id: true, userId: true, published: true } });
     if (!page?.published) throw this.pageNotFound();
     const pickupAt = new Date(input.pickupAt);
     if (pickupAt <= now) throw apiError(HttpStatus.BAD_REQUEST, 'BOOKING_IN_THE_PAST', 'Choose a time in the future');
@@ -161,8 +163,9 @@ export class ProfilePagesService {
         ip: ip ?? null,
         createdAt: now,
       },
-      select: { code: true },
+      select: { id: true, code: true, origin: true, destination: true, pickupAt: true },
     });
+    await this.notifications.send({ userId: page.userId, kind: 'BOOKING_NEW', group: 'BOOKINGS', booking });
     return { code: booking.code, url: `${this.config.publicBaseUrl}/b/${booking.code}` };
   }
 
@@ -336,6 +339,18 @@ export class ProfilePagesService {
     if (moved.count === 0) {
       if ((await this.prisma.bookingRequest.count({ where: { code } })) === 0) throw this.bookingNotFound();
       throw this.closed();
+    }
+    const booking = await this.prisma.bookingRequest.findUnique({
+      where: { code },
+      select: { id: true, origin: true, destination: true, pickupAt: true, page: { select: { userId: true } } },
+    });
+    if (booking) {
+      await this.notifications.send({
+        userId: booking.page.userId,
+        kind: status === 'ACCEPTED' ? 'BOOKING_ACCEPTED' : 'BOOKING_CANCELLED',
+        group: 'BOOKINGS',
+        booking,
+      });
     }
     return this.passengerBooking(code);
   }

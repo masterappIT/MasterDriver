@@ -27,6 +27,9 @@ model User {
   /// and every session they had stops working; their past orders stay as they are.
   suspendedAt          DateTime?
   suspendedReason      String?
+  /// 通知設定: the kinds of notification (NotificationGroup) this user turned off. Nothing is
+  /// recorded for them. The alert sound and its tone are kept on each phone, not here.
+  notificationsOff     NotificationGroup[] @default([])
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
@@ -45,6 +48,7 @@ model User {
   paymentMethods       PaymentMethod[]
   supportConversation  SupportConversation?
   profilePage          ProfilePage?
+  notifications        Notification[]
 
   @@unique([countryCode, phone])
 }
@@ -993,4 +997,68 @@ model BookingRequest {
 
   @@index([pageId, createdAt])
   @@index([ip, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// 通知: what happened to the user's orders, bookings and 客服 conversation, shown under the
+// bell while the app is open. There is no push to a closed page, SMS or WeChat message.
+// ---------------------------------------------------------------------------
+
+/** The groups a user can turn off in 通知設定. */
+enum NotificationGroup {
+  /// Orders the user put out.
+  DISPATCHED
+  /// Orders the user claimed.
+  CLAIMED
+  /// Booking requests from the user's 名片頁.
+  BOOKINGS
+  /// 客服 replies.
+  SUPPORT
+}
+
+enum NotificationKind {
+  /// To the dispatcher: a driver claimed the order.
+  ORDER_CLAIMED
+  /// To the dispatcher: the passenger confirmed the trip.
+  ORDER_CONFIRMED
+  /// To whichever of the dispatcher and the driver did not mark the trip done.
+  ORDER_COMPLETED
+  /// To the driver: the dispatcher (or the platform's staff for them) cancelled the order.
+  ORDER_CANCELLED
+  /// To the dispatcher: the platform's staff cancelled their order.
+  ORDER_CANCELLED_BY_STAFF
+  /// To the driver: the dispatcher took the order back to give it to someone else (改派).
+  ORDER_REOPENED
+  /// To the driver: the dispatcher marked the account settled.
+  ORDER_SETTLED
+  /// To the driver: the passenger's phone is now shown on the order.
+  CONTACT_REVEALED
+  /// To the 名片頁 owner.
+  BOOKING_NEW
+  BOOKING_ACCEPTED
+  BOOKING_CANCELLED
+  /// 客服 answered; one line until the user reads it, however many messages.
+  SUPPORT_REPLY
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  kind      NotificationKind
+  /// Where tapping it goes. Kept as plain ids: the line stays even if what it points to is gone.
+  orderId   String?
+  bookingId String?
+  /// The trip it is about, copied when sent ("深圳灣口岸 至 香港國際機場") with its pickup time.
+  summary   String           @default("")
+  pickupAt  DateTime?
+  /// Set on notifications that must be sent once only (the passenger's phone shown for one claim).
+  dedupeKey String?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt])
+  @@index([createdAt])
 }

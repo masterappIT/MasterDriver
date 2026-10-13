@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { api, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
+import NotificationBell from '../components/NotificationBell.vue';
 import { type OrderSummary } from '../components/OrderCard.vue';
 import { money, pickup, shortTime } from '../format';
 import { t } from '../i18n';
@@ -112,8 +113,11 @@ onBeforeUnmount(() => clearInterval(clock));
 <template>
   <div class="page home">
     <header class="home__hello">
-      <h1>{{ t(`你好，${session.profile?.name ?? '師傅'}`) }}</h1>
-      <span>{{ today }}</span>
+      <div class="home__greeting">
+        <h1>{{ t(`你好，${session.profile?.name ?? '師傅'}`) }}</h1>
+        <span>{{ today }}</span>
+      </div>
+      <NotificationBell />
     </header>
     <div v-if="error" class="notice error">{{ error }}</div>
 
@@ -212,15 +216,22 @@ onBeforeUnmount(() => clearInterval(clock));
 }
 .home__hello {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
   margin: var(--space-sm) 0 var(--space-lg);
 }
+.home__greeting {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 var(--space-md);
+  min-width: 0;
+}
 .home__hello h1 {
   margin: 0;
 }
-.home__hello span {
+.home__greeting span {
   color: var(--color-text-secondary);
   font-size: var(--font-label);
 }

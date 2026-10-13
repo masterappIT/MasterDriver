@@ -17,6 +17,8 @@ import { DevelopmentLoginService } from '../auth/development-login.service';
 import type { SmsProvider } from '../auth/sms';
 import { loadConfig } from '../config';
 import { EntitlementsService } from '../entitlements/entitlements.service';
+import { NotificationStreams } from '../notifications/notification-streams';
+import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
@@ -30,6 +32,7 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'Notification',
   'BookingRequest',
   'ProfilePhoto',
   'ProfilePage',
@@ -110,7 +113,9 @@ export async function setupDatabase() {
   const audit = new AuditService(prisma);
   const box = new SecretBox('test-encryption-key');
   const mediaStorage = new LocalMediaStorage(mkdtempSync(join(tmpdir(), 'md-support-media-')));
-  const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config);
+  const streams = new NotificationStreams(prisma);
+  const notifications = new NotificationsService(prisma, streams);
+  const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config, notifications);
   return {
     prisma,
     sms,
@@ -127,8 +132,10 @@ export async function setupDatabase() {
     adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders),
     site: new SiteService(prisma),
     mediaStorage,
-    support: new SupportService(prisma, mediaStorage, audit),
-    profilePages: new ProfilePagesService(prisma, mediaStorage, config),
+    support: new SupportService(prisma, mediaStorage, audit, notifications),
+    profilePages: new ProfilePagesService(prisma, mediaStorage, config, notifications),
+    streams,
+    notifications,
     box,
     paymentChannels: new PaymentChannelsService(prisma, box),
     smsChannels: new SmsChannelsService(prisma, box, { ...config, devLogOtp: false }),

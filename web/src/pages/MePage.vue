@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router';
 import { api, session, signOut } from '../api';
 import GroupInvites from '../components/GroupInvites.vue';
 import MenuRow from '../components/MenuRow.vue';
+import NotificationBell from '../components/NotificationBell.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect from '../components/RevealSelect.vue';
 import { money, plateKind } from '../format';
 import { language, setLanguage, t } from '../i18n';
+import { inbox } from '../notifications';
 import { toast } from '../toast';
 import { refreshUnread, unread } from '../unread';
 
@@ -81,7 +83,10 @@ onMounted(async () => {
     <header class="me__hero">
       <div class="me__name">
         <h1>{{ session.profile?.name ? t(session.profile.name) : t('未填司機資料') }}</h1>
-        <RouterLink class="me__edit" to="/app/profile">{{ session.profile ? t('編輯資料') : t('填寫') }}</RouterLink>
+        <span class="me__top-actions">
+          <RouterLink class="me__edit" to="/app/profile">{{ session.profile ? t('編輯資料') : t('填寫') }}</RouterLink>
+          <NotificationBell />
+        </span>
       </div>
       <span class="me__phone">{{ session.user?.countryCode }} {{ session.user?.phone }}</span>
       <div v-if="session.profile" class="me__car">
@@ -141,6 +146,13 @@ onMounted(async () => {
     <GroupInvites />
 
     <section class="card me__group">
+      <MenuRow
+        to="/app/notifications"
+        :title="t('通知')"
+        :detail="inbox.unread ? t(`${inbox.unread} 則未讀`) : t('單被接走、乘客確認、新預約、客服回覆')"
+        :count="inbox.unread"
+      />
+      <MenuRow to="/app/notification-settings" :title="t('通知設定')" :detail="t('提示音、要收哪些通知')" />
       <MenuRow to="/support" :title="t('聯絡客服')" :detail="supportContacts || t('文字、圖片、影片都可以傳')" :count="unread.support" />
       <div class="me__line">
         <span class="me__line-text">{{ t('介面語言') }}</span>
@@ -180,9 +192,18 @@ onMounted(async () => {
   font-size: 24px;
   overflow-wrap: anywhere;
 }
+.me__top-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
 .me__edit {
   flex-shrink: 0;
-  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
   padding: 0 var(--space-lg);
   border: none;
   border-radius: var(--radius-pill);
