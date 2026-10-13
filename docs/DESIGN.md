@@ -2,6 +2,7 @@
 
 MasterDriver 的 UI 沿用 Master Travel 的風格，讓用戶從 MasterDriver 升級到 Master Travel 時感覺是同一個品牌家族。
 
+- **設計參考範圍：**Master Travel 用戶端（乘客端）全部設計稿原型，Figma 檔案「EC Travel（跨境打車）」：https://www.figma.com/design/yqswcQZ9Q3E6BLTm6bFkmo/ 。MasterDriver 的設計語言、元件與版式以此為參考範圍，不超出這套設計語言另創風格。
 - **基準來源：** Master Travel 司機端的設計 token（`driver/lib/core/tokens/driver_tokens.dart`），輔以乘客端的車牌樣式與品牌網站的配色。
 - **只沿用視覺數值，不複製程式：** 本專案在 `web/` 以 CSS 變數重新定義同樣的數值，不 import、不複製 Master Travel 的實作（紅線 4）。
 - **Token 是唯一來源：** 程式中的顏色、間距、字號、圓角、陰影一律從 token 取值，不寫死數值。
