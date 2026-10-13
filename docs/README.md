@@ -6,6 +6,7 @@
 |---|---|
 | [PLAN.md](./PLAN.md) | 完整規劃：定位、紅線、流程、功能範圍、訂閱、升級路徑、技術方向、開發階段、指標與風險 |
 | [DECISIONS.md](./DECISIONS.md) | 已確認的決定與待拍板事項 |
+| [REUSE.md](./REUSE.md) | 沿用 Master Travel 程式碼的規則、分類與來源記錄 |
 | [DESIGN.md](./DESIGN.md) | 視覺設計規範：沿用 Master Travel 風格的顏色、間距、字型與設計流程 |
 
 ## 文件責任分工

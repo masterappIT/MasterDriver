@@ -29,7 +29,7 @@ MasterDriver 跨境師傅幫（簡稱「師傅幫」）是 MasterApp 旗下的�
 | 定位 | 免費接單派單工具 | 自己品牌的完整運營系統 |
 | 倉庫 | `masterappIT/MasterDriver` | `masterappIT/master-travel-project` |
 
-- 不 import、不複製 Master Travel 的實作；只可參考其邏輯後在本專案重寫。
+- 不 import、不連結 Master Travel 的程式；部分通用前端程式可以**複製沿用**，複製後由本專案維護，規則與記錄見 [docs/REUSE.md](docs/REUSE.md)。
 - 不共用資料庫、網域、部署或登入帳號。
 - 升級入口只連到 Master Travel 品牌網站的「預約演示」與微信、WhatsApp 諮詢。
 
@@ -53,6 +53,7 @@ MasterDriver 跨境師傅幫（簡稱「師傅幫」）是 MasterApp 旗下的�
 - [完整規劃](docs/PLAN.md)
 - [決定記錄與待拍板事項](docs/DECISIONS.md)
 - [視覺設計規範](docs/DESIGN.md)
+- [沿用 Master Travel 程式碼的規則](docs/REUSE.md)
 - [文件索引](docs/README.md)
 - [代理與開發規範](AGENTS.md)
 

@@ -9,7 +9,7 @@ This file directs every agent to follow the current rules in `.github/instructio
 MasterDriver 跨境師傅幫是獨立專案，任務是幫 Master Travel 進入市場。修改前先讀 [README.md](README.md) 的設計紅線與邊界，以及 [docs/PLAN.md](docs/PLAN.md)、[docs/DECISIONS.md](docs/DECISIONS.md)。
 
 - 任何變更不得違反 README 的六條設計紅線。
-- 不得修改、import 或複製 Master Travel（`masterappIT/master-travel-project`）的實作；只可參考邏輯後在本專案重寫。
+- 不得修改或 import Master Travel（`masterappIT/master-travel-project`）的程式。沿用其程式碼只能依 `docs/REUSE.md` 複製通用部分，並在該文件記錄來源與 commit；核心業務程式不沿用。
 - 待拍板事項未確認前，不得以猜測方式實作相關功能。
 
 ## 工作流程

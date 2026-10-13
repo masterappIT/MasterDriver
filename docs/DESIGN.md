@@ -2,10 +2,10 @@
 
 MasterDriver 的 UI 沿用 Master Travel 的風格，讓用戶從 MasterDriver 升級到 Master Travel 時感覺是同一個品牌家族。
 
-- **設計參考來源（2026-10-13 決定）：以 Master Travel 現有前端程式碼為準**，即已實作的乘客端（`src/`）與司機端（`driver/`）。參考其視覺數值、版式與元件做法，在本專案以 Vue 3 重寫，不 import、不複製檔案。
+- **設計參考來源（2026-10-13 決定）：以 Master Travel 現有前端程式碼為準**，即已實作的乘客端（`src/`）與司機端（`driver/`）。參考其視覺數值、版式與元件做法，可直接沿用的部分依 `docs/REUSE.md` 複製，其餘在本專案以 Vue 3 重寫；不 import、不連結 Master Travel 的程式。
 - **背景資料：**Master Travel 用戶端與司機端的 Figma 原型「EC Travel（跨境打車）」（https://www.figma.com/design/yqswcQZ9Q3E6BLTm6bFkmo/ ，兩個頁面、約 341 個畫面，含登入、叫車預約、訂單、付款、司機接單、司機收入等）。以程式碼為準；程式碼沒有的畫面，才回到 Figma 查看。
 - **基準來源：** Master Travel 司機端的設計 token（`driver/lib/core/tokens/driver_tokens.dart`），輔以乘客端的車牌樣式與品牌網站的配色。
-- **只沿用視覺數值，不複製程式：** 本專案在 `web/` 以 CSS 變數重新定義同樣的數值，不 import、不複製 Master Travel 的實作（紅線 4）。
+- **沿用方式：** 本專案在 `web/` 以 CSS 變數定義同樣的數值；圖示、圖片與部分通用程式可依 `docs/REUSE.md` 複製沿用，不 import、不連結 Master Travel 的程式（紅線 4）。
 - **Token 是唯一來源：** 程式中的顏色、間距、字號、圓角、陰影一律從 token 取值，不寫死數值。
 - 以下數值為 2026-10-13 從 Master Travel 讀取；若 Master Travel 日後調整，由我們決定是否跟進，不自動同步。
 
