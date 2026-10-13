@@ -273,7 +273,8 @@
 | SourceTag | 來源追蹤：預約或掃碼來自哪個平台 |
 | Feature / Plan / PlanFeature / Subscription / BillingPolicy | 收費控制：功能、方案、訂閱、免費期（Subscription 記錄來源：Stripe／人工／贈送，以及 Stripe 的客戶、訂閱、價格編號） |
 | PaymentEvent | 已處理的付款通知（Stripe webhook、AlipayHK 通知）事件編號，防止重複處理 |
-| EntitlementOverride / Usage / BillingAudit | 收費控制：個別覆蓋、用量、變更紀錄 |
+| EntitlementOverride / Usage | 收費控制：個別覆蓋、用量 |
+| Administrator / AdminSession / AdminAuditLog | 後台帳號、登入、所有後台操作紀錄（含收費控制變更） |
 | AdSlot / AdEvent | 廣告、曝光、點擊 |
 | PaymentChannelConfig | 付款通道設定（Stripe、AlipayHK、人工收款）；金鑰欄位以 KMS 加密 |
 | PlanPrice | 方案在各付款方式、期數、幣種下的價格與 Stripe 價格編號 |

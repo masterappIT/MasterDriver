@@ -311,13 +311,6 @@ model Usage {
   @@id([userId, featureKey, period])
 }
 
-model BillingAudit {
-  id        String   @id @default(cuid())
-  actor     String
-  action    String
-  payload   Json
-  createdAt DateTime @default(now())
-}
 
 // ---------------------------------------------------------------------------
 // Platform service fee (抽水) and prepaid credits. The fee is a fixed amount per
@@ -371,4 +364,64 @@ model CreditEntry {
 
   @@unique([orderId, type])
   @@index([userId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Platform admin. Accounts and sessions are separate from drivers' accounts.
+// ---------------------------------------------------------------------------
+
+enum AdminRole {
+  SUPER_ADMIN
+  OPERATOR
+  SALES
+}
+
+model Administrator {
+  id           String     @id @default(cuid())
+  username     String     @unique
+  displayName  String
+  /// scrypt hash; the password itself is never stored or logged.
+  passwordHash String
+  role         AdminRole
+  disabledAt   DateTime?
+  lastLoginAt  DateTime?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  sessions  AdminSession[]
+  auditLogs AdminAuditLog[]
+}
+
+model AdminSession {
+  id         String    @id @default(cuid())
+  adminId    String
+  tokenHash  String    @unique
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  admin Administrator @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+}
+
+/// Every admin sign-in attempt and every change made in the admin. Details never
+/// contain passwords, keys or verification codes.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  adminId    String?
+  action     String
+  targetType String?
+  targetId   String?
+  detail     Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  admin Administrator? @relation(fields: [adminId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([action, createdAt])
 }

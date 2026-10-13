@@ -26,7 +26,9 @@ export const passengerPriceOf = (order: Pick<OrderWithPeople, 'passengerPriceMin
   money(order.passengerPriceMinor, order.passengerCurrency);
 
 /** The dispatcher's spread; only when both prices are set in the same currency. */
-export function marginOf(order: OrderWithPeople) {
+export function marginOf(
+  order: Pick<OrderWithPeople, 'driverPriceMinor' | 'driverCurrency' | 'passengerPriceMinor' | 'passengerCurrency'>,
+) {
   if (order.driverPriceMinor === null || order.passengerPriceMinor === null) return null;
   if (order.driverCurrency !== order.passengerCurrency) return null;
   return money(order.passengerPriceMinor - order.driverPriceMinor, order.passengerCurrency);

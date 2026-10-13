@@ -2,6 +2,9 @@ import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PrismaClient } from '../../generated/prisma';
+import { AdminAuthService } from '../admin/admin-auth.service';
+import { AdminDataService } from '../admin/admin-data.service';
+import { AuditService } from '../admin/audit.service';
 import { AuthService } from '../auth/auth.service';
 import { CommissionService } from '../billing/commission.service';
 import { CreditsService } from '../billing/credits.service';
@@ -17,6 +20,9 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'AdminAuditLog',
+  'AdminSession',
+  'Administrator',
   'CreditEntry',
   'CreditAccount',
   'CommissionSetting',
@@ -71,6 +77,7 @@ export async function setupDatabase() {
   const entitlements = new EntitlementsService(prisma);
   const commission = new CommissionService(prisma, entitlements);
   const credits = new CreditsService(prisma);
+  const audit = new AuditService(prisma);
   return {
     prisma,
     sms,
@@ -80,6 +87,9 @@ export async function setupDatabase() {
     commission,
     credits,
     orders: new OrdersService(prisma, entitlements, commission, credits, config),
+    audit,
+    adminAuth: new AdminAuthService(prisma, audit),
+    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements),
     async reset() {
       sms.sent = [];
       await prisma.$executeRawUnsafe(`TRUNCATE ${TABLES.map((table) => `"${table}"`).join(', ')} CASCADE`);

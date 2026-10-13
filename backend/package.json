@@ -14,7 +14,8 @@
     "test:db": "tsx --test --test-concurrency=1 \"src/**/*.db-test.ts\"",
     "start": "node dist/main.js",
     "dev-login": "tsx src/cli/development-login.ts",
-    "billing": "tsx src/cli/billing.ts"
+    "billing": "tsx src/cli/billing.ts",
+    "admin": "tsx src/cli/admin.ts"
   },
   "dependencies": {
     "@masterdriver/shared": "0.1.0",
