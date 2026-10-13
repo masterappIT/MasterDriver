@@ -314,6 +314,7 @@
 | PaymentChannel | 付款通道設定（Stripe、AlipayHK，各分測試與正式環境）；金鑰欄位以 AES-256-GCM 加密 |
 | PlanPrice | 方案在各付款方式、期數、幣種下的價格與 Stripe 價格編號 |
 | SmsChannel / SmsMessage | 253 國內、國際簡訊帳號（密碼加密）；發送結果紀錄（不含簡訊內容） |
+| SpugSetting | Spug 推送助手的設定，國內與國際共用（2026-10-14）：啟用、接口網址、應用名稱、加密的範本編碼、測試號碼；各號碼區在 SmsChannel 選用 253 或 Spug |
 | Notification | 站內通知：對象、種類、所關的訂單或預約、路線與上車時間、已讀時間（2026-10-14）；用戶的 notificationsOff 記錄關掉的通知類別 |
 | ObservabilityRequestStat / ObservabilityInstance | 數據流監控（2026-10-14）：每天按地區、端別、瀏覽器累計的請求數、錯誤、慢請求與處理時間（只存推算出的地區，不存 IP，保留 30 天）；每台 API 伺服器每 15 秒寫入的在線狀態與通知連線數 |
 | AppSetting | 一般設定：升級入口連結、客服聯絡、條款、公告 |

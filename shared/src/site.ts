@@ -130,10 +130,15 @@ export const adPositionQuerySchema = z.object({ position: z.enum(AD_POSITIONS) }
 export const SMS_PROVIDERS = ['SMS253', 'SPUG'] as const;
 export type SmsProviderKind = (typeof SMS_PROVIDERS)[number];
 
+const testPhone = z
+  .string()
+  .trim()
+  .max(20)
+  .regex(/^\d*$/, 'DIGITS_ONLY');
+
 /**
- * Admin update of an SMS channel. A blank password keeps the stored one. For 253 the account
- * and password are the account's; for Spug the account is the application name shown in the
- * message and the password is the template code (or the whole URL copied from its console).
+ * Admin update of a route's SMS channel: which provider sends its codes, and the route's own
+ * 253 account. A blank password keeps the stored one. Choosing a provider changes no settings.
  */
 export const smsChannelUpdateSchema = z
   .object({
@@ -147,11 +152,22 @@ export const smsChannelUpdateSchema = z
       .trim()
       .max(300)
       .refine((value) => value === '' || value.includes('{code}'), { message: 'TEMPLATE_NEEDS_CODE' }),
-    testPhone: z
-      .string()
-      .trim()
-      .max(20)
-      .regex(/^\d*$/, 'DIGITS_ONLY'),
+    testPhone,
   })
   .partial();
 export type SmsChannelUpdate = z.infer<typeof smsChannelUpdateSchema>;
+
+/**
+ * Admin update of Spug 推送助手, one setting for both routes. `templateCode` is the template's
+ * code or the whole URL copied from its console; blank keeps the stored one.
+ */
+export const spugSettingUpdateSchema = z
+  .object({
+    enabled: z.boolean(),
+    endpoint: httpsUrl,
+    appName: z.string().trim().max(60),
+    templateCode: z.string().trim().max(200),
+    testPhone,
+  })
+  .partial();
+export type SpugSettingUpdate = z.infer<typeof spugSettingUpdateSchema>;

@@ -29,13 +29,7 @@ const NAV: (NavLink | NavGroup)[] = [
   { to: '/ads', label: '廣告欄位', roles: WRITE },
   { to: '/payment-channels', label: '付款通道', roles: WRITE },
   { to: '/service-fee', label: '平台服務費', roles: WRITE },
-  {
-    label: '登入配置',
-    items: [
-      { to: '/settings/development-login', label: '開發模式登入', roles: WRITE },
-      { to: '/sms-channels', label: '簡訊通道', roles: WRITE },
-    ],
-  },
+  { to: '/settings/login', label: '登入配置', roles: WRITE },
   { to: '/settings/general', label: '一般設定', roles: WRITE },
   { to: '/seo', label: 'SEO', roles: WRITE },
   { to: '/settings/limits', label: '防濫用設定', roles: WRITE },

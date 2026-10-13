@@ -701,17 +701,37 @@ enum SmsProviderKind {
   SPUG
 }
 
+/// One per route (+86, and +852 / +853): which provider sends its sign-in codes, and the
+/// route's own 253 account. Choosing Spug for a route leaves its 253 account as it is.
 model SmsChannel {
   route           SmsRoute  @id
+  /// The provider that sends this route's codes. Each keeps its own settings.
   provider        SmsProviderKind @default(SMS253)
+  /// This route's 253 account is switched on.
   enabled         Boolean   @default(false)
   endpoint        String    @default("")
   account         String    @default("")
   passwordEnc     String?
-  /// 253: the account and its password. Spug: `account` is the application name
-  /// shown in the message and the encrypted secret is the template code.
-  /// Must contain {code}. Not used by Spug, whose text is fixed.
+  /// Must contain {code}.
   template        String    @default("")
+  testPhone       String    @default("")
+  lastTestedAt    DateTime?
+  lastTestStatus  String?
+  lastTestMessage String?
+  updatedAt       DateTime  @updatedAt
+  updatedBy       String?
+}
+
+/// Spug 推送助手, set up once for both routes and kept apart from the 253 accounts. A route
+/// sends through it only when the route chooses Spug and this is switched on.
+model SpugSetting {
+  id              String    @id @default("default")
+  enabled         Boolean   @default(false)
+  endpoint        String    @default("https://push.spug.cc")
+  /// Fills the template's application name, shown in the message.
+  appName         String    @default("")
+  /// The template code: whoever has it can send, so it is kept like a password.
+  templateCodeEnc String?
   testPhone       String    @default("")
   lastTestedAt    DateTime?
   lastTestStatus  String?

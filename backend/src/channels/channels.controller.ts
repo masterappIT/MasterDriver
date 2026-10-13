@@ -1,5 +1,5 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
-import { smsChannelUpdateSchema, type SmsChannelUpdate } from '@masterdriver/shared';
+import { smsChannelUpdateSchema, spugSettingUpdateSchema, type SmsChannelUpdate, type SpugSettingUpdate } from '@masterdriver/shared';
 import type { Request } from 'express';
 import { z } from 'zod';
 import type { AdminUser } from '../admin/admin-auth.service';
@@ -126,6 +126,31 @@ export class ChannelsController {
   async testSend(@Param('route') route: string, @Body(new ZodPipe(testSendSchema)) body: z.infer<typeof testSendSchema>, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
     const result = await this.sms.testSend(routeOf(route), body.phone);
     await this.log(admin, 'channels.sms.testSend', request, route);
+    return result;
+  }
+
+  // ---- Spug 推送助手: one setting for both routes
+
+  @Get('sms-spug')
+  @AdminRoles('SUPER_ADMIN', 'OPERATOR')
+  spug() {
+    return this.sms.spug();
+  }
+
+  @Put('sms-spug')
+  @AdminRoles('SUPER_ADMIN')
+  async saveSpug(@Body(new ZodPipe(spugSettingUpdateSchema)) body: SpugSettingUpdate, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    const result = await this.sms.saveSpug(body, `admin:${admin.username}`);
+    await this.log(admin, 'channels.spug.save', request, 'SPUG', Object.keys(body).filter((key) => body[key as keyof SpugSettingUpdate] !== ''));
+    return result;
+  }
+
+  @Post('sms-spug/test-send')
+  @HttpCode(200)
+  @AdminRoles('SUPER_ADMIN')
+  async testSpug(@Body(new ZodPipe(testSendSchema)) body: z.infer<typeof testSendSchema>, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    const result = await this.sms.testSpug(body.phone);
+    await this.log(admin, 'channels.spug.testSend', request, 'SPUG');
     return result;
   }
 }

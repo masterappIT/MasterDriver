@@ -26,7 +26,7 @@ applyTo: 'backend/src/auth/**,prisma/schema.prisma,shared/src/schemas.ts,admin/*
 ## 目前狀態
 
 - 後端已實作：`backend/src/auth/development-login.service.ts`、`backend/src/auth/auth.service.ts`。
-- 平台後台「登入配置」頁：`admin/src/pages/DevelopmentLoginPage.vue`；管理 API：`GET/POST /api/admin/settings/phone-login-development`（`backend/src/admin/admin.controllers.ts`），讀取限超級管理員與營運，修改限超級管理員；操作紀錄只記「是否更換指定碼」，不記指定碼。
+- 平台後台「登入配置」頁的「開發模式登入」分頁：`admin/src/pages/LoginSettingsPage.vue`（2026-10-14 與簡訊設定合為一頁，照 Master Travel 的排版）；管理 API：`GET/POST /api/admin/settings/phone-login-development`（`backend/src/admin/admin.controllers.ts`），讀取限超級管理員與營運，修改限超級管理員；操作紀錄只記「是否更換指定碼」，不記指定碼。
 - 指令工具仍可用：`npm run dev-login -- --status`、`--on`、`--off`、`--code=123456`。
 
 ## 回歸測試

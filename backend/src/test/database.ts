@@ -48,6 +48,7 @@ const TABLES = [
   'PaymentMethod',
   'SmsMessage',
   'SmsChannel',
+  'SpugSetting',
   'PaymentChannel',
   'AdStat',
   'AdSlot',

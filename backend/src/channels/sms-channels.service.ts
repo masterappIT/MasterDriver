@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
-import type { SmsChannelUpdate } from '@masterdriver/shared';
-import type { SmsChannel, SmsRoute } from '../../generated/prisma';
+import type { SmsChannelUpdate, SpugSettingUpdate } from '@masterdriver/shared';
+import type { SmsChannel, SmsProviderKind, SmsRoute, SpugSetting } from '../../generated/prisma';
 import type { SmsProvider } from '../auth/sms';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomSixDigits } from '../common/crypto';
@@ -31,15 +31,31 @@ function view(row: SmsChannel) {
   };
 }
 
+function spugView(row: SpugSetting) {
+  return {
+    enabled: row.enabled,
+    endpoint: row.endpoint,
+    appName: row.appName,
+    templateConfigured: Boolean(row.templateCodeEnc),
+    testPhone: row.testPhone,
+    lastTestedAt: row.lastTestedAt?.toISOString() ?? null,
+    lastTestStatus: row.lastTestStatus,
+    lastTestMessage: row.lastTestMessage,
+    updatedAt: row.updatedAt.toISOString(),
+    updatedBy: row.updatedBy,
+  };
+}
+
 export function routeOf(value: string): SmsRoute {
   if (value !== 'DOMESTIC' && value !== 'INTERNATIONAL') throw apiError(HttpStatus.NOT_FOUND, 'SMS_ROUTE_NOT_FOUND', 'Unknown SMS route');
   return value;
 }
 
 /**
- * The SMS channels: one for +86 and one for +852 and +853, each sent through 253
- * 雲通訊 (as Master Travel does) or through Spug 推送助手. Also the SMS provider
- * behind sign-in codes; development-mode sign-in never reaches it.
+ * The SMS channels: one route for +86 and one for +852 and +853, each with its own 253 雲通訊
+ * account (as Master Travel does), and one Spug 推送助手 setting for both. Each route chooses
+ * which of the two sends its codes; the settings of the other stay as they are. Also the SMS
+ * provider behind sign-in codes; development-mode sign-in never reaches it.
  */
 @Injectable()
 export class SmsChannelsService implements SmsProvider {
@@ -66,38 +82,82 @@ export class SmsChannelsService implements SmsProvider {
     return (await Promise.all(ROUTES.map((route) => this.channel(route)))).map(view);
   }
 
+  /** The route's provider choice and its 253 account. Choosing a provider changes no settings. */
   async save(route: SmsRoute, input: SmsChannelUpdate, actor: string) {
     const current = await this.channel(route);
-    const { password: typed, ...rest } = input;
-    const provider = input.provider ?? current.provider;
-    // Another provider's account is of no use to this one: switching starts clean and switched off.
-    const switched = provider !== current.provider;
-    const password = typed && provider === 'SPUG' ? spugTemplateCode(typed) : typed;
-    if (password && provider === 'SPUG' && !isSpugTemplateCode(password)) {
-      throw apiError(HttpStatus.BAD_REQUEST, 'SPUG_TEMPLATE_CODE_INVALID', 'Paste the template URL or code from the Spug console');
-    }
-    const defaultEndpoint = provider === 'SPUG' ? SPUG_DEFAULT_ENDPOINT : route === 'DOMESTIC' ? SMS253_DEFAULT_ENDPOINT : '';
-    const endpoint = input.endpoint ?? (switched ? defaultEndpoint : current.endpoint);
-    const account = input.account ?? (switched ? '' : current.account);
-    const hasSecret = Boolean(password || (!switched && current.passwordEnc));
-    const enabled = input.enabled ?? (switched ? false : current.enabled);
-    if (enabled && !(account !== '' && endpoint !== '' && hasSecret)) {
+    const { password, ...rest } = input;
+    const endpoint = input.endpoint ?? current.endpoint;
+    const account = input.account ?? current.account;
+    const enabled = input.enabled ?? current.enabled;
+    if (enabled && !(account !== '' && endpoint !== '' && (password || current.passwordEnc))) {
       throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the account and password before enabling');
     }
     await this.prisma.smsChannel.update({
       where: { route },
       data: {
         ...rest,
-        provider,
         endpoint,
         account,
         enabled,
         updatedBy: actor,
-        ...(switched ? { passwordEnc: null, lastTestedAt: null, lastTestStatus: null, lastTestMessage: null } : {}),
         ...(password ? { passwordEnc: this.box.seal(password), lastTestedAt: null, lastTestStatus: null, lastTestMessage: null } : {}),
       },
     });
     return this.list();
+  }
+
+  // ------------------------------------------------------------- Spug 推送助手
+
+  private spugRow() {
+    return this.prisma.spugSetting.upsert({ where: { id: 'default' }, update: {}, create: { id: 'default', endpoint: SPUG_DEFAULT_ENDPOINT } });
+  }
+
+  async spug() {
+    return spugView(await this.spugRow());
+  }
+
+  async saveSpug(input: SpugSettingUpdate, actor: string) {
+    const current = await this.spugRow();
+    const { templateCode: typed, ...rest } = input;
+    const templateCode = typed ? spugTemplateCode(typed) : '';
+    if (templateCode && !isSpugTemplateCode(templateCode)) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'SPUG_TEMPLATE_CODE_INVALID', 'Paste the template URL or code from the Spug console');
+    }
+    const enabled = input.enabled ?? current.enabled;
+    const appName = input.appName ?? current.appName;
+    const endpoint = input.endpoint ?? current.endpoint;
+    if (enabled && !(appName !== '' && endpoint !== '' && (templateCode || current.templateCodeEnc))) {
+      throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the application name and the template before enabling');
+    }
+    await this.prisma.spugSetting.update({
+      where: { id: 'default' },
+      data: {
+        ...rest,
+        endpoint,
+        appName,
+        enabled,
+        updatedBy: actor,
+        ...(templateCode
+          ? { templateCodeEnc: this.box.seal(templateCode), lastTestedAt: null, lastTestStatus: null, lastTestMessage: null }
+          : {}),
+      },
+    });
+    return this.spug();
+  }
+
+  /** Sends one real SMS through Spug (it costs money); Spug has no check that sends nothing. */
+  async testSpug(phone?: string) {
+    const row = await this.spugRow();
+    const target = (phone ?? row.testPhone).replace(/\D/g, '');
+    if (!target) throw apiError(HttpStatus.BAD_REQUEST, 'SMS_TEST_PHONE_REQUIRED', 'Enter a test phone number');
+    const { route, countryCode, local } = splitTestNumber(target);
+    const result = await this.sendSpug(row, route, countryCode, local, randomSixDigits(), 'TEST');
+    const message = result.status === 'sent' ? '測試簡訊已送出' : `發送失敗：${result.providerError ?? result.providerCode ?? result.status}`;
+    await this.prisma.spugSetting.update({
+      where: { id: 'default' },
+      data: { lastTestedAt: new Date(), lastTestStatus: result.status === 'sent' ? 'success' : 'error', lastTestMessage: message },
+    });
+    return { ...result, spug: await this.spug() };
   }
 
   private credentials(row: SmsChannel) {
@@ -110,12 +170,6 @@ export class SmsChannelsService implements SmsProvider {
     const row = await this.channel(route);
     const credentials = this.credentials(row);
     if (!credentials) throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the account and password first');
-    if (row.provider === 'SPUG') {
-      // Spug has no call that proves the template without sending; say so instead of pretending.
-      const message = 'Spug 沒有不發簡訊的連線檢查，請用「發送測試簡訊」確認';
-      await this.prisma.smsChannel.update({ where: { route }, data: { lastTestedAt: new Date(), lastTestStatus: 'skipped', lastTestMessage: message } });
-      return { status: 'skipped', message, channels: await this.list() };
-    }
     let status = 'error';
     let message: string;
     try {
@@ -134,7 +188,7 @@ export class SmsChannelsService implements SmsProvider {
     return { status, message, channels: await this.list() };
   }
 
-  /** Sends one real SMS (it costs money) with a random code that is not shown anywhere. */
+  /** Sends one real SMS through the route's 253 account (it costs money) with a code shown nowhere. */
   async testSend(route: SmsRoute, phone?: string) {
     const row = await this.channel(route);
     const target = (phone ?? row.testPhone).replace(/\D/g, '');
@@ -142,7 +196,7 @@ export class SmsChannelsService implements SmsProvider {
     const countryCode = route === 'DOMESTIC' ? '+86' : target.startsWith('853') ? '+853' : '+852';
     // The test number is entered with its country code; strip it for the 253 request.
     const local = route === 'DOMESTIC' ? target.replace(/^86(?=1\d{10}$)/, '') : target.replace(/^(852|853)/, '');
-    return this.send(row, countryCode, local, randomSixDigits(), 'TEST');
+    return this.send253(row, countryCode, local, randomSixDigits(), 'TEST');
   }
 
   async messages() {
@@ -150,56 +204,79 @@ export class SmsChannelsService implements SmsProvider {
     return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
   }
 
-  /** SmsProvider: sign-in codes. */
+  /** SmsProvider: sign-in codes, through the provider the number's route chose. */
   async sendVerificationCode(countryCode: string, phone: string, code: string) {
     const row = await this.channel(routeFor(countryCode));
-    if (!row.enabled || !this.credentials(row)) {
+    const spug = row.provider === 'SPUG' ? await this.spugRow() : null;
+    const ready = spug ? spug.enabled && Boolean(spug.appName && spug.templateCodeEnc) : row.enabled && Boolean(this.credentials(row));
+    if (!ready) {
       if (this.config.devLogOtp) {
         this.logger.warn(`[development] verification code for ${countryCode} ${phone}: ${code}`);
         return;
       }
       throw apiError(HttpStatus.SERVICE_UNAVAILABLE, 'SMS_NOT_CONFIGURED', 'SMS is not configured for this number');
     }
-    const result = await this.send(row, countryCode, phone, code, 'OTP');
+    const result = spug ? await this.sendSpug(spug, row.route, countryCode, phone, code, 'OTP') : await this.send253(row, countryCode, phone, code, 'OTP');
     if (result.status !== 'sent') throw apiError(HttpStatus.BAD_GATEWAY, 'SMS_SEND_FAILED', 'The SMS could not be sent; try again');
   }
 
-  private async send(row: SmsChannel, countryCode: string, phone: string, code: string, purpose: 'OTP' | 'TEST') {
+  private async send253(row: SmsChannel, countryCode: string, phone: string, code: string, purpose: 'OTP' | 'TEST') {
     const credentials = this.credentials(row);
     if (!credentials) throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the account and password first');
     const message = (row.template || SMS253_DEFAULT_TEMPLATE).replace('{code}', code);
+    return this.attempt(row.route, 'SMS253', countryCode, phone, purpose, async () => {
+      const result = await call253(this.fetchImpl, row.endpoint, '/msg/send/json', credentials, {
+        phone: destinationFor(row.route, countryCode, phone),
+        msg: message,
+        report: 'false',
+      });
+      return { code: result.code, errorMsg: result.errorMsg, sent: result.code === '0' };
+    });
+  }
+
+  private async sendSpug(row: SpugSetting, route: SmsRoute, countryCode: string, phone: string, code: string, purpose: 'OTP' | 'TEST') {
+    if (!row.appName || !row.templateCodeEnc) {
+      throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the application name and the template first');
+    }
+    const templateCode = this.box.open(row.templateCodeEnc);
+    return this.attempt(route, 'SPUG', countryCode, phone, purpose, async () => {
+      // Spug's own template carries the text; we give the application name, the code and the number.
+      const result = await callSpug(this.fetchImpl, row.endpoint, templateCode, { name: row.appName, code, targets: destinationFor(route, countryCode, phone) });
+      return { code: result.code, errorMsg: result.errorMsg, sent: result.code === '200' };
+    });
+  }
+
+  /** One attempt, recorded by its outcome only: the message text contains the code. */
+  private async attempt(
+    route: SmsRoute,
+    provider: SmsProviderKind,
+    countryCode: string,
+    phone: string,
+    purpose: 'OTP' | 'TEST',
+    call: () => Promise<{ code: string; errorMsg: string | null; sent: boolean }>,
+  ) {
     let status = 'failed';
     let providerCode: string | null = null;
     let providerError: string | null = null;
     try {
-      if (row.provider === 'SPUG') {
-        // Spug's own template carries the text; we give the application name, the code and the number.
-        const result = await callSpug(this.fetchImpl, row.endpoint, credentials.password, {
-          name: credentials.account,
-          code,
-          targets: destinationFor(row.route, countryCode, phone),
-        });
-        providerCode = result.code;
-        providerError = result.errorMsg;
-        status = result.code === '200' ? 'sent' : 'rejected';
-      } else {
-        const result = await call253(this.fetchImpl, row.endpoint, '/msg/send/json', credentials, {
-          phone: destinationFor(row.route, countryCode, phone),
-          msg: message,
-          report: 'false',
-        });
-        providerCode = result.code;
-        providerError = result.errorMsg;
-        status = result.code === '0' ? 'sent' : 'rejected';
-      }
+      const result = await call();
+      providerCode = result.code;
+      providerError = result.errorMsg;
+      status = result.sent ? 'sent' : 'rejected';
     } catch (error) {
       providerError = error instanceof Error ? error.message : String(error);
     }
-    // The message text contains the code, so only the outcome is stored.
-    await this.prisma.smsMessage.create({
-      data: { route: row.route, provider: row.provider, countryCode, phone, purpose, status, providerCode, providerError },
-    });
-    telemetry.domain(`sms.${row.provider.toLowerCase()}`, status === 'sent' ? 'success' : 'error');
+    await this.prisma.smsMessage.create({ data: { route, provider, countryCode, phone, purpose, status, providerCode, providerError } });
+    telemetry.domain(`sms.${provider.toLowerCase()}`, status === 'sent' ? 'success' : 'error');
     return { status, providerCode, providerError };
   }
+}
+
+/** A test number typed with its country code: which route it belongs to, and the local part. */
+function splitTestNumber(digits: string) {
+  if (/^86(1\d{10})$/.test(digits) || /^1\d{10}$/.test(digits)) {
+    return { route: 'DOMESTIC' as const, countryCode: '+86', local: digits.replace(/^86/, '') };
+  }
+  const countryCode = digits.startsWith('853') ? '+853' : '+852';
+  return { route: 'INTERNATIONAL' as const, countryCode, local: digits.replace(/^(852|853)/, '') };
 }
