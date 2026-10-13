@@ -6,6 +6,7 @@
 
 | 日期 | 決定 |
 |---|---|
+| 2026-10-13 | 部署使用 Google Cloud 獨立專案 `master-driver-511510`（Master Driver，已啟用帳單），與 Master Travel 的專案分開；區域預計沿用 Master Travel 的 `asia-east2`（香港）。2026-10-13 查看時尚未啟用 Cloud Run、Cloud SQL、Secret Manager、Artifact Registry，也沒有儲存空間 |
 | 2026-10-13 | 訂閱收費使用 Stripe（只在網頁購買；Stripe Checkout + Customer Portal；webhook 同步；權益仍由本專案判斷；與 Master Travel 收款分開）。內地付款方式與續訂支援待接入前確認 |
 | 2026-10-13 | Master Travel 的部分程式碼可以直接沿用：以複製方式（不 import、不連結），只沿用通用部分，核心業務不沿用，來源記錄在 `docs/REUSE.md` |
 | 2026-10-13 | 設計參考改以 Master Travel 現有前端程式碼為準（乘客端 `src/`、司機端 `driver/`），Figma 原型作背景資料；頁面對照見 `docs/DESIGN.md` |
@@ -43,5 +44,5 @@
 | 6 | 試點對象：3 到 5 個司機或團隊 | 待提供 |
 | 7 | 商標和網域：MasterDriver、跨境師傅幫 | 香港和內地查核；獨立網域加備用網域 |
 | 8 | 空車回程的實際頻率 | 第 0 階段訪談確認 |
-| 9 | 技術選擇：後端 NestJS + Prisma + PostgreSQL；部署沿用 Master Travel 已驗證的雲端環境類型但獨立專案；簡訊服務商 | 同意；簡訊服務商待定 |
+| 9 | 簡訊服務商（+852、+86） | 待定 |
 | 10 | App 和小程序上架後，訂閱在哪裡購買 | 只在網頁購買；App 和小程序內不放購買入口，上架前再確認 Apple、Google、微信的最新規則 |
