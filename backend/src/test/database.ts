@@ -18,6 +18,7 @@ import type { SmsProvider } from '../auth/sms';
 import { loadConfig } from '../config';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { NotificationStreams } from '../notifications/notification-streams';
+import { ObservabilityService } from '../observability/observability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
@@ -32,6 +33,8 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'ObservabilityRequestStat',
+  'ObservabilityInstance',
   'Notification',
   'BookingRequest',
   'ProfilePhoto',
@@ -113,7 +116,8 @@ export async function setupDatabase() {
   const audit = new AuditService(prisma);
   const box = new SecretBox('test-encryption-key');
   const mediaStorage = new LocalMediaStorage(mkdtempSync(join(tmpdir(), 'md-support-media-')));
-  const streams = new NotificationStreams(prisma);
+  const observability = new ObservabilityService(prisma, mediaStorage);
+  const streams = new NotificationStreams(prisma, observability);
   const notifications = new NotificationsService(prisma, streams);
   const profilePages = new ProfilePagesService(prisma, mediaStorage, config, notifications);
   const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config, notifications);
@@ -136,6 +140,7 @@ export async function setupDatabase() {
     mediaStorage,
     support: new SupportService(prisma, mediaStorage, audit, notifications),
     streams,
+    observability,
     notifications,
     box,
     paymentChannels: new PaymentChannelsService(prisma, box),

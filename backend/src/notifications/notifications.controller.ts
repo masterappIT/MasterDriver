@@ -1,11 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Post, Put, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Post, Put, Req, Res, UseGuards } from '@nestjs/common';
 import {
   notificationReadSchema,
   notificationSettingsSchema,
   type NotificationRead,
   type NotificationSettings,
 } from '@masterdriver/shared';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AuthGuard, CurrentUser } from '../auth/auth.guard';
 import type { SessionUser } from '../auth/auth.service';
 import { ZodPipe } from '../common/zod-pipe';
@@ -36,8 +36,8 @@ export class NotificationsController {
    * list. Read with fetch so the sign-in token goes in the header, never in the address.
    */
   @Get('stream')
-  async stream(@CurrentUser() user: SessionUser, @Res() response: Response) {
-    this.streams.open(user.id, response);
+  async stream(@CurrentUser() user: SessionUser, @Req() request: Request, @Res() response: Response) {
+    this.streams.open(user.id, request, response);
     await this.notifications.revealDue(user.id);
   }
 }

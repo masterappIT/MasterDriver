@@ -21,6 +21,7 @@ const WRITE: AdminRole[] = ['SUPER_ADMIN', 'OPERATOR'];
 // Order and grouping follow the Master Travel admin: operations first, then settings, support, accounts and logs.
 const NAV: (NavLink | NavGroup)[] = [
   { to: '/', label: '總覽' },
+  { to: '/observability', label: '數據流監控', roles: WRITE },
   { to: '/users', label: '用戶' },
   { to: '/orders', label: '訂單' },
   { to: '/leads', label: '潛在客戶' },

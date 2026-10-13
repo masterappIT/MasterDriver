@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
+import { ObservabilityService } from '../observability/observability.service';
 import { PrismaService } from '../prisma.service';
 
 /** How often an instance looks for notifications written by another instance. */
@@ -29,9 +30,12 @@ export class NotificationStreams implements OnModuleDestroy {
   private timer: ReturnType<typeof setInterval> | undefined;
   private checking = false;
 
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ObservabilityService) private readonly observability: ObservabilityService,
+  ) {}
 
-  open(userId: string, response: Response) {
+  open(userId: string, request: Request, response: Response) {
     response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
@@ -50,11 +54,14 @@ export class NotificationStreams implements OnModuleDestroy {
     set.add(response);
     this.start();
 
+    // 數據流監控 counts an open stream as a driver with the app open.
+    const disconnect = this.observability.connect(userId, request);
     const ping = setInterval(() => response.write(': ping\n\n'), PING_MS);
     const end = setTimeout(() => response.end(), STREAM_MS);
     response.on('close', () => {
       clearInterval(ping);
       clearTimeout(end);
+      disconnect();
       this.remove(userId, response);
     });
   }

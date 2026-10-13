@@ -21,6 +21,9 @@ async function bootstrap() {
   app.set('trust proxy', true);
   app.disable('x-powered-by');
   app.use(noStoreByDefault);
+  // 數據流監控 counts every request when its answer has gone out.
+  const { ObservabilityService } = await import('./observability/observability.service');
+  app.use(app.get(ObservabilityService).middleware);
   // Room for a QR image upload (at most 400 KB, about 540 KB as base64).
   app.useBodyParser('json', { limit: '1mb' });
   app.setGlobalPrefix('api');

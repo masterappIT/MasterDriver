@@ -1073,3 +1073,46 @@ model Notification {
   @@index([createdAt])
 }
 
+// ---------------------------------------------------------------------------
+// 數據流監控 (platform admin). Each API instance counts requests in memory and adds them here
+// every 15 seconds, and writes its live state, so the page sees every instance. No IP address
+// is stored: only the region it resolved to.
+// ---------------------------------------------------------------------------
+
+/// Completed requests per day in Hong Kong time. Counts of requests, not people.
+model ObservabilityRequestStat {
+  day          DateTime @db.Date
+  /// "中国 · 广东", "香港", "本機／內網", "未知地區".
+  region       String
+  /// MAINLAND, HONG_KONG, MACAU, OTHER, INTERNAL, UNKNOWN.
+  area         String
+  /// driver, passenger, admin, backend.
+  source       String
+  /// WECHAT, WHATSAPP, BROWSER (another browser), NONE (no browser: probes, servers).
+  client       String
+  /// application, or health for the platform's own checks.
+  category     String
+  count        Int      @default(0)
+  /// Answered 500 or above.
+  errors       Int      @default(0)
+  /// Answered 400 to 499.
+  clientErrors Int      @default(0)
+  /// Took 800 ms or more.
+  slow         Int      @default(0)
+  totalMs      BigInt   @default(0)
+  updatedAt    DateTime @updatedAt
+
+  @@id([day, region, area, source, client, category])
+}
+
+/// One API instance's live state: who was active in the last 5 minutes and which notification
+/// streams are open. The page adds up the instances written in the last 45 seconds.
+model ObservabilityInstance {
+  id        String   @id
+  startedAt DateTime
+  updatedAt DateTime
+  presence  Json
+  streams   Int      @default(0)
+
+  @@index([updatedAt])
+}

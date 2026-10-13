@@ -14,6 +14,7 @@ const WRITE: AdminRole[] = ['SUPER_ADMIN', 'OPERATOR'];
 const routes: RouteRecordRaw[] = [
   { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { public: true, title: '登入' } },
   { path: '/', component: () => import('./pages/DashboardPage.vue'), meta: { title: '總覽' } },
+  { path: '/observability', component: () => import('./pages/ObservabilityPage.vue'), meta: { title: '數據流監控', roles: WRITE } },
   { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { title: '用戶' } },
   { path: '/users/:id', component: () => import('./pages/UserDetailPage.vue'), meta: { title: '用戶詳情' } },
   { path: '/orders', component: () => import('./pages/OrdersPage.vue'), meta: { title: '訂單' } },

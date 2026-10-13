@@ -21,6 +21,7 @@ import { EntitlementsService, FEATURES } from '../entitlements/entitlements.serv
 import { GroupInvitesService, WECHAT_GROUP_QR_DAYS } from '../groups/group-invites.service';
 import { decodeQrImage } from '../groups/qr-image';
 import { NotificationsService } from '../notifications/notifications.service';
+import { telemetry } from '../observability/telemetry';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { PrismaService } from '../prisma.service';
 import { contactRevealAt, orderInclude, legsOf, passengerPriceOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
@@ -112,6 +113,7 @@ export class OrdersService {
           if (input.bookingId) await this.takeBooking(tx, userId, input.bookingId, created.id);
           return created;
         });
+        telemetry.domain('order.create');
         // The order was read before the booking was tied to it; say so here rather than read it again.
         return this.withShareTexts(input.bookingId ? { ...order, booking: { id: input.bookingId } } : order);
       } catch (error) {
@@ -232,6 +234,7 @@ export class OrdersService {
     });
     const result: ClaimResult = updated.count === 1 ? 'WON' : 'LOST';
     await this.prisma.orderClaim.create({ data: { orderId: order.id, driverId: userId, result } });
+    telemetry.domain('order.claim', result === 'WON' ? 'success' : 'lost');
     if (result === 'WON') await this.tell(order.id, 'ORDER_CLAIMED', 'dispatcher');
     return this.claimResult(result, code, userId);
   }
@@ -250,6 +253,7 @@ export class OrdersService {
       if (live === 0) await this.credits.refundOrder(tx, journeyId);
     });
     await this.tell(id, 'ORDER_CANCELLED', 'driver');
+    telemetry.domain('order.cancel');
     return view;
   }
 
@@ -278,6 +282,7 @@ export class OrdersService {
   async complete(userId: string, id: string, now = new Date()) {
     const view = await this.transition(userId, id, ['ASSIGNED'], { status: 'COMPLETED', completedAt: now }, 'participant');
     await this.tell(id, 'ORDER_COMPLETED', view.viewer === 'dispatcher' ? 'driver' : 'dispatcher');
+    telemetry.domain('order.complete');
     return view;
   }
 
@@ -450,7 +455,10 @@ export class OrdersService {
       data: { passengerConfirmedAt: now },
     });
     // Once for the trip, on the leg whose link the passenger has.
-    if (confirmed.count > 0) await this.tell(order.id, 'ORDER_CONFIRMED', 'dispatcher');
+    if (confirmed.count > 0) {
+      await this.tell(order.id, 'ORDER_CONFIRMED', 'dispatcher');
+      telemetry.domain('order.confirm');
+    }
     return this.getForPassenger(confirmCode);
   }
 

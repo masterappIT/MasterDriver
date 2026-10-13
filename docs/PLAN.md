@@ -315,6 +315,7 @@
 | PlanPrice | 方案在各付款方式、期數、幣種下的價格與 Stripe 價格編號 |
 | SmsChannel / SmsMessage | 253 國內、國際簡訊帳號（密碼加密）；發送結果紀錄（不含簡訊內容） |
 | Notification | 站內通知：對象、種類、所關的訂單或預約、路線與上車時間、已讀時間（2026-10-14）；用戶的 notificationsOff 記錄關掉的通知類別 |
+| ObservabilityRequestStat / ObservabilityInstance | 數據流監控（2026-10-14）：每天按地區、端別、瀏覽器累計的請求數、錯誤、慢請求與處理時間（只存推算出的地區，不存 IP，保留 30 天）；每台 API 伺服器每 15 秒寫入的在線狀態與通知連線數 |
 | AppSetting | 一般設定：升級入口連結、客服聯絡、條款、公告 |
 | SeoSetting | 各頁類型的標題、描述、關鍵字、分享圖範本；網站驗證碼、統計代碼、robots、sitemap、canonical 網域 |
 

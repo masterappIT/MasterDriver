@@ -97,6 +97,7 @@ jobs:
           image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/api:${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           docker buildx build \
             --platform linux/amd64 \
+            --build-arg DBIP_RELEASE="$(date -u +%Y-%m)" \
             --file backend/Dockerfile \
             --tag "$image" \
             --push \

@@ -6,6 +6,7 @@ import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
 import { NotificationsService } from '../notifications/notifications.service';
+import { telemetry } from '../observability/telemetry';
 import { PrismaService } from '../prisma.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import { sniffMedia } from '../support/media-file';
@@ -200,6 +201,7 @@ export class ProfilePagesService {
       select: { id: true, code: true, origin: true, destination: true, pickupAt: true },
     });
     await this.notifications.send({ userId: page.userId, kind: 'BOOKING_NEW', group: 'BOOKINGS', booking });
+    telemetry.domain('booking.create');
     return { code: booking.code, url: `${this.config.publicBaseUrl}/b/${booking.code}` };
   }
 

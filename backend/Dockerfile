@@ -4,9 +4,13 @@
 
 FROM node:24-bookworm-slim AS build
 
+# 數據流監控's IP-to-region database: DB-IP City Lite (CC BY 4.0, credited on the admin page),
+# one release a month. The workflow passes the month; a release not out yet falls back to the month before.
+ARG DBIP_RELEASE=""
+
 WORKDIR /app
 RUN apt-get update \
-  && apt-get install --yes --no-install-recommends ca-certificates openssl \
+  && apt-get install --yes --no-install-recommends ca-certificates openssl curl gzip \
   && rm -rf /var/lib/apt/lists/*
 
 # Workspace manifests first, so dependencies are cached until one of them changes.
@@ -16,6 +20,22 @@ COPY backend/package.json ./backend/package.json
 COPY admin/package.json ./admin/package.json
 COPY web/package.json ./web/package.json
 RUN npm ci --workspace shared --workspace backend --include-workspace-root
+
+# A release that cannot be downloaded does not stop the deployment: regions then show 未知地區.
+RUN set -u; \
+  mkdir -p backend/geoip; \
+  for release in "${DBIP_RELEASE:-$(date -u +%Y-%m)}" "$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%Y-%m)"; do \
+    if curl --fail --location --retry 3 --silent --show-error "https://download.db-ip.com/free/dbip-city-lite-${release}.mmdb.gz" --output /tmp/dbip.mmdb.gz \
+      && gzip -t /tmp/dbip.mmdb.gz \
+      && gunzip -c /tmp/dbip.mmdb.gz > /tmp/dbip-city-lite.mmdb \
+      && node -e 'require("maxmind").open("/tmp/dbip-city-lite.mmdb").then((r) => { if (r.metadata.databaseType !== "DBIP-City-Lite" || !r.get("8.8.8.8")?.country?.names?.en) process.exit(1); }).catch((e) => { console.error(e); process.exit(1); })'; then \
+      mv /tmp/dbip-city-lite.mmdb backend/geoip/dbip-city-lite.mmdb; \
+      echo "DB-IP City Lite ${release} included"; \
+      break; \
+    fi; \
+    echo "DB-IP City Lite ${release} not available"; \
+  done; \
+  rm -f /tmp/dbip.mmdb.gz /tmp/dbip-city-lite.mmdb
 
 COPY prisma ./prisma
 COPY shared ./shared
@@ -38,6 +58,7 @@ COPY --from=build /app/backend/package.json ./package.json
 COPY --from=build /app/backend/dist ./dist
 COPY --from=build /app/backend/generated ./generated
 COPY --from=build /app/prisma /app/prisma
+COPY --from=build /app/backend/geoip ./geoip
 
 USER node
 EXPOSE 8080

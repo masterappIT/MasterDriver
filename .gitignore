@@ -28,3 +28,6 @@ backend/generated
 *.njsproj
 *.sln
 *.sw?
+
+# DB-IP database for 數據流監控 (downloaded into the API image at build time)
+backend/geoip

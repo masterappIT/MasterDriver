@@ -6,6 +6,7 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { randomSixDigits } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { SECRET_BOX, SecretBox } from '../common/secret-box';
+import { telemetry } from '../observability/telemetry';
 import { PrismaService } from '../prisma.service';
 import { call253, destinationFor, routeFor, SMS253_DEFAULT_ENDPOINT, SMS253_DEFAULT_TEMPLATE, type Fetch } from './sms253';
 import { callSpug, isSpugTemplateCode, SPUG_DEFAULT_ENDPOINT, spugTemplateCode } from './spug';
@@ -198,6 +199,7 @@ export class SmsChannelsService implements SmsProvider {
     await this.prisma.smsMessage.create({
       data: { route: row.route, provider: row.provider, countryCode, phone, purpose, status, providerCode, providerError },
     });
+    telemetry.domain(`sms.${row.provider.toLowerCase()}`, status === 'sent' ? 'success' : 'error');
     return { status, providerCode, providerError };
   }
 }

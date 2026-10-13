@@ -66,7 +66,7 @@ flowchart TB
 |---|---|---|
 | `web` | `web/dist` + nginx | 搶單頁、乘客確認頁、司機端、客服頁；`/api/*` 轉給 API |
 | `admin` | `admin/dist` + nginx | 平台後台；固定不給搜尋引擎收錄、不能被嵌入其他網站 |
-| `api` | `backend/Dockerfile` | 所有驗證、權限、收費與搶單判斷 |
+| `api` | `backend/Dockerfile` | 所有驗證、權限、收費與搶單判斷。映像檔建置時下載當月的 DB-IP City Lite（數據流監控用來由 IP 推算地區，約 130 MB）；下載不到時照常建置，地區顯示「未知地區」 |
 | `migrate`（Job） | 與 `api` 同一個映像檔 | 只執行 `prisma migrate deploy`；API 啟動時不會改資料庫結構 |
 
 瀏覽器只連 `web` 或 `admin` 的網域，API 經同一網域的 `/api` 轉發，所以登入 cookie 是同站的，不需要 CORS。
