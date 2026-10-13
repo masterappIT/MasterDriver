@@ -42,6 +42,10 @@ export const limitSettingUpdateSchema = z
     supportGuestConversationsPerIpPerDay: z.number().int().min(0).max(100),
     bookingPerIpPerDay: z.number().int().min(0).max(100),
     bookingPerPagePerDay: z.number().int().min(0).max(1000),
+    /** Never zero: nobody could sign in. */
+    otpResendSeconds: z.number().int().min(30).max(600),
+    otpPerPhonePerHour: z.number().int().min(1).max(20),
+    otpPerIpPerHour: z.number().int().min(1).max(500),
   })
   .partial()
   .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });

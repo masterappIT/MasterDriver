@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { defaultLocaleFor, type OtpRequest, type OtpVerify } from '@masterdriver/shared';
 import { APP_CONFIG, type AppConfig } from '../config';
+import { readLimits } from '../common/limits';
 import { apiError } from '../common/errors';
 import { hmac, randomSixDigits, randomToken, safeEqualHex, sha256 } from '../common/crypto';
 import { PrismaService } from '../prisma.service';
@@ -8,9 +9,6 @@ import { DevelopmentLoginService, developmentCodeHash } from './development-logi
 import { SMS_PROVIDER, type SmsProvider } from './sms';
 
 const CODE_TTL_MS = 10 * 60 * 1000;
-const RESEND_AFTER_SECONDS = 60;
-const MAX_CODES_PER_PHONE_PER_HOUR = 5;
-const MAX_CODES_PER_IP_PER_HOUR = 20;
 const MAX_ATTEMPTS = 5;
 export const SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 const LAST_SEEN_REFRESH_MS = 60 * 60 * 1000;
@@ -36,8 +34,13 @@ export class AuthService {
     return hmac(this.config.otpPepper, `${countryCode}:${phone}:${code}`);
   }
 
+  /**
+   * How often a code may be asked for is set in 防濫用設定 and applies in development mode too:
+   * it guards the SMS bill and the sign-in itself.
+   */
   async requestCode(input: OtpRequest, ip: string | undefined, now = new Date()) {
     const { countryCode, phone } = input;
+    const limits = await readLimits(this.prisma);
     const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
     const latest = await this.prisma.verificationCode.findFirst({
       where: { countryCode, phone },
@@ -45,7 +48,7 @@ export class AuthService {
       select: { createdAt: true },
     });
     if (latest) {
-      const waitSeconds = Math.ceil((latest.createdAt.getTime() + RESEND_AFTER_SECONDS * 1000 - now.getTime()) / 1000);
+      const waitSeconds = Math.ceil((latest.createdAt.getTime() + limits.otpResendSeconds * 1000 - now.getTime()) / 1000);
       if (waitSeconds > 0) {
         throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'OTP_TOO_FREQUENT', 'Wait before requesting another code', {
           retryAfterSeconds: waitSeconds,
@@ -56,7 +59,7 @@ export class AuthService {
       this.prisma.verificationCode.count({ where: { countryCode, phone, createdAt: { gt: hourAgo } } }),
       ip ? this.prisma.verificationCode.count({ where: { ip, createdAt: { gt: hourAgo } } }) : Promise.resolve(0),
     ]);
-    if (phoneCount >= MAX_CODES_PER_PHONE_PER_HOUR || ipCount >= MAX_CODES_PER_IP_PER_HOUR) {
+    if (phoneCount >= limits.otpPerPhonePerHour || ipCount >= limits.otpPerIpPerHour) {
       throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'OTP_LIMIT_REACHED', 'Too many codes requested');
     }
 
@@ -69,7 +72,7 @@ export class AuthService {
       await this.prisma.verificationCode.create({
         data: { countryCode, phone, ip, mode: 'DEVELOPMENT', codeHash: development.codeHash, expiresAt },
       });
-      return { resendAfterSeconds: RESEND_AFTER_SECONDS };
+      return { resendAfterSeconds: limits.otpResendSeconds };
     }
 
     const code = randomSixDigits();
@@ -77,7 +80,7 @@ export class AuthService {
       data: { countryCode, phone, ip, mode: 'SMS', codeHash: this.codeHash(countryCode, phone, code), expiresAt },
     });
     await this.sms.sendVerificationCode(countryCode, phone, code);
-    return { resendAfterSeconds: RESEND_AFTER_SECONDS };
+    return { resendAfterSeconds: limits.otpResendSeconds };
   }
 
   async verifyCode(input: OtpVerify, userAgent: string | undefined, now = new Date()) {

@@ -95,6 +95,13 @@ export class GroupInvitesService {
     return { mime: invite.qrMime, bytes: Buffer.from(invite.qrImage) };
   }
 
+  /** For staff looking into a complaint: the QR image of one of the user's groups, expired or not. */
+  async staffQr(ownerId: string, id: string) {
+    const invite = await this.prisma.groupInvite.findFirst({ where: { id, ownerId }, select: { qrImage: true, qrMime: true } });
+    if (!invite?.qrImage || !invite.qrMime) return null;
+    return { mime: invite.qrMime, bytes: Buffer.from(invite.qrImage) };
+  }
+
   /** What a claim page offers: groups the dispatcher chose to show that still work. */
   async forClaimPage(ownerId: string, now = new Date()) {
     const invites = await this.prisma.groupInvite.findMany({

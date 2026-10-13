@@ -53,6 +53,9 @@ export class ProfilePagesService {
     if (input.published && !page.user.profile) {
       throw apiError(HttpStatus.CONFLICT, 'PROFILE_REQUIRED', 'Fill in your driver details before publishing the page');
     }
+    if (input.published && page.blockedAt) {
+      throw apiError(HttpStatus.CONFLICT, 'PROFILE_PAGE_BLOCKED', 'The platform took this page down; contact support');
+    }
     return this.ownerView(await this.prisma.profilePage.update({ where: { id: page.id }, data: input, include: pageInclude }));
   }
 
@@ -113,11 +116,42 @@ export class ProfilePagesService {
       .map((leg) => leg.claimedById)
       .filter((id): id is string => id !== null);
     const photo = drivers.length
-      ? await this.prisma.profilePhoto.findFirst({ where: { id: photoId, page: { userId: { in: drivers } } } })
+      ? await this.prisma.profilePhoto.findFirst({ where: { id: photoId, page: { userId: { in: drivers }, blockedAt: null } } })
       : null;
     const bytes = photo ? await this.storage.read(photo.storageKey) : null;
     if (!photo || !bytes) throw apiError(HttpStatus.NOT_FOUND, 'PHOTO_NOT_FOUND', 'Photo not found');
     return { mime: photo.mimeType, bytes };
+  }
+
+  // ------------------------------------------------- the platform's staff
+
+  /**
+   * 下架 after a complaint: the page stops being public and its owner cannot publish it again
+   * until staff restore it. Restoring leaves it unpublished; the owner publishes it themselves.
+   */
+  async staffBlock(userId: string, reason: string, now = new Date()) {
+    const blocked = await this.prisma.profilePage.updateMany({
+      where: { userId, blockedAt: null },
+      data: { published: false, blockedAt: now, blockedReason: reason },
+    });
+    if (blocked.count === 0) throw apiError(HttpStatus.CONFLICT, 'PROFILE_PAGE_NOT_BLOCKABLE', 'No page, or it is already taken down');
+  }
+
+  async staffRestore(userId: string) {
+    const restored = await this.prisma.profilePage.updateMany({ where: { userId, blockedAt: { not: null } }, data: { blockedAt: null, blockedReason: null } });
+    if (restored.count === 0) throw apiError(HttpStatus.CONFLICT, 'PROFILE_PAGE_NOT_BLOCKED', 'The page is not taken down');
+  }
+
+  /** Any photo of the user's page, whether published or not, for staff looking into a complaint. */
+  async staffPhoto(userId: string, photoId: string) {
+    const photo = await this.prisma.profilePhoto.findFirst({ where: { id: photoId, page: { userId } } });
+    const bytes = photo ? await this.storage.read(photo.storageKey) : null;
+    if (!photo || !bytes) throw apiError(HttpStatus.NOT_FOUND, 'PHOTO_NOT_FOUND', 'Photo not found');
+    return { mime: photo.mimeType, bytes };
+  }
+
+  async staffRemovePhoto(userId: string, photoId: string) {
+    await this.removePhoto(userId, photoId);
   }
 
   // ----------------------------------------------------------- the public
@@ -278,6 +312,8 @@ export class ProfilePagesService {
     return {
       ...(await this.view(page)),
       published: page.published,
+      /** 下架 by the platform after a complaint, with the reason the owner is shown. */
+      blocked: page.blockedAt ? { at: page.blockedAt.toISOString(), reason: page.blockedReason ?? '' } : null,
       hasDriverProfile: Boolean(page.user.profile),
       url: `${this.config.publicBaseUrl}/p/${page.code}`,
       photoLimit: PROFILE_PHOTO_MAX,

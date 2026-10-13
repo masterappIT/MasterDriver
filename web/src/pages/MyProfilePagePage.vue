@@ -12,6 +12,8 @@ interface MyPage {
   code: string;
   url: string;
   published: boolean;
+  /** 下架 by the platform after a complaint; it cannot be published until restored. */
+  blocked: { at: string; reason: string } | null;
   hasDriverProfile: boolean;
   intro: string;
   routes: string[];
@@ -128,8 +130,12 @@ onMounted(async () => {
     <template v-if="page">
       <section class="card">
         <div class="my-page__head">
-          <span class="my-page__state" :class="{ 'my-page__state--on': page.published }">{{ page.published ? t('已公開') : t('未公開') }}</span>
+          <span class="my-page__state" :class="{ 'my-page__state--on': page.published }">{{ page.blocked ? t('已被下架') : page.published ? t('已公開') : t('未公開') }}</span>
           <span class="hint">{{ page.published ? t('有連結的人都打得開') : t('現在只有你看得到') }}</span>
+        </div>
+        <div v-if="page.blocked" class="notice error">
+          {{ t(`平台收到投訴後下架了你的名片頁，原因：${page.blocked.reason}。修改內容後請聯絡客服恢復，恢復前不能公開。`) }}
+          <RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink>
         </div>
         <p class="my-page__url">{{ page.url }}</p>
         <div class="my-page__actions">
@@ -210,7 +216,7 @@ onMounted(async () => {
         <p class="hint">{{ t('請只放自己車輛的照片，不要拍到乘客或他人的車牌。你接單後，乘客在確認頁也會看到這些照片，方便認車，不用公開名片頁。') }}</p>
       </section>
 
-      <button v-if="!page.published" class="button block large" type="button" :disabled="busy || !page.hasDriverProfile" @click="save(true)">
+      <button v-if="!page.published" class="button block large" type="button" :disabled="busy || !page.hasDriverProfile || Boolean(page.blocked)" @click="save(true)">
         {{ t('儲存並公開') }}
       </button>
       <button v-else class="my-page__unpublish" type="button" :disabled="busy" @click="save(false)">{{ t('改為不公開') }}</button>

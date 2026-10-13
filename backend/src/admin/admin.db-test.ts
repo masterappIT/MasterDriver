@@ -168,3 +168,57 @@ test('sales staff see orders but not passengers', async () => {
   assert.equal((await ctx.adminData.getOrder(order.id, boss)).passenger?.contact, sampleOrder.passengerContact);
   assert.equal(await ctx.prisma.adminAuditLog.count({ where: { action: 'order.viewPassenger' } }), 1);
 });
+
+test('a complaint about a 名片頁: found by its link, taken down until restored, a photo and a group removed', async () => {
+  const boss = await superAdmin();
+  const owner = await createDriver(ctx, '陳師傅');
+  const page = await ctx.profilePages.update(owner, { published: true, intro: '十年經驗', whatsapp: '+852 6000 0000' });
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(64, 1)]);
+  const withPhoto = await ctx.profilePages.addPhoto(owner, jpeg);
+  const photoId = withPhoto.photos[0].id;
+  const png = `data:image/png;base64,${Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]).toString('base64')}`;
+  const [group] = await ctx.groupInvites.create(owner, { platform: 'WECHAT', name: '', qrImage: png, showOnClaimPage: true });
+
+  const found = await ctx.adminData.listUsers({ q: `https://md.test/p/${page.code}?from=wechat`, page: 1 });
+  assert.deepEqual(found.items.map((item) => item.id), [owner], 'the page link finds its owner');
+
+  const detail = await ctx.adminData.getUser(owner);
+  assert.equal(detail.profilePage?.intro, '十年經驗');
+  assert.deepEqual(detail.profilePage?.photoIds, [photoId]);
+  assert.equal(detail.groupInvites[0].hasQr, true);
+  assert.equal((await ctx.adminData.pagePhoto(owner, photoId)).mime, 'image/jpeg');
+  assert.ok(await ctx.adminData.groupQr(owner, group.id));
+
+  const blocked = await ctx.adminData.blockPage(owner, { reason: '照片含廣告' }, boss);
+  assert.equal(blocked.profilePage?.published, false);
+  assert.equal(blocked.profilePage?.blockedReason, '照片含廣告');
+  await rejectsWith(ctx.profilePages.publicPage(page.code), 'PROFILE_PAGE_NOT_FOUND');
+  await rejectsWith(ctx.profilePages.update(owner, { published: true }), 'PROFILE_PAGE_BLOCKED');
+  assert.equal((await ctx.profilePages.mine(owner)).blocked?.reason, '照片含廣告', 'the owner is told why');
+  await rejectsWith(ctx.adminData.blockPage(owner, { reason: '再一次' }, boss), 'PROFILE_PAGE_NOT_BLOCKABLE');
+
+  const restored = await ctx.adminData.restorePage(owner, boss);
+  assert.equal(restored.profilePage?.blockedAt, null);
+  assert.equal(restored.profilePage?.published, false, 'the owner publishes it again themselves');
+  await ctx.profilePages.update(owner, { published: true });
+
+  const withoutPhoto = await ctx.adminData.removePagePhoto(owner, photoId, { reason: '不雅照片' }, boss);
+  assert.deepEqual(withoutPhoto.profilePage?.photoIds, []);
+  const withoutGroup = await ctx.adminData.removeGroupInvite(owner, group.id, { reason: '廣告群' }, boss);
+  assert.deepEqual(withoutGroup.groupInvites, []);
+  await rejectsWith(ctx.adminData.removeGroupInvite(owner, group.id, { reason: '廣告群' }, boss), 'GROUP_INVITE_NOT_FOUND');
+
+  const log = await ctx.prisma.adminAuditLog.findMany({ where: { targetId: owner }, orderBy: { createdAt: 'asc' } });
+  assert.deepEqual(log.map((entry) => entry.action), ['profile-page.block', 'profile-page.restore', 'profile-page.photo.remove', 'group-invite.remove']);
+});
+
+test("the user detail shows what the user turned off and their latest notifications", async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  await ctx.notifications.saveSettings(dispatcher, { off: ['BOOKINGS'] });
+  const order = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(order.code, driver);
+  const { notifications } = await ctx.adminData.getUser(dispatcher);
+  assert.deepEqual(notifications.off, ['BOOKINGS']);
+  assert.deepEqual(notifications.recent.map((item) => [item.kind, item.read]), [['ORDER_CLAIMED', false]]);
+});

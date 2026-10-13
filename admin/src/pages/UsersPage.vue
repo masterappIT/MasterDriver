@@ -45,7 +45,7 @@ onMounted(load);
   <h1>用戶</h1>
   <div class="card">
     <form class="row" @submit.prevent="search">
-      <input v-model="q" class="input" placeholder="手機號碼或姓名" />
+      <input v-model="q" class="input" placeholder="手機號碼、姓名或名片頁連結" />
       <button class="button" type="submit">搜尋</button>
     </form>
   </div>

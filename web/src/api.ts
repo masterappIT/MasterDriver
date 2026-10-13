@@ -81,6 +81,7 @@ const ERROR_TEXT: Record<string, string> = {
   JOURNEY_LEG_LIMIT: '一個行程最多 4 段',
   LEG_BEFORE_PREVIOUS: '這一段的時間不能早於上一段',
   PROFILE_PAGE_NOT_FOUND: '找不到這個名片頁，或司機尚未公開',
+  PROFILE_PAGE_BLOCKED: '你的名片頁已被平台下架，請聯絡客服',
   BOOKING_NOT_FOUND: '找不到這個預約',
   BOOKING_NOT_OPEN: '這個預約已經結束，不能再更改',
   BOOKING_IN_THE_PAST: '請選擇將來的時間',

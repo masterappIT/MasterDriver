@@ -547,6 +547,12 @@ model LimitSetting {
   bookingPerIpPerDay                   Int      @default(5)
   /// 名片頁: booking requests one page may receive in 24 hours.
   bookingPerPagePerDay                 Int      @default(30)
+  /// 簡訊驗證碼: seconds before the same number may ask for another code.
+  otpResendSeconds                     Int      @default(60)
+  /// 簡訊驗證碼: codes one number may ask for in an hour.
+  otpPerPhonePerHour                   Int      @default(5)
+  /// 簡訊驗證碼: codes one address may ask for in an hour.
+  otpPerIpPerHour                      Int      @default(20)
   updatedAt                            DateTime @updatedAt
   updatedBy                            String?
 }
@@ -925,6 +931,10 @@ model ProfilePage {
   regions   String[] @default([])
   wechatId  String   @default("")
   whatsapp  String   @default("")
+  /// 下架: the platform's staff took the page down after a complaint. The owner cannot publish
+  /// it again until staff restore it, and its photos are not shown to passengers either.
+  blockedAt     DateTime?
+  blockedReason String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1062,3 +1072,4 @@ model Notification {
   @@index([userId, createdAt])
   @@index([createdAt])
 }
+

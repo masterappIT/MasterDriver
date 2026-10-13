@@ -83,3 +83,17 @@ test('development mode keeps the request rate limits', async () => {
   await ctx.auth.requestCode(phone, undefined);
   await rejectsWith(ctx.auth.requestCode(phone, undefined), 'OTP_TOO_FREQUENT');
 });
+
+test('how often a code may be asked for follows 防濫用設定, in development mode too', async () => {
+  await ctx.site.updateLimits({ otpResendSeconds: 120, otpPerPhonePerHour: 2 }, 'test');
+  const first = await ctx.auth.requestCode(phone, '1.1.1.1');
+  assert.equal(first.resendAfterSeconds, 120);
+  await rejectsWith(ctx.auth.requestCode(phone, '1.1.1.1', later(61)), 'OTP_TOO_FREQUENT');
+  await ctx.developmentLogin.update({ enabled: true, code: '246810' }, 'test');
+  await ctx.auth.requestCode(phone, '1.1.1.1', later(121));
+  await rejectsWith(ctx.auth.requestCode(phone, '1.1.1.1', later(242)), 'OTP_LIMIT_REACHED');
+
+  await ctx.site.updateLimits({ otpPerIpPerHour: 1 }, 'test');
+  await rejectsWith(ctx.auth.requestCode({ countryCode: '+852', phone: '91234568' }, '1.1.1.1', later(300)), 'OTP_LIMIT_REACHED');
+  await ctx.auth.requestCode({ countryCode: '+852', phone: '91234568' }, '2.2.2.2', later(300));
+});

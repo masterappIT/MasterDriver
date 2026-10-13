@@ -44,6 +44,18 @@ import { AuditService } from './audit.service';
 
 const WRITE_ROLES = ['SUPER_ADMIN', 'OPERATOR'] as const;
 
+/** A user's picture shown to staff: never cached by anything shared, never run as a page. */
+function sendPrivateImage(response: Response, image: { mime: string; bytes: Buffer }) {
+  response
+    .set({
+      'content-type': image.mime,
+      'cache-control': 'private, no-store',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': "default-src 'none'; sandbox",
+    })
+    .send(image.bytes);
+}
+
 @Controller('admin/auth')
 export class AdminAuthController {
   constructor(
@@ -170,6 +182,60 @@ export class AdminController {
   @AdminRoles(...WRITE_ROLES)
   restoreUser(@Param('id') id: string, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
     return this.data.restoreUser(id, admin, request.ip);
+  }
+
+  // ---- complaints about a user's 名片頁 and 派單群
+
+  @Post('users/:id/page/block')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  blockPage(@Param('id') id: string, @Body(new ZodPipe(adminReasonSchema)) body: AdminReason, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    return this.data.blockPage(id, body, admin, request.ip);
+  }
+
+  @Post('users/:id/page/restore')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  restorePage(@Param('id') id: string, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    return this.data.restorePage(id, admin, request.ip);
+  }
+
+  @Get('users/:id/page/photos/:photoId')
+  async pagePhoto(@Param('id') id: string, @Param('photoId') photoId: string, @Res() response: Response) {
+    sendPrivateImage(response, await this.data.pagePhoto(id, photoId));
+  }
+
+  @Post('users/:id/page/photos/:photoId/remove')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  removePagePhoto(
+    @Param('id') id: string,
+    @Param('photoId') photoId: string,
+    @Body(new ZodPipe(adminReasonSchema)) body: AdminReason,
+    @CurrentAdmin() admin: AdminUser,
+    @Req() request: Request,
+  ) {
+    return this.data.removePagePhoto(id, photoId, body, admin, request.ip);
+  }
+
+  @Get('users/:id/group-invites/:inviteId/qr')
+  async groupQr(@Param('id') id: string, @Param('inviteId') inviteId: string, @Res() response: Response) {
+    const image = await this.data.groupQr(id, inviteId);
+    if (!image) throw apiError(HttpStatus.NOT_FOUND, 'GROUP_INVITE_NOT_FOUND', 'Group not found');
+    sendPrivateImage(response, image);
+  }
+
+  @Post('users/:id/group-invites/:inviteId/remove')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  removeGroupInvite(
+    @Param('id') id: string,
+    @Param('inviteId') inviteId: string,
+    @Body(new ZodPipe(adminReasonSchema)) body: AdminReason,
+    @CurrentAdmin() admin: AdminUser,
+    @Req() request: Request,
+  ) {
+    return this.data.removeGroupInvite(id, inviteId, body, admin, request.ip);
   }
 
   @Put('users/:id/profile')

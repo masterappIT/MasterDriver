@@ -17,7 +17,9 @@ import { CreditsService } from '../billing/credits.service';
 import { apiError } from '../common/errors';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
 import { driverPriceOf, isSelfDriven, passengerPriceOf, marginOf, orderInclude } from '../orders/order-view';
+import { GroupInvitesService } from '../groups/group-invites.service';
 import { OrdersService } from '../orders/orders.service';
+import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { PrismaService } from '../prisma.service';
 import type { AdminUser } from './admin-auth.service';
 import { AuditService, PAGE_SIZE } from './audit.service';
@@ -44,6 +46,8 @@ export class AdminDataService {
     @Inject(CommissionService) private readonly commission: CommissionService,
     @Inject(EntitlementsService) private readonly entitlements: EntitlementsService,
     @Inject(OrdersService) private readonly orders: OrdersService,
+    @Inject(ProfilePagesService) private readonly profilePages: ProfilePagesService,
+    @Inject(GroupInvitesService) private readonly groupInvites: GroupInvitesService,
   ) {}
 
   // -------------------------------------------------------------- dashboard
@@ -103,8 +107,16 @@ export class AdminDataService {
   // ------------------------------------------------------------------ users
 
   async listUsers(query: PageQuery) {
+    // A complaint usually comes with the 名片頁 link (…/p/{code}): it finds the page's owner too.
+    const pageCode = query.q?.match(/\/p\/([A-Za-z0-9]{8})\b/)?.[1] ?? query.q;
     const where: Prisma.UserWhereInput = query.q
-      ? { OR: [{ phone: { contains: query.q } }, { profile: { name: { contains: query.q, mode: 'insensitive' } } }] }
+      ? {
+          OR: [
+            { phone: { contains: query.q } },
+            { profile: { name: { contains: query.q, mode: 'insensitive' } } },
+            { profilePage: { code: pageCode } },
+          ],
+        }
       : {};
     const [total, users] = await Promise.all([
       this.prisma.user.count({ where }),
@@ -149,7 +161,11 @@ export class AdminDataService {
         subscriptions: { orderBy: { createdAt: 'desc' } },
         entitlementOverrides: { orderBy: { createdAt: 'desc' } },
         usages: { orderBy: { period: 'desc' }, take: 12 },
-        profilePage: { select: { code: true, published: true, wechatId: true, whatsapp: true, _count: { select: { photos: true, bookings: true } } } },
+        profilePage: {
+          include: { photos: { orderBy: { createdAt: 'asc' }, select: { id: true } }, _count: { select: { bookings: true } } },
+        },
+        groupInvites: { orderBy: { createdAt: 'asc' } },
+        notifications: { orderBy: { createdAt: 'desc' }, take: 20 },
         _count: { select: { dispatchedOrders: true, claimedOrders: true, paymentMethods: true } },
       },
     });
@@ -171,14 +187,45 @@ export class AdminDataService {
       suspendedReason: user.suspendedReason,
       profile: user.profile,
       counts: { dispatched: user._count.dispatchedOrders, claimed: user._count.claimedOrders },
-      /** 名片頁, as the driver set it up; null when they never opened the editor. */
+      /**
+       * 名片頁 as the driver set it up, with what it says, for looking into a complaint; null when
+       * they never opened the editor. Photos are read through the admin API.
+       */
       profilePage: user.profilePage && {
         code: user.profilePage.code,
         published: user.profilePage.published,
+        blockedAt: iso(user.profilePage.blockedAt),
+        blockedReason: user.profilePage.blockedReason,
+        intro: user.profilePage.intro,
+        routes: user.profilePage.routes,
+        languages: user.profilePage.languages,
+        regions: user.profilePage.regions,
         wechatId: user.profilePage.wechatId || null,
         whatsapp: user.profilePage.whatsapp || null,
-        photos: user.profilePage._count.photos,
+        photos: user.profilePage.photos.length,
+        photoIds: user.profilePage.photos.map((photo) => photo.id),
         bookings: user.profilePage._count.bookings,
+      },
+      /** 派單群 the driver shows on their claim pages: WhatsApp links as they are, WeChat QR images through the admin API. */
+      groupInvites: user.groupInvites.map((invite) => ({
+        id: invite.id,
+        platform: invite.platform,
+        name: invite.name,
+        inviteUrl: invite.inviteUrl,
+        hasQr: invite.qrImage !== null,
+        expiresAt: iso(invite.expiresAt),
+        showOnClaimPage: invite.showOnClaimPage,
+        createdAt: invite.createdAt.toISOString(),
+      })),
+      /** 通知: what the user turned off, and their latest lines, for 「我沒收到通知」. */
+      notifications: {
+        off: user.notificationsOff,
+        recent: user.notifications.map((item) => ({
+          kind: item.kind,
+          summary: item.summary,
+          read: item.readAt !== null,
+          createdAt: item.createdAt.toISOString(),
+        })),
       },
       /** 收款方式: how many the user has set up; the accounts and QR codes themselves stay with the user. */
       paymentMethods: user._count.paymentMethods,
@@ -294,6 +341,59 @@ export class AdminDataService {
     if (restored.count === 0) throw apiError(HttpStatus.CONFLICT, 'USER_NOT_SUSPENDED', 'The account is not suspended');
     await this.audit.log({ adminId: admin.id, action: 'user.restore', targetType: 'user', targetId: id, ip });
     return this.getUser(id, now);
+  }
+
+  // ------------------------------------------------- complaints about content
+
+  /** 下架 a 名片頁 after a complaint; see ProfilePagesService.staffBlock. */
+  async blockPage(userId: string, input: AdminReason, admin: AdminUser, ip?: string, now = new Date()) {
+    await this.ensureUser(userId);
+    await this.profilePages.staffBlock(userId, input.reason, now);
+    await this.audit.log({ adminId: admin.id, action: 'profile-page.block', targetType: 'user', targetId: userId, detail: { reason: input.reason }, ip });
+    return this.getUser(userId, now);
+  }
+
+  async restorePage(userId: string, admin: AdminUser, ip?: string) {
+    await this.ensureUser(userId);
+    await this.profilePages.staffRestore(userId);
+    await this.audit.log({ adminId: admin.id, action: 'profile-page.restore', targetType: 'user', targetId: userId, ip });
+    return this.getUser(userId);
+  }
+
+  pagePhoto(userId: string, photoId: string) {
+    return this.profilePages.staffPhoto(userId, photoId);
+  }
+
+  async removePagePhoto(userId: string, photoId: string, input: AdminReason, admin: AdminUser, ip?: string) {
+    await this.profilePages.staffRemovePhoto(userId, photoId);
+    await this.audit.log({
+      adminId: admin.id,
+      action: 'profile-page.photo.remove',
+      targetType: 'user',
+      targetId: userId,
+      detail: { photoId, reason: input.reason },
+      ip,
+    });
+    return this.getUser(userId);
+  }
+
+  groupQr(userId: string, inviteId: string) {
+    return this.groupInvites.staffQr(userId, inviteId);
+  }
+
+  async removeGroupInvite(userId: string, inviteId: string, input: AdminReason, admin: AdminUser, ip?: string) {
+    const invite = await this.prisma.groupInvite.findFirst({ where: { id: inviteId, ownerId: userId }, select: { platform: true, name: true, inviteUrl: true } });
+    if (!invite) throw apiError(HttpStatus.NOT_FOUND, 'GROUP_INVITE_NOT_FOUND', 'Group not found');
+    await this.groupInvites.remove(userId, inviteId);
+    await this.audit.log({
+      adminId: admin.id,
+      action: 'group-invite.remove',
+      targetType: 'user',
+      targetId: userId,
+      detail: { inviteId, platform: invite.platform, name: invite.name, inviteUrl: invite.inviteUrl, reason: input.reason },
+      ip,
+    });
+    return this.getUser(userId);
   }
 
   /**

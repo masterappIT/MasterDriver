@@ -10,6 +10,9 @@ interface Limits {
   supportGuestConversationsPerIpPerDay: number;
   bookingPerIpPerDay: number;
   bookingPerPagePerDay: number;
+  otpResendSeconds: number;
+  otpPerPhonePerHour: number;
+  otpPerIpPerHour: number;
   updatedAt: string;
   updatedBy: string | null;
 }
@@ -31,6 +34,30 @@ const BOOKING_FIELDS: Field[] = [
     hint: '超過後乘客會看到「今天的預約已滿」。填 0 表示暫停所有名片頁的預約。',
     min: 0,
     max: 1000,
+  },
+];
+
+const OTP_FIELDS: Field[] = [
+  {
+    key: 'otpResendSeconds',
+    label: '同一個號碼隔多少秒才能再申請驗證碼',
+    hint: '司機按「重新發送」要等的時間。',
+    min: 30,
+    max: 600,
+  },
+  {
+    key: 'otpPerPhonePerHour',
+    label: '同一個號碼每小時最多申請幾次',
+    hint: '超過後要等一小時。被人用來刷簡訊時可以調低。',
+    min: 1,
+    max: 20,
+  },
+  {
+    key: 'otpPerIpPerHour',
+    label: '同一個 IP 每小時最多申請幾次',
+    hint: '同一個 Wi-Fi 或公司網絡下的人共用一個 IP，不要調得太低。',
+    min: 1,
+    max: 500,
   },
 ];
 
@@ -72,13 +99,16 @@ const form = reactive({
   supportGuestConversationsPerIpPerDay: 0,
   bookingPerIpPerDay: 0,
   bookingPerPagePerDay: 0,
+  otpResendSeconds: 60,
+  otpPerPhonePerHour: 1,
+  otpPerIpPerHour: 1,
 });
 const meta = ref<{ updatedAt: string; updatedBy: string | null } | null>(null);
 const error = ref('');
 const message = ref('');
 
 function fill(limits: Limits) {
-  for (const field of [...FIELDS, ...BOOKING_FIELDS]) form[field.key] = limits[field.key];
+  for (const field of [...OTP_FIELDS, ...FIELDS, ...BOOKING_FIELDS]) form[field.key] = limits[field.key];
   meta.value = { updatedAt: limits.updatedAt, updatedBy: limits.updatedBy };
 }
 
@@ -109,7 +139,14 @@ onMounted(async () => {
   <div v-if="message" class="notice">{{ message }}</div>
 
   <form class="card limits" @submit.prevent="save">
-    <h2>客服</h2>
+    <h2>簡訊驗證碼</h2>
+    <label v-for="field in OTP_FIELDS" :key="field.key" class="field">
+      {{ field.label }}
+      <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
+      <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+    </label>
+    <p class="hint">簡訊按則收費，這三項用來防止被刷。開發模式登入時同樣適用。</p>
+    <h2 class="limits__heading">客服</h2>
     <label v-for="field in FIELDS" :key="field.key" class="field">
       {{ field.label }}
       <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />

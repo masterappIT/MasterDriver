@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, can } from '../api';
+import { api, apiFetch, can } from '../api';
 import { CREDIT_ENTRY, dateTime, fromLocalInput, hkd, money, PLAN_NAME, PLATE_TYPE } from '../format';
 
 interface Grant {
@@ -31,7 +31,32 @@ interface UserDetail {
     mainlandPhone: string | null;
     hidePlates: boolean;
   } | null;
-  profilePage: { code: string; published: boolean; wechatId: string | null; whatsapp: string | null; photos: number; bookings: number } | null;
+  profilePage: {
+    code: string;
+    published: boolean;
+    blockedAt: string | null;
+    blockedReason: string | null;
+    intro: string;
+    routes: string[];
+    languages: string[];
+    regions: string[];
+    wechatId: string | null;
+    whatsapp: string | null;
+    photos: number;
+    photoIds: string[];
+    bookings: number;
+  } | null;
+  groupInvites: {
+    id: string;
+    platform: 'WECHAT' | 'WECHAT_CONTACT' | 'WHATSAPP';
+    name: string;
+    inviteUrl: string | null;
+    hasQr: boolean;
+    expiresAt: string | null;
+    showOnClaimPage: boolean;
+    createdAt: string;
+  }[];
+  notifications: { off: string[]; recent: { kind: string; summary: string; read: boolean; createdAt: string }[] };
   paymentMethods: number;
   counts: { dispatched: number; claimed: number };
   credits: {
@@ -61,6 +86,22 @@ const SOURCE: Record<string, string> = {
   default: '預設方案',
   none: '無',
 };
+const GROUP_KIND: Record<string, string> = { WECHAT: '微信群二維碼', WECHAT_CONTACT: '個人微信二維碼', WHATSAPP: 'WhatsApp 群連結' };
+const NOTIFICATION_GROUP: Record<string, string> = { DISPATCHED: '我出的單', CLAIMED: '我接的單', BOOKINGS: '名片頁預約', SUPPORT: '客服' };
+const NOTIFICATION_KIND: Record<string, string> = {
+  ORDER_CLAIMED: '出的單有司機接了',
+  ORDER_CONFIRMED: '乘客確認了行程',
+  ORDER_COMPLETED: '行程已標記完成',
+  ORDER_CANCELLED: '接的單被取消',
+  ORDER_CANCELLED_BY_STAFF: '平台代為取消',
+  ORDER_REOPENED: '接的單被改派',
+  ORDER_SETTLED: '已結清',
+  CONTACT_REVEALED: '可以看乘客電話了',
+  BOOKING_NEW: '新預約',
+  BOOKING_ACCEPTED: '乘客同意報價',
+  BOOKING_CANCELLED: '乘客取消預約',
+  SUPPORT_REPLY: '客服回覆',
+};
 const PLANS = [
   { key: 'team', label: '團隊' },
   { key: 'company', label: '公司' },
@@ -77,6 +118,7 @@ const gift = reactive({ planKey: 'company', endsAt: '', reason: '' });
 async function load() {
   try {
     user.value = await api<UserDetail>('GET', `/users/${route.params.id}`);
+    loadImages(user.value);
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -104,6 +146,55 @@ function suspend() {
 function restore() {
   if (!confirm('恢復這個帳號？對方可以再登入。')) return;
   return run(() => api('POST', `/users/${route.params.id}/restore`), '帳號已恢復');
+}
+
+// ---- complaints about the 名片頁 and 派單群: every action asks for a reason for the log.
+
+/**
+ * Pictures come through the admin API, which needs the admin header, so each is read with
+ * apiFetch and shown from memory, as on the 客服 page.
+ */
+const images = reactive<Record<string, string>>({});
+async function loadImage(path: string) {
+  if (images[path]) return;
+  images[path] = 'loading';
+  try {
+    images[path] = URL.createObjectURL(await (await apiFetch('GET', path)).blob());
+  } catch {
+    images[path] = 'missing';
+  }
+}
+function loadImages(detail: UserDetail) {
+  for (const photoId of detail.profilePage?.photoIds ?? []) void loadImage(photoPath(photoId));
+  for (const invite of detail.groupInvites) if (invite.hasQr) void loadImage(qrPath(invite.id));
+}
+onBeforeUnmount(() => {
+  for (const url of Object.values(images)) if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+});
+const photoPath = (photoId: string) => `/users/${route.params.id}/page/photos/${photoId}`;
+const qrPath = (inviteId: string) => `/users/${route.params.id}/group-invites/${inviteId}/qr`;
+
+function blockPage() {
+  const reason = prompt('下架名片頁：乘客打不開，司機在恢復前不能再公開，並會看到下面寫的原因。\n請寫原因：')?.trim();
+  if (!reason) return;
+  return run(() => api('POST', `/users/${route.params.id}/page/block`, { reason }), '名片頁已下架');
+}
+
+function restorePage() {
+  if (!confirm('恢復名片頁？司機可以再自己公開。')) return;
+  return run(() => api('POST', `/users/${route.params.id}/page/restore`), '已恢復，司機可以再公開');
+}
+
+function removePhoto(photoId: string) {
+  const reason = prompt('刪除這張照片：刪除後不能還原。\n請寫原因（會記在操作紀錄）：')?.trim();
+  if (!reason) return;
+  return run(() => api('POST', `/users/${route.params.id}/page/photos/${photoId}/remove`, { reason }), '照片已刪除');
+}
+
+function removeGroup(inviteId: string) {
+  const reason = prompt('移除這個派單群：搶單頁不再顯示，刪除後不能還原。\n請寫原因（會記在操作紀錄）：')?.trim();
+  if (!reason) return;
+  return run(() => api('POST', `/users/${route.params.id}/group-invites/${inviteId}/remove`, { reason }), '派單群已移除');
 }
 
 /** 代改司機資料: the same fields and rules as the driver's own form. */
@@ -293,16 +384,84 @@ onMounted(load);
     </div>
 
     <div class="card">
-      <h2>客源與收款</h2>
+      <h2>名片頁</h2>
+      <p class="hint">有投訴時在這裡查看內容並處理。用戶列表的搜尋框可以直接貼名片頁連結找到司機。</p>
       <p v-if="!user.profilePage" class="muted">還沒有打開過名片頁設定</p>
-      <div v-else class="row">
-        <span>名片頁：{{ user.profilePage.published ? '已公開' : '未公開' }}</span>
-        <span>車輛照片：{{ user.profilePage.photos }} 張</span>
-        <span>收到預約：{{ user.profilePage.bookings }} 個</span>
-        <span>微信號：{{ user.profilePage.wechatId ?? '—' }}</span>
-        <span>WhatsApp：{{ user.profilePage.whatsapp ?? '—' }}</span>
-      </div>
+      <template v-else>
+        <div v-if="user.profilePage.blockedAt" class="notice error">
+          已於 {{ dateTime(user.profilePage.blockedAt) }} 下架，原因：{{ user.profilePage.blockedReason ?? '—' }}
+        </div>
+        <div class="row">
+          <span>狀態：{{ user.profilePage.blockedAt ? '已下架' : user.profilePage.published ? '已公開' : '未公開' }}</span>
+          <span>代碼：{{ user.profilePage.code }}</span>
+          <span>收到預約：{{ user.profilePage.bookings }} 個</span>
+          <span>微信號：{{ user.profilePage.wechatId ?? '—' }}</span>
+          <span>WhatsApp：{{ user.profilePage.whatsapp ?? '—' }}</span>
+        </div>
+        <p><b>介紹：</b>{{ user.profilePage.intro || '—' }}</p>
+        <p><b>路線：</b>{{ user.profilePage.routes.join('、') || '—' }}　<b>語言：</b>{{ user.profilePage.languages.join('、') || '—' }}　<b>服務地區：</b>{{ user.profilePage.regions.join('、') || '—' }}</p>
+        <div v-if="user.profilePage.photoIds.length" class="user-media">
+          <figure v-for="photoId in user.profilePage.photoIds" :key="photoId" class="user-media__item">
+            <a v-if="images[photoPath(photoId)]?.startsWith('blob:')" :href="images[photoPath(photoId)]" target="_blank" rel="noopener">
+              <img :src="images[photoPath(photoId)]" alt="車輛照片" />
+            </a>
+            <span v-else class="user-media__missing">{{ images[photoPath(photoId)] === 'missing' ? '讀取不到照片' : '載入中' }}</span>
+            <button v-if="can.write()" class="button secondary" type="button" @click="removePhoto(photoId)">刪除照片</button>
+          </figure>
+        </div>
+        <p v-else class="muted">沒有車輛照片</p>
+        <div v-if="can.write()" class="row">
+          <button v-if="user.profilePage.blockedAt" class="button" type="button" @click="restorePage">恢復名片頁</button>
+          <button v-else class="button danger" type="button" @click="blockPage">下架名片頁</button>
+        </div>
+      </template>
       <p>收款方式：{{ user.paymentMethods }} 個<span class="hint">　帳號與收款碼只給用戶自己和他選擇顯示的乘客，後台不顯示</span></p>
+    </div>
+
+    <div class="card">
+      <h2>派單群</h2>
+      <p v-if="user.groupInvites.length === 0" class="muted">沒有加入派單群</p>
+      <div v-else class="user-media">
+        <figure v-for="invite in user.groupInvites" :key="invite.id" class="user-media__item">
+          <template v-if="invite.hasQr">
+            <a v-if="images[qrPath(invite.id)]?.startsWith('blob:')" :href="images[qrPath(invite.id)]" target="_blank" rel="noopener">
+              <img :src="images[qrPath(invite.id)]" alt="二維碼" />
+            </a>
+            <span v-else class="user-media__missing">{{ images[qrPath(invite.id)] === 'missing' ? '讀取不到二維碼' : '載入中' }}</span>
+          </template>
+          <figcaption>
+            <b>{{ invite.name || GROUP_KIND[invite.platform] }}</b>
+            <span class="hint">{{ GROUP_KIND[invite.platform] }}　{{ invite.showOnClaimPage ? '在搶單頁顯示' : '不在搶單頁顯示' }}</span>
+            <span v-if="invite.inviteUrl" class="hint">{{ invite.inviteUrl }}</span>
+            <span v-if="invite.expiresAt" class="hint">{{ dateTime(invite.expiresAt) }} 過期</span>
+          </figcaption>
+          <button v-if="can.write()" class="button secondary" type="button" @click="removeGroup(invite.id)">移除</button>
+        </figure>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>通知</h2>
+      <p>
+        關掉的通知：{{ user.notifications.off.map((group) => NOTIFICATION_GROUP[group] ?? group).join('、') || '沒有' }}
+        <span class="hint">　通知只在司機開著頁面時跳出；提示音開關存在司機手機上，後台看不到</span>
+      </p>
+      <table class="table">
+        <thead>
+          <tr><th>時間</th><th>通知</th><th>行程</th><th>已讀</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="(item, i) in user.notifications.recent" :key="i">
+            <td>{{ dateTime(item.createdAt) }}</td>
+            <td>{{ NOTIFICATION_KIND[item.kind] ?? item.kind }}</td>
+            <td>{{ item.summary || '—' }}</td>
+            <td>{{ item.read ? '已讀' : '未讀' }}</td>
+          </tr>
+          <tr v-if="user.notifications.recent.length === 0">
+            <td colspan="4" class="muted">最近沒有通知</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="card">
@@ -396,6 +555,42 @@ onMounted(load);
   flex-direction: column;
   gap: var(--space-md);
   margin-top: var(--space-md);
+}
+.user-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin: var(--space-md) 0;
+}
+.user-media__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 180px;
+  margin: 0;
+}
+.user-media__item img {
+  width: 180px;
+  height: 135px;
+  object-fit: cover;
+  border-radius: var(--radius-input);
+  background: var(--color-field);
+}
+.user-media__missing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 180px;
+  height: 135px;
+  border-radius: var(--radius-input);
+  background: var(--color-field);
+  color: var(--color-text-muted);
+}
+.user-media__item figcaption {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
 }
 .user-profile-form__check {
   flex-direction: row;

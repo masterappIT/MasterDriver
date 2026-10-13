@@ -115,6 +115,7 @@ export async function setupDatabase() {
   const mediaStorage = new LocalMediaStorage(mkdtempSync(join(tmpdir(), 'md-support-media-')));
   const streams = new NotificationStreams(prisma);
   const notifications = new NotificationsService(prisma, streams);
+  const profilePages = new ProfilePagesService(prisma, mediaStorage, config, notifications);
   const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config, notifications);
   return {
     prisma,
@@ -129,11 +130,11 @@ export async function setupDatabase() {
     orders,
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
-    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders),
+    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders, profilePages, new GroupInvitesService(prisma)),
+    profilePages,
     site: new SiteService(prisma),
     mediaStorage,
     support: new SupportService(prisma, mediaStorage, audit, notifications),
-    profilePages: new ProfilePagesService(prisma, mediaStorage, config, notifications),
     streams,
     notifications,
     box,
