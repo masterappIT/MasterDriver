@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import type { ContactRevealUpdate, CreateOrderInput, OrderListQuery, UpdateOrderPricesInput } from '@masterdriver/shared';
+import { MAX_JOURNEY_LEGS, type ContactRevealUpdate, type CreateOrderInput, type OrderListQuery, type UpdateOrderPricesInput } from '@masterdriver/shared';
 import { Prisma, type OrderStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
@@ -9,7 +9,7 @@ import { CreditsService } from '../billing/credits.service';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
 import { GroupInvitesService } from '../groups/group-invites.service';
 import { PrismaService } from '../prisma.service';
-import { orderInclude, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
+import { orderInclude, legsOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
 import { claimedShareText, dispatchShareText, passengerShareText } from './share-text';
 
 const ORDER_CODE_LENGTH = 10;
@@ -38,8 +38,15 @@ export class OrdersService {
         // Quota, order and service fee succeed or fail together: with too few
         // credits nothing is created and no quota is used.
         const order = await this.prisma.$transaction(async (tx) => {
-          await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
-          const fee = await this.commission.feeFor(tx, userId, now);
+          const pickupAt = new Date(input.pickupAt);
+          const leg = input.afterOrderId ? await this.nextLeg(tx, userId, input.afterOrderId, pickupAt) : null;
+          if (!leg && input.handoffNote) {
+            throw apiError(HttpStatus.BAD_REQUEST, 'HANDOFF_WITHOUT_LEG', 'A handoff only belongs to a following leg');
+          }
+          if (input.selfDrive) await this.requireProfile(tx, userId);
+          // 接駁: a trip uses the quota and pays the service fee once, with its first leg.
+          if (!leg) await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
+          const fee = leg ? 0 : await this.commission.feeFor(tx, userId, now);
           const preference =
             input.contactRevealMinutes === undefined
               ? (await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { contactRevealMinutes: true } })).contactRevealMinutes
@@ -49,7 +56,7 @@ export class OrdersService {
               code: randomCode(ORDER_CODE_LENGTH),
               confirmCode: randomCode(CONFIRM_CODE_LENGTH),
               dispatcherId: userId,
-              pickupAt: new Date(input.pickupAt),
+              pickupAt,
               origin: input.origin,
               destination: input.destination,
               waypoints: input.waypoints,
@@ -67,6 +74,9 @@ export class OrdersService {
               passengerName: input.passengerName,
               passengerContact: input.passengerContact,
               contactRevealMinutes: preference,
+              ...(leg ? { journeyId: leg.journeyId, legIndex: leg.legIndex, handoffNote: input.handoffNote } : {}),
+              // 這段我自己做: taken by the dispatcher at once, never offered for claiming.
+              ...(input.selfDrive ? { status: 'ASSIGNED' as const, claimedById: userId, claimedAt: now } : {}),
             },
             include: orderInclude,
           });
@@ -124,8 +134,7 @@ export class OrdersService {
     if (order.claimedById === userId) return this.claimResult('WON', code, userId);
     if (order.scope === 'TEAM') throw apiError(HttpStatus.FORBIDDEN, 'TEAM_ONLY', 'Only team members can claim this order');
 
-    const profile = await this.prisma.driverProfile.findUnique({ where: { userId }, select: { userId: true } });
-    if (!profile) throw apiError(HttpStatus.CONFLICT, 'PROFILE_REQUIRED', 'Fill in your driver details first');
+    await this.requireProfile(this.prisma, userId);
 
     const updated = await this.prisma.order.updateMany({
       where: { id: order.id, status: 'OPEN', claimedById: null },
@@ -136,11 +145,19 @@ export class OrdersService {
     return this.claimResult(result, code, userId);
   }
 
-  /** Cancelling returns the service fee, in the same transaction. */
+  /**
+   * Cancelling returns the service fee, in the same transaction. A trip with
+   * 接駁 paid once, on its first leg, so its fee returns only when the last of
+   * its legs is cancelled; the other legs are never cancelled automatically.
+   */
   async cancel(userId: string, id: string, now = new Date()) {
-    return this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', (tx) =>
-      this.credits.refundOrder(tx, id),
-    );
+    return this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', async (tx) => {
+      const { journeyId } = await tx.order.findUniqueOrThrow({ where: { id }, select: { journeyId: true } });
+      if (!journeyId) return this.credits.refundOrder(tx, id);
+      await this.lockJourney(tx, journeyId);
+      const live = await tx.order.count({ where: { journeyId, status: { not: 'CANCELLED' } } });
+      if (live === 0) await this.credits.refundOrder(tx, journeyId);
+    });
   }
 
   /** "改派": take the order back from the driver and open it for claiming again. */
@@ -200,15 +217,61 @@ export class OrdersService {
     return toPassengerView(order);
   }
 
+  /** One confirmation covers every leg of a trip with 接駁 that is still on. */
   async confirmByPassenger(confirmCode: string, now = new Date()) {
-    const order = await this.prisma.order.findUnique({ where: { confirmCode }, select: { status: true } });
+    const order = await this.prisma.order.findUnique({ where: { confirmCode }, select: { id: true, journeyId: true } });
     if (!order) throw this.notFound();
-    if (order.status === 'CANCELLED') throw this.invalidStatus();
+    const trip: Prisma.OrderWhereInput = order.journeyId ? { journeyId: order.journeyId } : { id: order.id };
+    const live = await this.prisma.order.count({ where: { ...trip, status: { not: 'CANCELLED' } } });
+    if (live === 0) throw this.invalidStatus();
     await this.prisma.order.updateMany({
-      where: { confirmCode, status: { in: ['OPEN', 'ASSIGNED'] }, passengerConfirmedAt: null },
+      where: { ...trip, status: { in: ['OPEN', 'ASSIGNED'] }, passengerConfirmedAt: null },
       data: { passengerConfirmedAt: now },
     });
     return this.getForPassenger(confirmCode);
+  }
+
+  /**
+   * Where a new leg goes: after the last leg of the trip that `afterOrderId`
+   * belongs to, which must be that leg. An order on its own becomes leg 1 of a
+   * new trip. Runs under the trip's lock, like cancelling a leg.
+   */
+  private async nextLeg(tx: Prisma.TransactionClient, userId: string, afterOrderId: string, pickupAt: Date) {
+    const previous = await tx.order.findFirst({ where: { id: afterOrderId, dispatcherId: userId }, select: { journeyId: true } });
+    if (!previous) throw this.notFound();
+    const journeyId = previous.journeyId ?? afterOrderId;
+    await this.lockJourney(tx, journeyId);
+    await tx.order.updateMany({ where: { id: journeyId, journeyId: null }, data: { journeyId, legIndex: 1 } });
+    const legs = await tx.order.findMany({
+      where: { journeyId },
+      orderBy: { legIndex: 'asc' },
+      select: { id: true, legIndex: true, status: true, pickupAt: true },
+    });
+    const last = legs[legs.length - 1];
+    if (last.id !== afterOrderId) {
+      throw apiError(HttpStatus.CONFLICT, 'NOT_LAST_LEG', 'A leg can only follow the last leg of the trip');
+    }
+    if (last.status === 'CANCELLED') throw this.invalidStatus();
+    if (legs.length >= MAX_JOURNEY_LEGS) {
+      throw apiError(HttpStatus.CONFLICT, 'JOURNEY_LEG_LIMIT', `A trip has at most ${MAX_JOURNEY_LEGS} legs`);
+    }
+    if (pickupAt < last.pickupAt) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'LEG_BEFORE_PREVIOUS', 'A leg cannot start before the previous leg');
+    }
+    return { journeyId, legIndex: (last.legIndex ?? 1) + 1 };
+  }
+
+  /**
+   * Adding and cancelling legs of one trip take turns on the first leg's row,
+   * so a refund decision never misses a leg added or cancelled at the same time.
+   */
+  private async lockJourney(tx: Prisma.TransactionClient, journeyId: string) {
+    await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${journeyId} FOR UPDATE`;
+  }
+
+  private async requireProfile(db: Prisma.TransactionClient, userId: string) {
+    const profile = await db.driverProfile.findUnique({ where: { userId }, select: { userId: true } });
+    if (!profile) throw apiError(HttpStatus.CONFLICT, 'PROFILE_REQUIRED', 'Fill in your driver details first');
   }
 
   private async transition(
@@ -244,12 +307,16 @@ export class OrdersService {
   private withShareTexts(order: OrderWithPeople) {
     const links = linksOf(order, this.config.publicBaseUrl);
     const driver = order.claimedBy?.profile;
+    const legs = legsOf(order);
+    const liveLegs = legs?.filter((leg) => leg.status !== 'CANCELLED');
+    // The passenger gets one link for the whole trip: the first leg's.
+    const tripConfirm = order.journeyHead ? linksOf(order.journeyHead, this.config.publicBaseUrl).passengerConfirm : links.passengerConfirm;
     return {
       ...toOrderView(order, 'dispatcher', this.config.publicBaseUrl),
       share: {
-        dispatch: dispatchShareText(order, links.dispatch),
+        dispatch: dispatchShareText({ ...order, legCount: legs?.length }, links.dispatch),
         claimed: driver ? claimedShareText(order, driver) : null,
-        passenger: passengerShareText(order, links.passengerConfirm),
+        passenger: passengerShareText(order, tripConfirm, liveLegs),
       },
     };
   }

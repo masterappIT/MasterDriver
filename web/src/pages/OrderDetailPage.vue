@@ -1,13 +1,15 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
+import JourneyLegs from '../components/JourneyLegs.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import { money, pickup, shortTime, type Money } from '../format';
 import { t } from '../i18n';
+import { MAX_JOURNEY_LEGS, type Journey } from '../journey';
 import { toast } from '../toast';
 
 interface Driver {
@@ -32,6 +34,8 @@ interface Detail {
   luggage: number;
   vehicleType: string | null;
   notes: string | null;
+  handoffNote: string | null;
+  journey: Journey | null;
   dispatcherName: string | null;
   claimedAt: string | null;
   passengerConfirmedAt: string | null;
@@ -40,6 +44,7 @@ interface Detail {
   passengerContact: string | null;
   contactRevealAt: string | null;
   contactRevealMinutes?: number | null;
+  selfDrive?: boolean;
   driver: Driver | null;
   driverPrice: Money;
   passengerPrice?: Money;
@@ -51,7 +56,8 @@ interface Detail {
 }
 
 const route = useRoute();
-const id = String(route.params.id);
+// Legs of one trip link to each other on this same page, so follow the route.
+const id = computed(() => String(route.params.id));
 const order = ref<Detail | null>(null);
 const error = ref('');
 const busy = ref(false);
@@ -61,10 +67,27 @@ const prices = reactive({ currency: 'HKD', driver: '', passenger: '' });
 
 const isDispatcher = computed(() => order.value?.viewer === 'dispatcher');
 const live = computed(() => order.value?.status === 'OPEN' || order.value?.status === 'ASSIGNED');
+const selfDriven = computed(() => Boolean(order.value?.selfDrive) && order.value?.status === 'ASSIGNED');
+
+/** 接駁: a leg can be added after the last leg of a trip, up to the limit. */
+const canAddLeg = computed(() => {
+  const o = order.value;
+  if (!o || !isDispatcher.value || !live.value) return false;
+  return !o.journey || (o.journey.legIndex === o.journey.legCount && o.journey.legCount < MAX_JOURNEY_LEGS);
+});
+/** Other legs still on: cancelling this one does not cancel them. */
+const otherLiveLegs = computed(() =>
+  (order.value?.journey?.legs ?? []).filter(
+    (leg) => leg.legIndex !== order.value?.journey?.legIndex && (leg.status === 'OPEN' || leg.status === 'ASSIGNED'),
+  ),
+);
+const cancelQuestion = computed(() =>
+  otherLiveLegs.value.length > 0 ? '確定取消這一段？接駁的其他段不會自動取消，需要的話請逐段取消。' : '確定取消這張單？',
+);
 
 async function load() {
   try {
-    order.value = await api<Detail>('GET', `/orders/${id}`);
+    order.value = await api<Detail>('GET', `/orders/${id.value}`);
     error.value = '';
   } catch (e) {
     error.value = errorText(e);
@@ -75,7 +98,7 @@ async function act(path: string, done: string, confirmText?: string) {
   if (confirmText && !confirm(t(confirmText))) return;
   busy.value = true;
   try {
-    order.value = await api<Detail>('POST', `/orders/${id}/${path}`);
+    order.value = await api<Detail>('POST', `/orders/${id.value}/${path}`);
     toast(done);
   } catch (e) {
     toast(errorText(e));
@@ -95,7 +118,7 @@ function editReveal() {
 async function saveReveal() {
   busy.value = true;
   try {
-    order.value = await api<Detail>('PATCH', `/orders/${id}/contact-reveal`, { contactRevealMinutes: reveal.value });
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/contact-reveal`, { contactRevealMinutes: reveal.value });
     editingReveal.value = false;
     toast('已更新');
   } catch (e) {
@@ -122,7 +145,7 @@ function editPrices() {
 async function patchPrices(body: Record<string, unknown>, done: string) {
   busy.value = true;
   try {
-    order.value = await api<Detail>('PATCH', `/orders/${id}/prices`, body);
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/prices`, body);
     editingPrices.value = false;
     toast(done);
   } catch (e) {
@@ -141,6 +164,12 @@ function savePrices() {
 }
 
 onMounted(load);
+watch(id, () => {
+  order.value = null;
+  editingPrices.value = false;
+  editingReveal.value = false;
+  void load();
+});
 </script>
 
 <template>
@@ -153,10 +182,14 @@ onMounted(load);
 
       <section class="card">
         <div class="detail__top">
-          <strong>{{ pickup(order.pickupAt) }}</strong>
+          <strong>
+            {{ pickup(order.pickupAt) }}
+            <span v-if="order.journey" class="leg-tag">{{ t(`接駁 第 ${order.journey.legIndex}／${order.journey.legCount} 段`) }}</span>
+          </strong>
           <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
         </div>
         <div class="detail__route">{{ t(order.origin) }} → {{ t(order.destination) }}</div>
+        <p v-if="order.journey && order.handoffNote" class="muted">{{ t(`交接：${order.handoffNote}`) }}</p>
         <p v-if="order.waypoints.length" class="muted">{{ t(`途經：${order.waypoints.join('、')}`) }}</p>
         <p class="muted">
           {{ t(`${order.passengers}人・${order.luggage}件行李`) }}<template v-if="order.vehicleType">・{{ t(order.vehicleType) }}</template>
@@ -164,18 +197,36 @@ onMounted(load);
         <p v-if="order.notes">{{ t(`備註：${order.notes}`) }}</p>
       </section>
 
+      <div v-if="order.status === 'CANCELLED' && otherLiveLegs.length" class="notice">
+        {{ t('這一段已取消，接駁的其他段仍在進行。需要的話，請在下面打開該段取消。') }}
+      </div>
+
+      <!-- 接駁: every leg of the trip -->
+      <section v-if="order.journey" class="card">
+        <h2>{{ t(`接駁行程（${order.journey.legCount} 段）`) }}</h2>
+        <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
+        <RouterLink v-if="canAddLeg" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`">＋ {{ t('加接駁段') }}</RouterLink>
+      </section>
+      <section v-else-if="canAddLeg" class="card">
+        <p class="hint detail__leg-hint">{{ t('乘客中途要換車（例如香港口岸過關後由澳門車接）？加一段接駁，另外派給下一段的司機。') }}</p>
+        <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`">＋ {{ t('加接駁段') }}</RouterLink>
+      </section>
+
       <!-- Dispatcher: texts to paste into groups and to the passenger -->
       <section v-if="isDispatcher && order.share && live" class="card">
-        <h2>{{ t('貼到群裡') }}</h2>
-        <pre class="detail__share">{{ t(order.share.dispatch.wechat) }}</pre>
-        <button class="button block large" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">{{ t('複製，貼到微信群') }}</button>
-        <a v-if="!inWeChat" class="button secondary block detail__gap" :href="whatsappLink(t(order.share.dispatch.whatsapp))" target="_blank" rel="noopener">
-          {{ t('分享到 WhatsApp') }}
-        </a>
+        <template v-if="!selfDriven">
+          <h2>{{ t('貼到群裡') }}</h2>
+          <pre class="detail__share">{{ t(order.share.dispatch.wechat) }}</pre>
+          <button class="button block large" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">{{ t('複製，貼到微信群') }}</button>
+          <a v-if="!inWeChat" class="button secondary block detail__gap" :href="whatsappLink(t(order.share.dispatch.whatsapp))" target="_blank" rel="noopener">
+            {{ t('分享到 WhatsApp') }}
+          </a>
+        </template>
+        <p v-else class="hint">{{ t('這段你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
         <button class="button secondary block detail__gap" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
           {{ t('複製給乘客的確認訊息') }}
         </button>
-        <button v-if="order.share.claimed" class="button secondary block detail__gap" type="button" @click="copy(order.share.claimed, '已複製，貼回群裡吧')">
+        <button v-if="order.share.claimed && !selfDriven" class="button secondary block detail__gap" type="button" @click="copy(order.share.claimed, '已複製，貼回群裡吧')">
           {{ t('複製「已派出」訊息貼回群') }}
         </button>
       </section>
@@ -188,7 +239,9 @@ onMounted(load);
           <template v-if="isDispatcher">
             <p>{{ t('乘客價') }}：<strong>{{ money(order.passengerPrice) || '—' }}</strong>　<span class="hint">{{ order.showPassengerPrice ? t('乘客看得到') : t('乘客看不到') }}</span></p>
             <p v-if="order.margin">{{ t('差價') }}：<strong>{{ money(order.margin) }}</strong></p>
-            <p v-if="order.serviceFee" class="hint">{{ t(`平台服務費 HK$${order.serviceFee}（取消會退回）`) }}</p>
+            <p v-if="order.serviceFee" class="hint">
+              {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}（整個接駁行程只收一次，全部段都取消才退回）`) : t(`平台服務費 HK$${order.serviceFee}（取消會退回）`) }}
+            </p>
             <div v-if="live" class="row">
               <button class="button secondary" type="button" @click="editPrices">{{ t('修改價格') }}</button>
               <button class="button secondary" type="button" :disabled="busy" @click="patchPrices({ showPassengerPrice: !order.showPassengerPrice }, '已更新')">
@@ -220,10 +273,10 @@ onMounted(load);
       </section>
 
       <section v-if="order.driver" class="card">
-        <h2>{{ isDispatcher ? t('接單司機') : t('你的車') }}</h2>
+        <h2>{{ selfDriven ? t('這段你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</h2>
         <p><strong>{{ order.driver.name ? t(order.driver.name) : '—' }}</strong>　<span class="hint">{{ t(`${shortTime(order.claimedAt)} 搶到`) }}</span></p>
         <PlateTag :hk="order.driver.hkPlate" :macau="order.driver.macauPlate" :mainland="order.driver.mainlandPlate" />
-        <div v-if="isDispatcher" class="row detail__gap">
+        <div v-if="isDispatcher && !selfDriven" class="row detail__gap">
           <a class="button secondary" :href="`tel:${order.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
           <button class="button secondary" type="button" @click="copy(order.driver.phone, '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
@@ -258,8 +311,10 @@ onMounted(load);
       <section v-if="live" class="card row">
         <button v-if="order.status === 'ASSIGNED'" class="button" type="button" :disabled="busy" @click="act('complete', '已完成', '確定這趟行程已完成？')">{{ t('標記完成') }}</button>
         <template v-if="isDispatcher">
-          <button v-if="order.status === 'ASSIGNED'" class="button secondary" type="button" :disabled="busy" @click="act('reopen', '已重新開放搶單', '收回這張單，重新讓司機搶？')">{{ t('改派') }}</button>
-          <button class="button secondary" type="button" :disabled="busy" @click="act('cancel', '已取消', '確定取消這張單？')">{{ t('取消這張單') }}</button>
+          <button v-if="order.status === 'ASSIGNED'" class="button secondary" type="button" :disabled="busy" @click="act('reopen', '已重新開放搶單', selfDriven ? '把這段放到群裡讓司機搶？' : '收回這張單，重新讓司機搶？')">
+            {{ selfDriven ? t('放到群裡搶') : t('改派') }}
+          </button>
+          <button class="button secondary" type="button" :disabled="busy" @click="act('cancel', '已取消', cancelQuestion)">{{ order.journey ? t('取消這一段') : t('取消這張單') }}</button>
         </template>
       </section>
     </template>
@@ -295,5 +350,8 @@ onMounted(load);
 }
 .detail__gap {
   margin-top: var(--space-sm);
+}
+.detail__leg-hint {
+  margin: 0 0 var(--space-sm);
 }
 </style>

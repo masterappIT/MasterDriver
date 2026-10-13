@@ -51,6 +51,9 @@ const priceSchema = z.object({
   currency: z.enum(CURRENCIES),
 });
 
+/** 接駁: a trip has at most this many legs, each its own order. */
+export const MAX_JOURNEY_LEGS = 4;
+
 /** Up to 24 hours before pickup, or null for "as soon as the order is claimed". */
 export const contactReveal = z.number().int().min(0).max(1440).nullable();
 
@@ -76,6 +79,12 @@ export const createOrderSchema = z.object({
   rawText: optionalText(300),
   /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */
   contactRevealMinutes: contactReveal.optional(),
+  /** 接駁: add this order as the next leg after the last leg of the dispatcher's trip. */
+  afterOrderId: z.string().trim().min(1).max(40).optional(),
+  /** How the passenger gets to this leg from the previous one; only for a following leg. */
+  handoffNote: optionalText(120),
+  /** 這段我自己做: the dispatcher drives this order, so it is not offered for claiming. */
+  selfDrive: z.boolean().default(false),
 });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 

@@ -220,3 +220,15 @@ h2 {
   box-shadow: var(--shadow-floating);
   z-index: 10;
 }
+
+/* 接駁: "第 2／2 段" next to an order's time. */
+.leg-tag {
+  display: inline-block;
+  padding: 1px var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}

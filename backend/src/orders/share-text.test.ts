@@ -79,3 +79,21 @@ test('passenger message never carries the driver price, and the passenger price 
   assert.ok(shown.includes('費用 HK$1,000'));
   assert.ok(!shown.includes('HK$850'));
 });
+
+test('a following leg says where it sits in the trip and how the passenger gets there', () => {
+  const leg = { ...order, legIndex: 2, legCount: 2, handoffNote: '乘客自行過關（穿梭巴士）' };
+  const text = dispatchShareText(leg, 'https://x.test/o/abc').wechat;
+  assert.ok(text.includes('接駁：第 2／2 段'));
+  assert.ok(text.includes('交接：乘客自行過關（穿梭巴士）'));
+  assert.ok(!dispatchShareText(order, 'https://x.test/o/abc').wechat.includes('接駁'));
+});
+
+test('the passenger message for a trip covers every leg and adds up prices shown in one currency', () => {
+  const hk = { ...order, destination: '港珠澳大橋香港口岸', showPassengerPrice: true, passengerPriceMinor: 60000 };
+  const macau = { ...order, origin: '港珠澳大橋澳門口岸', destination: '澳門威尼斯人', showPassengerPrice: true, passengerPriceMinor: 40000 };
+  const text = passengerShareText(hk, 'https://x.test/c/xyz', [hk, macau]);
+  assert.ok(text.includes('深圳灣口岸 → 澳門威尼斯人（2 段接駁）'));
+  assert.ok(text.includes('費用 HK$1,000'));
+  const mixed = passengerShareText(hk, 'https://x.test/c/xyz', [hk, { ...macau, passengerCurrency: 'MOP' }]);
+  assert.ok(!mixed.includes('費用'));
+});

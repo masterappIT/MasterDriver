@@ -165,6 +165,13 @@ model Order {
   /// from contactRevealMinutes before pickup (null: as soon as claimed).
   passengerContact     String
   contactRevealMinutes Int?        @default(60)
+  /// 接駁: every leg of one trip points at the trip's first leg (the first
+  /// leg at itself). Null for an order that is not part of a trip.
+  journeyId            String?
+  /// Position of this leg in its trip, from 1; null outside a trip.
+  legIndex             Int?
+  /// How the passenger gets here from the previous leg, e.g. 乘客自行過關（穿梭巴士）.
+  handoffNote          String?
   claimedById          String?
   claimedAt            DateTime?
   passengerConfirmedAt DateTime?
@@ -173,10 +180,13 @@ model Order {
   createdAt            DateTime    @default(now())
   updatedAt            DateTime    @updatedAt
 
-  dispatcher User         @relation("OrderDispatcher", fields: [dispatcherId], references: [id])
-  claimedBy  User?        @relation("OrderClaimer", fields: [claimedById], references: [id])
-  claims     OrderClaim[]
+  dispatcher  User         @relation("OrderDispatcher", fields: [dispatcherId], references: [id])
+  claimedBy   User?        @relation("OrderClaimer", fields: [claimedById], references: [id])
+  claims      OrderClaim[]
+  journeyHead Order?       @relation("Journey", fields: [journeyId], references: [id])
+  journeyLegs Order[]      @relation("Journey")
 
+  @@unique([journeyId, legIndex])
   @@index([dispatcherId, createdAt])
   @@index([claimedById, createdAt])
 }

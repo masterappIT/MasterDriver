@@ -16,6 +16,10 @@ export interface ShareOrder {
   passengerCurrency: keyof typeof CURRENCY_PREFIX;
   showPassengerPrice: boolean;
   notes: string | null;
+  /** 接駁: this order's place in its trip; absent or null for a single order. */
+  legIndex?: number | null;
+  legCount?: number;
+  handoffNote?: string | null;
 }
 
 export interface ShareDriver {
@@ -38,6 +42,8 @@ function dispatchLines(order: ShareOrder): string[] {
   const load = [`${order.passengers}人`, `${order.luggage}件行李`, order.vehicleType].filter(Boolean).join('｜');
   return [
     route(order),
+    order.legIndex ? `接駁：第 ${order.legIndex}／${order.legCount ?? order.legIndex} 段` : null,
+    order.legIndex && order.handoffNote ? `交接：${order.handoffNote}` : null,
     order.waypoints.length > 0 ? `途經：${order.waypoints.join('、')}` : null,
     load,
     order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
@@ -72,14 +78,26 @@ export function claimedShareText(order: ShareOrder, driver: ShareDriver): string
     .join('\n');
 }
 
+/** The passenger price to quote: the shown prices added up, when they share one currency. */
+function shownPassengerPrice(legs: ShareOrder[]) {
+  const shown = legs.filter((leg) => leg.showPassengerPrice && leg.passengerPriceMinor !== null);
+  if (shown.length === 0 || new Set(shown.map((leg) => leg.passengerCurrency)).size > 1) return '';
+  const total = shown.reduce((sum, leg) => sum + (leg.passengerPriceMinor as number), 0);
+  return `，費用 ${formatPrice(total, shown[0].passengerCurrency)}`;
+}
+
 /**
  * Message the dispatcher sends the passenger with the confirmation link. It
- * never carries the driver price; the passenger price only when shown.
+ * never carries the driver price; the passenger price only when shown. For a
+ * trip with 接駁, pass its legs that are not cancelled: the message covers the
+ * whole trip and the link (the first leg's) shows every leg.
  */
-export function passengerShareText(order: ShareOrder, confirmUrl: string): string {
-  const price =
-    order.showPassengerPrice && order.passengerPriceMinor !== null
-      ? `，費用 ${formatPrice(order.passengerPriceMinor, order.passengerCurrency)}`
-      : '';
-  return `您好，您的行程 ${formatPickup(order.pickupAt)} ${route(order)} 已安排${price}，請按連結查看並確認：${confirmUrl}`;
+export function passengerShareText(order: ShareOrder, confirmUrl: string, legs?: ShareOrder[]): string {
+  if (legs && legs.length > 1) {
+    const first = legs[0];
+    const last = legs[legs.length - 1];
+    const trip = `${first.origin} → ${last.destination}（${legs.length} 段接駁）`;
+    return `您好，您的行程 ${formatPickup(first.pickupAt)} ${trip} 已安排${shownPassengerPrice(legs)}，請按連結查看各段司機並確認：${confirmUrl}`;
+  }
+  return `您好，您的行程 ${formatPickup(order.pickupAt)} ${route(order)} 已安排${shownPassengerPrice([order])}，請按連結查看並確認：${confirmUrl}`;
 }

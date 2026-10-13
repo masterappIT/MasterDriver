@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, errorText } from '../api';
 import AdBanner from '../components/AdBanner.vue';
@@ -11,6 +11,29 @@ const router = useRouter();
 const tab = ref<'claimed' | 'dispatched'>(route.query.tab === 'dispatched' ? 'dispatched' : 'claimed');
 const orders = ref<OrderSummary[]>([]);
 const error = ref('');
+
+/** 接駁: the legs of one trip stay together, in leg order, where the trip's first listed leg appears. */
+const listed = computed(() => {
+  const trips = new Map<string, OrderSummary[]>();
+  const result: (OrderSummary | OrderSummary[])[] = [];
+  for (const order of orders.value) {
+    const trip = order.journey?.legs[0]?.id;
+    if (!trip) {
+      result.push(order);
+      continue;
+    }
+    const legs = trips.get(trip);
+    if (legs) legs.push(order);
+    else {
+      const group = [order];
+      trips.set(trip, group);
+      result.push(group);
+    }
+  }
+  return result.flatMap((entry) =>
+    Array.isArray(entry) ? [...entry].sort((a, b) => (a.journey?.legIndex ?? 0) - (b.journey?.legIndex ?? 0)) : [entry],
+  );
+});
 
 async function load() {
   error.value = '';
@@ -36,7 +59,7 @@ onMounted(load);
       <button class="orders-page__tab" :class="{ active: tab === 'dispatched' }" type="button" @click="tab = 'dispatched'">{{ t('派的單') }}</button>
     </div>
     <div v-if="error" class="notice error">{{ error }}</div>
-    <OrderCard v-for="order in orders" :key="order.code" :order="order" :role="tab" />
+    <OrderCard v-for="order in listed" :key="order.code" :order="order" :role="tab" />
     <p v-if="orders.length === 0" class="card muted">{{ tab === 'claimed' ? t('還沒有接過單。') : t('還沒有發過單。') }}</p>
     <AdBanner position="MY_ORDERS" />
   </div>

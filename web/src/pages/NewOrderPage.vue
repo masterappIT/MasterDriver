@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { parseQuickOrder } from '@masterdriver/shared/quick-order';
 import { computed, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { api, errorText } from '../api';
+import { useRoute, useRouter } from 'vue-router';
+import { api, errorText, session } from '../api';
 import RevealSelect from '../components/RevealSelect.vue';
 import { fromLocalInput, pickup, toLocalInput } from '../format';
 import { t } from '../i18n';
+import { HANDOFF_NOTES, HANDOFF_PLACES } from '../journey';
 
 interface PastOrder {
   id: string;
@@ -21,7 +22,26 @@ interface PastOrder {
   showPassengerPrice?: boolean;
 }
 
+interface PreviousLeg {
+  id: string;
+  pickupAt: string;
+  origin: string;
+  destination: string;
+  passengers: number;
+  luggage: number;
+  passengerName: string | null;
+  passengerContact: string | null;
+  contactRevealMinutes?: number | null;
+  driverPrice: { amount: number; currency: string } | null;
+  journey: { legIndex: number } | null;
+}
+
+const route = useRoute();
 const router = useRouter();
+/** 加接駁段: this order follows the order in ?after= as the next leg of the trip. */
+const afterId = typeof route.query.after === 'string' ? route.query.after : '';
+const previous = ref<PreviousLeg | null>(null);
+const legNumber = computed(() => (previous.value?.journey?.legIndex ?? 1) + 1);
 const past = ref<PastOrder[]>([]);
 const busy = ref(false);
 const error = ref('');
@@ -42,6 +62,8 @@ const form = reactive({
   passengerName: '',
   passengerContact: '',
   contactRevealMinutes: 60 as number | null,
+  handoffNote: '',
+  selfDrive: false,
 });
 
 /** Places used before, most recent first: one tap fills them in. */
@@ -144,12 +166,35 @@ async function submit() {
       passengerName: form.passengerName,
       passengerContact: form.passengerContact,
       contactRevealMinutes: form.contactRevealMinutes,
+      afterOrderId: afterId || undefined,
+      handoffNote: afterId ? form.handoffNote : undefined,
+      selfDrive: form.selfDrive,
     });
     await router.replace(`/app/orders/${created.id}?sent=1`);
   } catch (e) {
     error.value = errorText(e);
   } finally {
     busy.value = false;
+  }
+}
+
+/** The next leg carries the same passenger; its time starts after the previous leg. */
+async function loadPrevious() {
+  try {
+    const leg = await api<PreviousLeg>('GET', `/orders/${afterId}`);
+    previous.value = leg;
+    Object.assign(form, {
+      pickupAt: toLocalInput(new Date(new Date(leg.pickupAt).getTime() + 60 * 60 * 1000)),
+      passengers: String(leg.passengers),
+      luggage: String(leg.luggage),
+      passengerName: leg.passengerName ?? '',
+      passengerContact: leg.passengerContact ?? '',
+      contactRevealMinutes: leg.contactRevealMinutes ?? null,
+      currency: leg.driverPrice?.currency ?? form.currency,
+      handoffNote: HANDOFF_NOTES[0],
+    });
+  } catch (e) {
+    error.value = errorText(e);
   }
 }
 
@@ -160,18 +205,33 @@ onMounted(async () => {
   ]);
   past.value = orders;
   if (preferences) form.contactRevealMinutes = preferences.contactRevealMinutes;
+  if (afterId) await loadPrevious();
 });
 </script>
 
 <template>
   <form class="page new-order" @submit.prevent="submit">
     <div class="new-order__head">
-      <h1>{{ t('發單') }}</h1>
-      <button v-if="past.length" class="button secondary" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
+      <h1>{{ afterId ? t(`加接駁段（第 ${legNumber} 段）`) : t('發單') }}</h1>
+      <button v-if="past.length && !afterId" class="button secondary" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
     </div>
     <div v-if="error" class="notice error">{{ error }}</div>
 
-    <div class="card quick-line">
+    <div v-if="previous" class="card">
+      <p class="hint new-order__previous-label">{{ t(`接在第 ${legNumber - 1} 段後面`) }}</p>
+      <strong>{{ pickup(previous.pickupAt) }}</strong>
+      <div>{{ t(previous.origin) }} → {{ t(previous.destination) }}</div>
+      <p class="hint">{{ t('同一位乘客，已帶入人數、行李和乘客資料。這一段另外貼到群裡搶，平台服務費整個行程只收一次。') }}</p>
+      <label class="field new-order__handoff">
+        {{ t('交接方式') }}
+        <input v-model="form.handoffNote" class="input" maxlength="120" />
+      </label>
+      <div class="chips">
+        <button v-for="note in HANDOFF_NOTES" :key="note" class="chip" type="button" @click="form.handoffNote = note">{{ t(note) }}</button>
+      </div>
+    </div>
+
+    <div v-if="!afterId" class="card quick-line">
       <label class="field">
         {{ t('一句話發單') }}
         <textarea
@@ -189,7 +249,11 @@ onMounted(async () => {
 
     <div class="card">
       <label class="field">{{ t('出發時間（香港時間）') }}<input v-model="form.pickupAt" class="input" type="datetime-local" required /></label>
-      <label class="field">{{ t('出發地') }}<input v-model="form.origin" class="input" maxlength="120" :placeholder="t('例如：深圳灣口岸')" required /></label>
+      <label class="field">{{ afterId ? t('接駁點（這一段的出發地）') : t('出發地') }}<input v-model="form.origin" class="input" maxlength="120" :placeholder="t('例如：深圳灣口岸')" required /></label>
+      <div v-if="afterId" class="chips new-order__add">
+        <span class="hint">{{ t('常用接駁點：') }}</span>
+        <button v-for="place in HANDOFF_PLACES" :key="place" class="chip" type="button" @click="form.origin = place">{{ t(place) }}</button>
+      </div>
       <div v-for="(_, index) in form.waypoints" :key="index" class="field">
         {{ t(`途經點 ${index + 1}`) }}
         <div class="row new-order__waypoint">
@@ -243,8 +307,15 @@ onMounted(async () => {
       </label>
     </div>
 
+    <div class="card">
+      <label class="row"><input v-model="form.selfDrive" type="checkbox" /> {{ t('這段我自己做（不放到群裡搶）') }}</label>
+      <p v-if="form.selfDrive" class="hint">
+        {{ session.profile ? t('這張單直接算你接，乘客確認頁會顯示你的車牌。之後可按「放到群裡搶」改派。') : t('請先在「我的」填寫司機資料（姓名、車牌），乘客確認頁會顯示。') }}
+      </p>
+    </div>
+
     <div class="action-bar">
-      <button class="button block large" type="submit" :disabled="busy">{{ t('發出') }}</button>
+      <button class="button block large" type="submit" :disabled="busy || (afterId !== '' && !previous)">{{ afterId ? t('發出接駁段') : t('發出') }}</button>
     </div>
   </form>
 </template>
@@ -269,6 +340,12 @@ onMounted(async () => {
 }
 .new-order__add {
   margin-bottom: var(--space-md);
+}
+.new-order__previous-label {
+  margin: 0 0 var(--space-xs);
+}
+.new-order__handoff {
+  margin: var(--space-md) 0 var(--space-sm);
 }
 .new-order__third {
   flex: 1;

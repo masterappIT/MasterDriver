@@ -47,6 +47,7 @@ npm run dev:web
 - 介面文字只寫繁體；簡體由沿用 Master Travel 的 OpenCC 對照表轉出，只有選用簡體時才下載。+86 帳號預設簡體，可在「我的」切換。
 - 只用系統字型、不依賴 Google 服務；在微信內不顯示「分享到 WhatsApp」（微信會攔截跳轉），改用複製。
 - 搶單頁在單仍是「待搶」時每 5 秒更新一次狀態，讓各群打開同一條連結都能看到「已被接走」。
+- 接駁單：單詳情按「加接駁段」打開 `/app/new?after=<上一段 id>`，帶入乘客資料，填接駁點（常用口岸一鍵填入）與交接方式。各段的 `journeyId` 指向第一段（第一段指向自己），`legIndex` 從 1 起，最多 4 段。新增段與取消段都先鎖住第一段的資料列，所以服務費只在全部段都取消時退回一次。乘客只用第一段的確認連結。
 
 ## 平台後台
 
@@ -85,7 +86,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/auth/logout` | 要 | 登出 |
 | `GET /api/me` | 要 | 目前用戶與司機資料 |
 | `GET/PUT /api/me/profile` | 要 | 司機資料（第一次搶單前要填） |
-| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字 |
+| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`afterOrderId` + `handoffNote`：加接駁段（接在行程最後一段後面，不再扣額度和服務費）；`selfDrive: true`：這段我自己做（直接算自己接，要先有司機資料） |
 | `GET /api/orders?role=dispatched\|claimed` | 要 | 我的派單／我的接單 |
 | `GET /api/orders/:id` | 要 | 單的詳情（發單者或接單司機） |
 | `PATCH /api/orders/:id/prices` | 要 | 改司機價、乘客價、是否讓乘客看到乘客價（發單者；司機價在有人接單後鎖定） |
@@ -99,8 +100,8 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET/POST /api/me/group-invites`、`PATCH/DELETE /api/me/group-invites/:id` | 要 | 我的派單群（微信群二維碼、個人微信二維碼、WhatsApp 連結；最多 5 個） |
 | `GET /api/public/group-invites/:id/qr` | — | 二維碼圖片（微信群二維碼過期後不再提供） |
 | `GET /api/me/credits` | 要 | 點數餘額、最近紀錄、目前每單服務費（是否免收） |
-| `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現） |
-| `POST /api/c/:confirmCode/confirm` | — | 乘客按確認 |
+| `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現）；接駁行程另有 `legs` 列出未取消的各段與司機 |
+| `POST /api/c/:confirmCode/confirm` | — | 乘客按確認；接駁行程一次確認全部未取消的段 |
 
 ### 公開資料（司機端與公開頁面用，不用登入）
 
@@ -125,6 +126,6 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
 | `npm run verify:admin` | 後台型別檢查與建置 |
 | `npm run verify:web` | 網頁測試（繁簡轉換）、型別檢查與建置 |
-| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
+| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。

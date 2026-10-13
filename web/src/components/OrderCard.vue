@@ -17,6 +17,9 @@ export interface OrderSummary {
   passengerConfirmedAt: string | null;
   dispatcherName: string | null;
   driver?: { name: string | null } | null;
+  selfDrive?: boolean;
+  /** 接駁: the trip this order is a leg of; legs[0].id (dispatcher only) identifies it. */
+  journey?: { legIndex: number; legCount: number; legs: { id?: string }[] } | null;
 }
 
 defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' }>();
@@ -25,7 +28,10 @@ defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' }>();
 <template>
   <RouterLink :to="`/app/orders/${order.id}`" class="card order-card">
     <div class="order-card__top">
-      <strong>{{ pickup(order.pickupAt) }}</strong>
+      <strong>
+        {{ pickup(order.pickupAt) }}
+        <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${order.journey.legIndex}／${order.journey.legCount}`) }}</span>
+      </strong>
       <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
     </div>
     <div class="order-card__route">{{ t(order.origin) }} → {{ t(order.destination) }}</div>
@@ -34,7 +40,9 @@ defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' }>();
       <template v-if="order.driverPrice">・{{ money(order.driverPrice) }}</template>
     </div>
     <div class="hint">
-      <template v-if="role === 'dispatched'">{{ order.driver?.name ? t(`司機：${order.driver.name}`) : t('等待司機搶單') }}</template>
+      <template v-if="role === 'dispatched'">
+        {{ order.selfDrive && order.status === 'ASSIGNED' ? t('自己做') : order.driver?.name ? t(`司機：${order.driver.name}`) : t('等待司機搶單') }}
+      </template>
       <template v-else>{{ t(`派單：${order.dispatcherName ?? '—'}`) }}</template>
     </div>
   </RouterLink>

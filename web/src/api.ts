@@ -67,7 +67,11 @@ const ERROR_TEXT: Record<string, string> = {
   INSUFFICIENT_CREDITS: '點數不足，請先充值',
   QR_IMAGE_INVALID: '請上傳 400 KB 以內的 PNG、JPG 或 WebP 圖片',
   GROUP_INVITE_LIMIT: '最多只能加入 5 個群',
-  GROUP_INVITE_NOT_FOUND: '找不到這個群'
+  GROUP_INVITE_NOT_FOUND: '找不到這個群',
+  NOT_LAST_LEG: '只能接在行程的最後一段後面，請重新整理',
+  JOURNEY_LEG_LIMIT: '一個行程最多 4 段',
+  LEG_BEFORE_PREVIOUS: '這一段的時間不能早於上一段',
+  HANDOFF_WITHOUT_LEG: '交接方式只用於接駁段'
 };
 
 const INVALID_PHONE = 'INVALID_PHONE';

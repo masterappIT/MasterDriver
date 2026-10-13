@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import { api, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
 import JoinGroups, { type OfferedGroup } from '../components/JoinGroups.vue';
+import JourneyLegs from '../components/JourneyLegs.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import PlateTag from '../components/PlateTag.vue';
 import ProfileForm from '../components/ProfileForm.vue';
@@ -12,6 +13,7 @@ import StatusBadge from '../components/StatusBadge.vue';
 import { copyText } from '../device';
 import { money, pickup, plates, shortTime } from '../format';
 import { t } from '../i18n';
+import type { Journey } from '../journey';
 import { toast } from '../toast';
 
 interface ClaimView {
@@ -27,6 +29,8 @@ interface ClaimView {
   vehicleType: string | null;
   driverPrice: { amount: number; currency: string } | null;
   notes: string | null;
+  handoffNote: string | null;
+  journey: Journey | null;
   dispatcherName: string | null;
   passengerConfirmedAt: string | null;
   viewer: 'dispatcher' | 'driver' | 'other';
@@ -105,7 +109,8 @@ const claimedMessage = computed(() => {
   const o = order.value;
   if (!o) return '';
   const driverPlates = plates(session.profile);
-  return [`【已接單】${pickup(o.pickupAt)} ${o.origin} → ${o.destination}`, `司機：${session.profile?.name ?? ''}`, driverPlates ? `車牌：${driverPlates}` : '']
+  const leg = o.journey ? `（接駁第 ${o.journey.legIndex} 段）` : '';
+  return [`【已接單】${pickup(o.pickupAt)} ${o.origin} → ${o.destination}${leg}`, `司機：${session.profile?.name ?? ''}`, driverPlates ? `車牌：${driverPlates}` : '']
     .filter(Boolean)
     .join('\n');
 });
@@ -139,6 +144,10 @@ onBeforeUnmount(() => clearInterval(poller));
           <span v-if="order.driverPrice" class="claim-page__price">{{ money(order.driverPrice) }}</span>
         </div>
         <div class="claim-page__time">{{ pickup(order.pickupAt) }}</div>
+        <p v-if="order.journey" class="claim-page__leg">
+          <span class="leg-tag">{{ t(`接駁 第 ${order.journey.legIndex}／${order.journey.legCount} 段`) }}</span>
+          <span v-if="order.handoffNote" class="muted">{{ t(`交接：${order.handoffNote}`) }}</span>
+        </p>
         <div class="claim-page__route">
           <div>{{ t(order.origin) }}</div>
           <div v-for="stop in order.waypoints" :key="stop" class="claim-page__stop">{{ t(`途經：${stop}`) }}</div>
@@ -152,6 +161,12 @@ onBeforeUnmount(() => clearInterval(poller));
         </div>
         <p v-if="order.notes" class="claim-page__notes">{{ t(`備註：${order.notes}`) }}</p>
         <p class="hint">{{ t(`發單：${order.dispatcherName ?? '—'}`) }}</p>
+      </section>
+
+      <section v-if="order.journey" class="card">
+        <h2>{{ t('整個行程') }}</h2>
+        <p v-if="order.viewer === 'driver'" class="hint">{{ t('其他段的司機搶到後會顯示在這裡；電話與乘客電話同時顯示，方便交接時聯絡。') }}</p>
+        <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
       </section>
 
       <section v-if="order.viewer === 'driver'" class="card">
@@ -242,6 +257,13 @@ onBeforeUnmount(() => clearInterval(poller));
 .claim-page__load {
   margin: var(--space-md) 0;
   color: var(--color-label);
+}
+.claim-page__leg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  margin: 0 0 var(--space-md);
 }
 .claim-page__notes {
   background: var(--color-background);
