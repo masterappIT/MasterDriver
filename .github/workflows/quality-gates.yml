@@ -1,9 +1,11 @@
 name: Quality gates
 
+# `main` is covered by "Deploy production", which runs these gates before it deploys.
 on:
   push:
-    branches: [main]
+    branches: [develop]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -39,3 +41,8 @@ jobs:
       - run: npm run test:api:db
       - run: npm run verify:admin
       - run: npm run verify:web
+      - name: Check deployment scripts
+        run: |
+          set -euo pipefail
+          for script in deploy/cloud-run/*.sh deploy/frontend/*.sh; do bash -n "$script"; done
+          PYTHONDONTWRITEBYTECODE=1 python3 deploy/cloud-run/test_revision_ready.py

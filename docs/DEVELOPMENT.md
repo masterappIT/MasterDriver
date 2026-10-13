@@ -25,7 +25,7 @@ npm run prisma:seed
 npm run dev:api
 ```
 
-API 在 `http://localhost:3020/api`，健康檢查為 `GET /api/health`。
+API 在 `http://localhost:3020/api`，健康檢查為 `GET /api/health`（部署用的 `/api/health/live` 只看程序、`/api/health/ready` 看資料庫，見 `docs/PRODUCTION-DEPLOYMENT.md`）。
 
 ## 本機登入
 

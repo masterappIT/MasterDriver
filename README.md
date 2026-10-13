@@ -8,7 +8,7 @@ MasterDriver 跨境師傅幫（簡稱「師傅幫」）是 MasterApp 旗下的�
 
 ## 專案狀態
 
-規劃階段。尚未開始寫程式；開工前的待拍板事項見 [docs/DECISIONS.md](docs/DECISIONS.md)。
+第一版開發中（2026-10-13）：後端、司機與乘客網頁、平台後台已有程式，並在本機驗證；尚未部署，也還沒在微信與 WhatsApp 內實測。部署檔案已準備好，雲端資源尚未建立（見 [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md)）。待拍板事項見 [docs/DECISIONS.md](docs/DECISIONS.md)。
 
 ## 設計紅線
 
@@ -54,11 +54,15 @@ MasterDriver 跨境師傅幫（簡稱「師傅幫」）是 MasterApp 旗下的�
 - [決定記錄與待拍板事項](docs/DECISIONS.md)
 - [視覺設計規範](docs/DESIGN.md)
 - [沿用 Master Travel 程式碼的規則](docs/REUSE.md)
+- [本機開發指南](docs/DEVELOPMENT.md)
+- [正式環境部署](docs/PRODUCTION-DEPLOYMENT.md)
 - [文件索引](docs/README.md)
 - [代理與開發規範](AGENTS.md)
 
 ## Git 工作方式
 
-- `main` 為主分支；遠端為 `https://github.com/masterappIT/MasterDriver.git`。
+- 遠端為 `https://github.com/masterappIT/MasterDriver.git`。分支沿用 Master Travel 的方式：
+  - `main` 是唯一的正式部署分支。雲端設定完成並啟用後，**每次推送到 `main` 都會自動部署正式環境**（先過品質閘門）。
+  - `develop` 用於開發整合，推送後只執行品質閘門，不部署。
 - 提交與推送分開進行：先提交，經明確指示後才推送。
 - 不提交 `.env`、金鑰、正式密碼或個人資料。

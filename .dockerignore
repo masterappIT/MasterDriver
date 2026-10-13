@@ -1,0 +1,16 @@
+# Keep images small and keep local files out of them: this repository is public
+# and images are built from a clean checkout in CI, but a local build must be safe too.
+.git
+.github
+.agents
+.claude
+.data
+.env
+.env.*
+!.env.example
+**/node_modules
+**/dist
+backend/generated
+docs
+*.log
+.DS_Store
