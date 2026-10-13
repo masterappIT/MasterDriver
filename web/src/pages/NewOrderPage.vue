@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { parseQuickOrder } from '@masterdriver/shared/quick-order';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, errorText } from '../api';
 import RevealSelect from '../components/RevealSelect.vue';
-import { fromLocalInput, toLocalInput } from '../format';
+import { fromLocalInput, pickup, toLocalInput } from '../format';
 import { t } from '../i18n';
 
 interface PastOrder {
@@ -45,6 +46,52 @@ const form = reactive({
 
 /** Places used before, most recent first: one tap fills them in. */
 const places = computed(() => [...new Set(past.value.flatMap((order) => [order.origin, order.destination]))].slice(0, 6));
+
+/**
+ * 一句話發單: type the order the way it is written in the group; the form below
+ * is filled in from it and stays fully editable. Nothing is sent until "發出".
+ */
+const line = ref('');
+const filledFromLine = ref<string[]>([]);
+
+function fillFromLine() {
+  const parsed = parseQuickOrder(line.value);
+  const filled: string[] = [];
+  if (parsed.pickupAt) {
+    form.pickupAt = parsed.pickupAt.slice(0, 16);
+    filled.push(`時間 ${pickup(parsed.pickupAt)}`);
+  }
+  if (parsed.origin) {
+    form.origin = parsed.origin;
+    filled.push(`出發地 ${parsed.origin}`);
+  }
+  if (parsed.destination) {
+    form.destination = parsed.destination;
+    filled.push(`目的地 ${parsed.destination}`);
+  }
+  if (parsed.passengers) {
+    form.passengers = String(parsed.passengers);
+    filled.push(`${parsed.passengers}人`);
+  }
+  if (parsed.luggage !== undefined) {
+    form.luggage = String(parsed.luggage);
+    filled.push(`${parsed.luggage}件行李`);
+  }
+  if (parsed.vehicleType) {
+    form.vehicleType = parsed.vehicleType;
+    filled.push(parsed.vehicleType);
+  }
+  if (parsed.price) {
+    form.currency = parsed.price.currency;
+    form.driverPrice = String(parsed.price.amount);
+    filled.push(`司機價 ${parsed.price.amount}`);
+  }
+  if (parsed.notes) {
+    form.notes = parsed.notes;
+    filled.push(`備註 ${parsed.notes}`);
+  }
+  filledFromLine.value = filled;
+}
 
 const margin = computed(() => {
   if (!form.driverPrice || !form.passengerPrice) return null;
@@ -93,6 +140,7 @@ async function submit() {
       passengerPrice: price(form.passengerPrice),
       showPassengerPrice: form.showPassengerPrice,
       notes: form.notes,
+      rawText: line.value.trim() || undefined,
       passengerName: form.passengerName,
       passengerContact: form.passengerContact,
       contactRevealMinutes: form.contactRevealMinutes,
@@ -122,6 +170,22 @@ onMounted(async () => {
       <button v-if="past.length" class="button secondary" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
     </div>
     <div v-if="error" class="notice error">{{ error }}</div>
+
+    <div class="card quick-line">
+      <label class="field">
+        {{ t('一句話發單') }}
+        <textarea
+          v-model="line"
+          class="textarea quick-line__input"
+          maxlength="300"
+          :placeholder="t('照群裡的寫法輸入或貼上，例如：明天15:40澳門送惠州博羅灣 直車 7座')"
+        />
+      </label>
+      <button class="button secondary block" type="button" :disabled="!line.trim()" @click="fillFromLine">{{ t('自動填入下方表格') }}</button>
+      <p v-if="filledFromLine.length" class="hint quick-line__filled">
+        {{ t(`已填入：${filledFromLine.join('、')}。請核對並補齊其餘資料。`) }}
+      </p>
+    </div>
 
     <div class="card">
       <label class="field">{{ t('出發時間（香港時間）') }}<input v-model="form.pickupAt" class="input" type="datetime-local" required /></label>
@@ -188,6 +252,12 @@ onMounted(async () => {
 <style scoped>
 .new-order {
   padding-bottom: calc(100px + var(--safe-bottom));
+}
+.quick-line__input {
+  min-height: 64px;
+}
+.quick-line__filled {
+  margin: var(--space-sm) 0 0;
 }
 .new-order__head {
   display: flex;

@@ -63,6 +63,7 @@ export class OrdersService {
               showPassengerPrice: input.showPassengerPrice,
               commissionMinor: fee > 0 ? fee : null,
               notes: input.notes,
+              rawText: input.rawText,
               passengerName: input.passengerName,
               passengerContact: input.passengerContact,
               contactRevealMinutes: preference,

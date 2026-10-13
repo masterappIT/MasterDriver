@@ -41,6 +41,10 @@ test('order input fills defaults and drops blank optional text', () => {
   assert.equal(parsed.notes, undefined);
 });
 
+test('an order still needs passengers and the passenger contact', () => {
+  assert.equal(createOrderSchema.safeParse({ pickupAt: '2026-10-15T14:30:00+08:00', origin: '澳门', destination: '惠州博罗湾' }).success, false);
+});
+
 test('order input requires a time zone on the pickup time', () => {
   const result = createOrderSchema.safeParse({
     pickupAt: '2026-10-15T14:30:00',

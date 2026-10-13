@@ -72,6 +72,8 @@ export const createOrderSchema = z.object({
   notes: optionalText(500),
   passengerName: optionalText(40),
   passengerContact: text(60),
+  /** The one-line text the order was written from, as typed. */
+  rawText: optionalText(300),
   /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */
   contactRevealMinutes: contactReveal.optional(),
 });

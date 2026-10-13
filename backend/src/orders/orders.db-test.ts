@@ -167,3 +167,10 @@ test("the dispatcher's own default applies to new orders", async () => {
   assert.equal((await ctx.orders.create(dispatcher, withoutReveal)).contactRevealMinutes, 120);
   assert.equal((await ctx.orders.create(dispatcher, { ...withoutReveal, contactRevealMinutes: 30 })).contactRevealMinutes, 30);
 });
+
+test('the one-line text the order was written from is kept with the order', async () => {
+  const dispatcher = await createDriver(ctx);
+  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, rawText: '明天15:40澳门送惠州博罗湾，直车 7座' });
+  const stored = await ctx.prisma.order.findUniqueOrThrow({ where: { id: created.id } });
+  assert.equal(stored.rawText, '明天15:40澳门送惠州博罗湾，直车 7座');
+});

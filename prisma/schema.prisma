@@ -158,6 +158,8 @@ model Order {
   /// was created; refunded if the order is cancelled. Null when no fee applied.
   commissionMinor      Int?
   notes                String?
+  /// The one-line text the order was written from (一句話發單), kept as typed.
+  rawText              String?
   passengerName        String?
   /// Visible to the dispatcher always; to the driver who claimed the order only
   /// from contactRevealMinutes before pickup (null: as soon as claimed).
