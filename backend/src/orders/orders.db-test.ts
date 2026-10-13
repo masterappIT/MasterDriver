@@ -42,6 +42,27 @@ test('claiming again as the winner is harmless', async () => {
   assert.equal((await ctx.orders.claim(created.code, driver)).result, 'WON');
 });
 
+test('the claim page counts the trips its dispatcher took and finished, not the ones they dispatched', async () => {
+  const dispatcher = await createDriver(ctx);
+  const other = await createDriver(ctx);
+  const own = await ctx.orders.create(dispatcher, sampleOrder);
+  assert.equal((await ctx.orders.getByCode(own.code)).dispatcherCompletedTrips, 0);
+
+  // A trip the dispatcher dispatched and someone else finished does not count for the dispatcher.
+  assert.equal((await ctx.orders.claim(own.code, other)).result, 'WON');
+  await ctx.orders.complete(other, own.id);
+  // A trip the dispatcher took from someone else and finished does.
+  const taken = await ctx.orders.create(other, sampleOrder);
+  assert.equal((await ctx.orders.claim(taken.code, dispatcher)).result, 'WON');
+  const claimedOnly = await ctx.orders.getByCode(own.code);
+  assert.equal(claimedOnly.dispatcherCompletedTrips, 0, 'claimed is not completed');
+  await ctx.orders.complete(dispatcher, taken.id);
+
+  const view = await ctx.orders.getByCode(own.code);
+  assert.equal(view.dispatcherCompletedTrips, 1);
+  assert.equal((await ctx.orders.claim(own.code, other)).order.dispatcherCompletedTrips, 1, 'the claim result carries it too');
+});
+
 test('a dispatcher cannot claim their own order, and a driver needs details first', async () => {
   const dispatcher = await createDriver(ctx);
   const created = await ctx.orders.create(dispatcher, sampleOrder);

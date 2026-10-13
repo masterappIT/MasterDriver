@@ -13,7 +13,7 @@ const envFile = resolve(__dirname, '../.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const features = [
-  { key: 'order.create', name: '每月發單數', kind: 'QUOTA' as const },
+  { key: 'order.create', name: '每月出單數', kind: 'QUOTA' as const },
   { key: 'team.manage', name: '團隊成員與副手', kind: 'SWITCH' as const },
   { key: 'order.directAssign', name: '直接指派、報名後挑選', kind: 'SWITCH' as const },
   { key: 'stats.export', name: '統計匯出', kind: 'SWITCH' as const },

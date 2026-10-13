@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { COUNTRY_CODES, isValidMobile, normalizePhone } from './phone';
+import { COUNTRY_CODES, formatPassengerPhone, isValidMobile, normalizePhone, splitPassengerPhone } from './phone';
 import { PLATE_TYPES, VEHICLE_OWNERSHIPS, normalizeVehiclePlates, vehiclePlateError } from './vehicle-plate';
 
 export const ORDER_STATUSES = ['OPEN', 'ASSIGNED', 'COMPLETED', 'CANCELLED'] as const;
@@ -93,7 +93,21 @@ export const createOrderSchema = z.object({
   showPassengerPrice: z.boolean().default(false),
   notes: optionalText(500),
   passengerName: optionalText(40),
-  passengerContact: text(60),
+  /**
+   * The passenger's phone with its country code, e.g. "+852 91234567". Passengers give a
+   * phone, not a WeChat ID, when an order is put out; stored as formatPassengerPhone writes it.
+   */
+  passengerContact: z
+    .string()
+    .trim()
+    .transform((value, ctx) => {
+      const parts = splitPassengerPhone(value);
+      if (!parts || !/^\+(852|853|86)\s?\d/.test(value.replace(/[\-()]/g, ''))) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'INVALID_PASSENGER_PHONE' });
+        return z.NEVER;
+      }
+      return formatPassengerPhone(parts.countryCode, parts.phone);
+    }),
   /** The one-line text the order was written from, as typed. */
   rawText: optionalText(300),
   /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */
@@ -160,7 +174,7 @@ export type CommissionUpdate = z.infer<typeof commissionUpdateSchema>;
 export const contactRevealUpdateSchema = z.object({ contactRevealMinutes: contactReveal });
 export type ContactRevealUpdate = z.infer<typeof contactRevealUpdateSchema>;
 
-/** Dispatcher defaults applied to new orders (我的 → 發單預設). */
+/** Dispatcher defaults applied to new orders (我的 → 出單預設). */
 export const preferencesUpdateSchema = z
   .object({ contactRevealMinutes: contactReveal, poolByDefault: z.boolean() })
   .partial()

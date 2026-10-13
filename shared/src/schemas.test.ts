@@ -45,6 +45,24 @@ test('an order still needs passengers and the passenger contact', () => {
   assert.equal(createOrderSchema.safeParse({ pickupAt: '2026-10-15T14:30:00+08:00', origin: '澳门', destination: '惠州博罗湾' }).success, false);
 });
 
+test('the passenger contact is a phone with its country code, stored in one format', () => {
+  const order = { pickupAt: '2026-10-15T14:30:00+08:00', origin: 'A', destination: 'B', passengers: 1 };
+  const contact = (passengerContact: string) => createOrderSchema.safeParse({ ...order, passengerContact });
+  const stored = (passengerContact: string) => {
+    const result = contact(passengerContact);
+    return result.success ? result.data.passengerContact : null;
+  };
+  assert.equal(stored('+852 9123 4567'), '+852 91234567');
+  assert.equal(stored('+852 2345-6789'), '+852 23456789', 'a Hong Kong landline is a phone too');
+  assert.equal(stored('+86 138 0013 8000'), '+86 13800138000');
+  assert.equal(stored('+853 6612 3456'), '+853 66123456');
+  for (const rejected of ['wechat: wang-test', 'wang_test', '91234567', '13800138000', '+852 9123', '+86 2345 6789', '+1 4155550172']) {
+    const result = contact(rejected);
+    assert.equal(result.success, false, rejected);
+    if (!result.success) assert.equal(result.error.issues[0].message, 'INVALID_PASSENGER_PHONE', rejected);
+  }
+});
+
 test('order input requires a time zone on the pickup time', () => {
   const result = createOrderSchema.safeParse({
     pickupAt: '2026-10-15T14:30:00',

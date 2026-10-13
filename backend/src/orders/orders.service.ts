@@ -158,8 +158,13 @@ export class OrdersService {
   async getByCode(code: string, userId?: string) {
     const order = await this.prisma.order.findUnique({ where: { code }, include: orderInclude });
     if (!order) throw this.notFound();
-    // The dispatcher's own groups, so drivers who opened the link can join them.
-    return { ...this.view(order, userId), groupInvites: await this.groupInvites.forClaimPage(order.dispatcherId) };
+    const [groupInvites, dispatcherCompletedTrips] = await Promise.all([
+      // The dispatcher's own groups, so drivers who opened the link can join them.
+      this.groupInvites.forClaimPage(order.dispatcherId),
+      // Counted like the 名片頁 figure: trips the dispatcher took and finished in the tool, never typed in.
+      this.prisma.order.count({ where: { claimedById: order.dispatcherId, status: 'COMPLETED' } }),
+    ]);
+    return { ...this.view(order, userId), groupInvites, dispatcherCompletedTrips };
   }
 
   /**

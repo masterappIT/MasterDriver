@@ -149,7 +149,7 @@ export async function createDriver(ctx: TestContext, name = '測試師傅') {
 
 /** The plan catalogue from the seed, reduced to what the tests need. */
 export async function seedPlans(ctx: TestContext, freeQuota: number) {
-  await ctx.prisma.feature.create({ data: { key: 'order.create', name: '每月發單數', kind: 'QUOTA' } });
+  await ctx.prisma.feature.create({ data: { key: 'order.create', name: '每月出單數', kind: 'QUOTA' } });
   await ctx.prisma.plan.create({ data: { key: 'free', name: 'free', rank: 0, isDefault: true } });
   await ctx.prisma.plan.create({ data: { key: 'company', name: 'company', rank: 2 } });
   await ctx.prisma.planFeature.createMany({

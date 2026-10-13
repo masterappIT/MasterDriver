@@ -22,6 +22,7 @@
       "default": "./dist/index.js"
     },
     "./quick-order": "./src/quick-order.ts",
-    "./vehicle-plate": "./src/vehicle-plate.ts"
+    "./vehicle-plate": "./src/vehicle-plate.ts",
+    "./phone": "./src/phone.ts"
   }
 }
