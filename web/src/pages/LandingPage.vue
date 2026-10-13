@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { api } from '../api';
 import BrandMark from '../components/BrandMark.vue';
+import StatusBadge from '../components/StatusBadge.vue';
 import { language, setLanguage, t } from '../i18n';
 import { usePageSeo } from '../seo';
 import { loadSite, site } from '../site';
@@ -9,6 +10,13 @@ import { loadSite, site } from '../site';
 /** The platform's public home page: what the tool is, for someone who is not signed in. */
 const settings = computed(() => site.settings);
 const legal = ref({ terms: false, privacy: false });
+
+/** A made-up order, shown the way the group text and the claim page really look. */
+const SAMPLE = {
+  heading: '【有單】10/15（四）14:30',
+  lines: ['深圳灣口岸 → 香港國際機場', '4人｜3件行李｜7座', 'HK$850'],
+  link: `${window.location.host}/o/a1b2c3`,
+};
 
 const STEPS = [
   { title: '發單，拿到一條連結', text: '照平常在群裡的寫法輸入一句話，時間、路線、座位、價格自動填好。' },
@@ -57,6 +65,36 @@ onMounted(async () => {
       <p class="landing__lead">{{ t('跨境司機在微信群和 WhatsApp 群裡派單、搶單、請乘客確認的工具。不用換群，不用下載 App。') }}</p>
       <RouterLink class="button block large" to="/login">{{ t('開始使用') }}</RouterLink>
       <p class="hint landing__free">{{ t('用手機號碼登入，目前免費。') }}</p>
+    </section>
+
+    <section class="landing__section">
+      <h2>{{ t('實際長這樣') }}</h2>
+      <p class="muted">{{ t('發單後拿到這段文字，貼到群裡：') }}</p>
+      <div class="landing__bubble">
+        <strong>{{ t(SAMPLE.heading) }}</strong>
+        <span v-for="line in SAMPLE.lines" :key="line">{{ t(line) }}</span>
+        <span>{{ t('搶單：') }}<span class="landing__link">{{ SAMPLE.link }}</span></span>
+      </div>
+      <p class="muted">{{ t('司機點開連結，看到的是：') }}</p>
+      <div class="card" aria-hidden="true">
+        <div class="landing__sample-top">
+          <StatusBadge status="OPEN" />
+          <span class="landing__sample-price">HK$850</span>
+        </div>
+        <div class="landing__sample-time">10/15（四）14:30</div>
+        <div class="landing__sample-route">
+          <div>{{ t('深圳灣口岸') }}</div>
+          <div class="landing__sample-arrow">↓</div>
+          <div>{{ t('香港國際機場') }}</div>
+        </div>
+        <div class="row landing__sample-load">
+          <span>{{ t('4 人') }}</span>
+          <span>{{ t('3 件行李') }}</span>
+          <span>{{ t('7座') }}</span>
+        </div>
+        <span class="button block large landing__sample-button">{{ t('立即搶單') }}</span>
+      </div>
+      <p class="hint">{{ t('以上是示範，不是真實的單。') }}</p>
     </section>
 
     <section class="landing__section">
@@ -147,6 +185,50 @@ onMounted(async () => {
 }
 .landing__section {
   margin-top: var(--space-xl);
+}
+.landing__bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 320px;
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  border-radius: var(--radius-input);
+  border-top-left-radius: var(--space-xs);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  word-break: break-all;
+}
+.landing__link {
+  color: var(--color-primary);
+}
+.landing__sample-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.landing__sample-price {
+  font-size: 24px;
+  font-weight: 700;
+}
+.landing__sample-time {
+  font-size: 22px;
+  font-weight: 700;
+  margin: var(--space-md) 0;
+}
+.landing__sample-route {
+  font-size: 18px;
+  font-weight: 600;
+}
+.landing__sample-arrow {
+  color: var(--color-text-muted);
+}
+.landing__sample-load {
+  margin: var(--space-md) 0;
+  color: var(--color-label);
+}
+.landing__sample-button {
+  cursor: default;
 }
 .landing__steps {
   list-style: none;
