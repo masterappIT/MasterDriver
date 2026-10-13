@@ -71,6 +71,14 @@ flowchart TB
 
 瀏覽器只連 `web` 或 `admin` 的網域，API 經同一網域的 `/api` 轉發，所以登入 cookie 是同站的，不需要 CORS。
 
+### 快取
+
+發布後用戶不用自己清微信快取：
+
+- `index.html` 與所有頁面路徑 `no-store`；`/assets/` 的檔名帶內容雜湊，永久快取（`deploy/frontend/web.conf`、`admin.conf`）。下次打開或重新整理就是新版。
+- 每個映像檔只有自己那一版的檔案，發布時還開著的頁面再切到沒載入過的頁面會找不到舊檔。網頁與後台遇到這種載入失敗會自動整頁重新載入到該頁一次（`web/src/stale-build.ts`、`admin/src/stale-build.ts`），30 秒內不重複，避免真的故障時不停重整。
+- API 回應預設 `Cache-Control: no-store`（`backend/src/common/no-store.ts`），搶單頁輪詢的狀態不會被瀏覽器重用；Logo、名片頁照片、派單群二維碼、客服檔案各自設定較長的快取，會蓋過預設值。
+
 ## 發布流程
 
 `.github/workflows/deploy-production.yml`，推送到 `main` 或手動執行時觸發：
