@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { api, errorText } from '../api';
 import { BOOKING_STATUS, type DriverBooking } from '../booking';
 import { pickup, shortTime } from '../format';
+import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 
 /** Booking requests passengers sent from the driver's 名片頁, newest first. */
@@ -20,8 +21,7 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <RouterLink to="/app/me" class="hint">← {{ t('我的') }}</RouterLink>
-    <h1>{{ t('預約') }}</h1>
+    <PageBack :title="t('預約')" fallback="/app/me" />
     <div v-if="error" class="notice error">{{ error }}</div>
     <p v-if="bookings && bookings.length === 0" class="muted">
       {{ t('還沒有預約。把名片頁的連結放到朋友圈、小紅書或傳給熟客，乘客就可以在上面預約。') }}
@@ -31,7 +31,7 @@ onMounted(async () => {
         <strong>{{ pickup(booking.pickupAt) }}</strong>
         <span class="bookings__status" :class="{ 'bookings__status--new': booking.unread }">{{ t(BOOKING_STATUS[booking.status].driver) }}</span>
       </div>
-      <div>{{ t(booking.origin) }} → {{ t(booking.destination) }}</div>
+      <div>{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
       <div class="hint">{{ t(`${booking.passengers}人・${booking.luggage}件行李・${shortTime(booking.createdAt)} 送出`) }}</div>
     </RouterLink>
   </div>

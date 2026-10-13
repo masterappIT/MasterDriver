@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { COUNTRY_CODES, type CountryCode, formatPassengerPhone, isValidPassengerPhone, splitPassengerPhone } from '@masterdriver/shared/phone';
 import { parseQuickOrder } from '@masterdriver/shared/quick-order';
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, errorText, session } from '../api';
-import RevealSelect from '../components/RevealSelect.vue';
+import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
 import { fromLocalInput, pickup, toLocalInput } from '../format';
+import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { PLATE_NAMES, type PlateRegion } from '../journey';
 
@@ -53,6 +55,28 @@ const past = ref<PastOrder[]>([]);
 const busy = ref(false);
 const error = ref('');
 const inAnHour = new Date(Date.now() + 60 * 60 * 1000);
+/** The dispatcher's own country code is the likeliest one for their passengers. */
+function defaultCountry(): CountryCode {
+  const own = session.user?.countryCode;
+  return (COUNTRY_CODES as readonly string[]).includes(own ?? '') ? (own as CountryCode) : '+852';
+}
+
+/** A contact brought over from an earlier leg or a booking that is not a phone, shown so it can be retyped. */
+const carriedContact = ref('');
+
+/** Fills the phone fields from a contact written earlier, or keeps it aside when it is not a phone. */
+function carryContact(raw: string | null | undefined) {
+  const parts = raw ? splitPassengerPhone(raw) : null;
+  if (parts) {
+    form.passengerCountry = parts.countryCode;
+    form.passengerPhone = parts.phone;
+    carriedContact.value = '';
+  } else {
+    form.passengerPhone = '';
+    carriedContact.value = raw ?? '';
+  }
+}
+
 const form = reactive({
   pickupAt: toLocalInput(inAnHour),
   origin: '',
@@ -67,7 +91,9 @@ const form = reactive({
   showPassengerPrice: false,
   notes: '',
   passengerName: '',
-  passengerContact: '',
+  /** The passenger's phone: a country code and the number; passengers do not give a WeChat ID here. */
+  passengerCountry: defaultCountry(),
+  passengerPhone: '',
   contactRevealMinutes: 60 as number | null,
   /** 直達 (false) or 接駁 (true): with 接駁 this order ends at the 接駁位置. */
   transfer: false,
@@ -81,8 +107,8 @@ const form = reactive({
 const places = computed(() => [...new Set(past.value.flatMap((order) => [order.origin, order.destination]))].slice(0, 6));
 
 /**
- * 一句話發單: type the order the way it is written in the group; the form below
- * is filled in from it and stays fully editable. Nothing is sent until "發出".
+ * 一句話出單: type the order the way it is written in the group; the form below
+ * is filled in from it and stays fully editable. Nothing is sent until "出單".
  */
 const line = ref('');
 const filledFromLine = ref<string[]>([]);
@@ -159,6 +185,12 @@ const price = (value: string) => (value ? { amount: Number(value), currency: for
 
 async function submit() {
   error.value = '';
+  // Checked here first so the driver hears about a wrong number before anything is sent; the API checks it again.
+  if (!isValidPassengerPhone(form.passengerCountry, form.passengerPhone)) {
+    error.value = t(form.passengerCountry === '+86' ? '乘客電話請填 11 位內地手機號碼' : '乘客電話請填 8 位數字');
+    document.getElementById('passenger-phone')?.focus();
+    return;
+  }
   busy.value = true;
   try {
     const created = await api<{ id: string }>('POST', '/orders', {
@@ -175,7 +207,7 @@ async function submit() {
       notes: form.notes,
       rawText: line.value.trim() || undefined,
       passengerName: form.passengerName,
-      passengerContact: form.passengerContact,
+      passengerContact: formatPassengerPhone(form.passengerCountry, form.passengerPhone),
       contactRevealMinutes: form.contactRevealMinutes,
       afterOrderId: afterId || undefined,
       bookingId: fromBooking.value ? bookingId : undefined,
@@ -184,7 +216,8 @@ async function submit() {
       selfDrive: form.selfDrive,
       inPool: !form.selfDrive && form.inPool,
     });
-    await router.replace(`/app/orders/${created.id}?sent=1`);
+    // Straight to the texts to paste: getting the order into the groups is the point of dispatching.
+    await router.replace(`/app/orders/${created.id}/share`);
   } catch (e) {
     error.value = errorText(e);
   } finally {
@@ -203,10 +236,10 @@ async function loadPrevious() {
       passengers: String(leg.passengers),
       luggage: String(leg.luggage),
       passengerName: leg.passengerName ?? '',
-      passengerContact: leg.passengerContact ?? '',
       contactRevealMinutes: leg.contactRevealMinutes ?? null,
       currency: leg.driverPrice?.currency ?? form.currency,
     });
+    carryContact(leg.passengerContact);
   } catch (e) {
     error.value = errorText(e);
   }
@@ -233,19 +266,31 @@ async function loadBooking() {
       passengers: String(booking.passengers),
       luggage: String(booking.luggage),
       passengerName: booking.passengerName ?? '',
-      passengerContact: booking.passengerContact,
       notes: booking.notes ?? '',
       ...(booking.quote
         ? { currency: booking.quote.currency, passengerPrice: String(booking.quote.amount), showPassengerPrice: true }
         : {}),
     });
+    carryContact(booking.passengerContact);
     fromBooking.value = true;
   } catch (e) {
     error.value = errorText(e);
   }
 }
 
+/** What the folded 更多設定 currently says, so nothing is hidden by surprise. */
+const moreSummary = computed(() =>
+  [
+    `乘客電話：${revealLabel(form.contactRevealMinutes)}`,
+    form.selfDrive ? '這段我自己做' : form.inPool ? '放進接單池' : '只給拿到連結的人',
+  ].join(' · '),
+);
+
+/** From 首頁「貼群文字」: start with the cursor in the one-line box, ready to paste. */
+const lineInput = ref<HTMLTextAreaElement | null>(null);
+
 onMounted(async () => {
+  if (route.query.paste === '1') lineInput.value?.focus();
   const [orders, preferences] = await Promise.all([
     api<PastOrder[]>('GET', '/orders?role=dispatched').catch(() => []),
     api<{ contactRevealMinutes: number | null; poolByDefault: boolean }>('GET', '/me/preferences').catch(() => null),
@@ -262,27 +307,27 @@ onMounted(async () => {
 
 <template>
   <form class="page new-order" @submit.prevent="submit">
-    <div class="new-order__head">
-      <h1>{{ afterId ? t(`加接駁段（第 ${legNumber} 段）`) : t('發單') }}</h1>
-      <button v-if="past.length && !afterId" class="button secondary" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
-    </div>
+    <PageBack :title="afterId ? t(`加接駁段（第 ${legNumber} 段）`) : t('出單')" :fallback="afterId ? `/app/orders/${afterId}` : '/app'">
+      <button v-if="past.length && !afterId" class="chip new-order__copy" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
+    </PageBack>
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <div v-if="previous" class="card">
       <p class="hint new-order__previous-label">{{ t(`接在第 ${legNumber - 1} 段後面`) }}</p>
       <strong>{{ pickup(previous.pickupAt) }}</strong>
-      <div>{{ t(previous.origin) }} → {{ t(previous.destination) }}</div>
+      <div>{{ t(`${previous.origin} 至 ${previous.destination}`) }}</div>
       <p class="hint">{{ t('同一位乘客，已帶入接駁位置、人數、行李和乘客資料。這一段另外貼到群裡搶，平台服務費整個行程只收一次。') }}</p>
     </div>
 
     <div v-if="fromBooking" class="notice">
-      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後發出；想自己做就勾最下面的「這段我自己做」，否則填司機價派到群裡。') }}
+      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後出單；想自己做就勾最下面的「這段我自己做」，否則填司機價派到群裡。') }}
     </div>
 
     <div v-if="!afterId && !fromBooking" class="card quick-line">
       <label class="field">
-        {{ t('一句話發單') }}
+        {{ t('一句話出單') }}
         <textarea
+          ref="lineInput"
           v-model="line"
           class="textarea quick-line__input"
           maxlength="300"
@@ -301,7 +346,7 @@ onMounted(async () => {
         <label class="row"><input v-model="form.transfer" type="radio" name="mode" :value="true" /> {{ t('接駁（中途換車）') }}</label>
       </div>
       <p v-if="form.transfer && !afterId" class="hint new-order__add">
-        {{ t('這張單是第 1 段，目的地填接駁位置。發出後按「加接駁段」發下一段。乘客自行過關不算接駁。') }}
+        {{ t('這張單是第 1 段，目的地填接駁位置。出單後按「加接駁段」出下一段。乘客自行過關不算接駁。') }}
       </p>
       <label class="field">{{ t('出發時間（香港時間）') }}<input v-model="form.pickupAt" class="input" type="datetime-local" required /></label>
       <label class="field">
@@ -318,7 +363,7 @@ onMounted(async () => {
           <button class="button secondary" type="button" @click="form.waypoints.splice(index, 1)">{{ t('刪除') }}</button>
         </div>
       </div>
-      <button v-if="form.waypoints.length < 5" class="chip new-order__add" type="button" @click="form.waypoints.push('')">＋ {{ t('加途經點') }}</button>
+      <button v-if="form.waypoints.length < 5" class="chip new-order__add" type="button" @click="form.waypoints.push('')">{{ t('加途經點') }}</button>
       <label class="field">
         {{ form.transfer && !afterId ? t('接駁位置（這一段的目的地）') : t('目的地') }}
         <input v-model="form.destination" class="input" maxlength="120" :placeholder="form.transfer && !afterId ? t('自己輸入換車的地點') : t('例如：香港國際機場')" required />
@@ -366,37 +411,88 @@ onMounted(async () => {
     </div>
 
     <div class="card">
-      <h2>{{ t('乘客') }} <span class="hint">🔒 {{ t('只有搶到單的司機，在你設定的時間後才看得到') }}</span></h2>
+      <h2>{{ t('乘客') }} <span class="hint">{{ t('只有搶到單的司機，在你設定的時間後才看得到') }}</span></h2>
       <label class="field">{{ t('乘客稱呼（選填）') }}<input v-model="form.passengerName" class="input" maxlength="40" /></label>
-      <label class="field">{{ t('乘客電話或微信') }}<input v-model="form.passengerContact" class="input" maxlength="60" required /></label>
+      <div class="field">
+        <label for="passenger-phone">{{ t('乘客電話') }}</label>
+        <div class="new-order__phone">
+          <select v-model="form.passengerCountry" class="select" :aria-label="t('區號')">
+            <option v-for="code in COUNTRY_CODES" :key="code" :value="code">{{ code }}</option>
+          </select>
+          <input
+            id="passenger-phone"
+            v-model="form.passengerPhone"
+            class="input"
+            type="tel"
+            inputmode="tel"
+            autocomplete="off"
+            maxlength="20"
+            :placeholder="form.passengerCountry === '+86' ? t('11 位手機號碼') : t('8 位數字')"
+            required
+          />
+        </div>
+        <span v-if="carriedContact" class="hint new-order__carried">{{ t(`原本留的聯絡方式是「${carriedContact}」，不是電話號碼，請向乘客要電話後填上。`) }}</span>
+      </div>
+    </div>
+
+    <!-- Settings most orders leave at the driver's defaults; folded so the form shows only what must be filled. -->
+    <details class="card new-order__more" :open="fromBooking || form.selfDrive">
+      <summary>
+        <span>{{ t('更多設定') }}</span>
+        <span class="hint">{{ t(moreSummary) }}</span>
+      </summary>
       <label class="field">
         {{ t('接單司機何時看到乘客電話') }}
         <RevealSelect v-model="form.contactRevealMinutes" />
         <span class="hint">{{ t('在這之前，司機只能聯絡你。預設值可在「我的」修改。') }}</span>
       </label>
-    </div>
-
-    <div class="card">
       <label class="row"><input v-model="form.selfDrive" type="checkbox" /> {{ t('這段我自己做（不放到群裡搶）') }}</label>
       <p v-if="form.selfDrive" class="hint">
         {{ session.profile ? t('這張單直接算你接，乘客確認頁會顯示你的車牌。之後可按「放到群裡搶」改派。') : t('請先在「我的」填寫司機資料（姓名、車牌），乘客確認頁會顯示。') }}
       </p>
-    </div>
-
-    <div v-if="!form.selfDrive" class="card">
-      <label class="row"><input v-model="form.inPool" type="checkbox" /> {{ t('同時放到接單池') }}</label>
-      <p class="hint">
-        {{ t('不勾：只有拿到連結的人看得到這張單。勾選：所有登入的司機都能在「接單池」看到並搶，乘客資料仍然只有搶到的司機看得到。預設值可在「我的」修改。') }}
-      </p>
-    </div>
+      <template v-if="!form.selfDrive">
+        <label class="row new-order__pool"><input v-model="form.inPool" type="checkbox" /> {{ t('同時放到接單池') }}</label>
+        <p class="hint">
+          {{ t('不勾：只有拿到連結的人看得到這張單。勾選：所有登入的司機都能在「接單池」看到並搶，乘客資料仍然只有搶到的司機看得到。預設值可在「我的」修改。') }}
+        </p>
+      </template>
+    </details>
 
     <div class="action-bar">
-      <button class="button block large" type="submit" :disabled="busy || (afterId !== '' && !previous)">{{ afterId ? t('發出接駁段') : t('發出') }}</button>
+      <button class="button block large" type="submit" :disabled="busy || (afterId !== '' && !previous)">{{ afterId ? t('出單（接駁段）') : t('出單') }}</button>
     </div>
   </form>
 </template>
 
 <style scoped>
+.new-order__phone {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: var(--space-sm);
+}
+.new-order__carried {
+  color: var(--color-gold-ink);
+}
+.new-order__more summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+.new-order__more summary::-webkit-details-marker {
+  display: none;
+}
+.new-order__more[open] summary {
+  margin-bottom: var(--space-md);
+}
+.new-order__more summary .hint {
+  font-weight: 400;
+}
+.new-order__pool {
+  margin-top: var(--space-md);
+}
 .new-order {
   padding-bottom: calc(100px + var(--safe-bottom));
 }
@@ -406,10 +502,8 @@ onMounted(async () => {
 .quick-line__filled {
   margin: var(--space-sm) 0 0;
 }
-.new-order__head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+.new-order__copy {
+  white-space: nowrap;
 }
 .new-order__waypoint {
   flex-wrap: nowrap;

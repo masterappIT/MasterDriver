@@ -35,7 +35,7 @@ async function save(body: { enabled?: boolean; fee?: number }, done: string) {
 function toggle() {
   if (!status.value) return;
   const next = !status.value.enabled;
-  if (next && !confirm(`開啟後，沒有免收資格的派單者每發一張單都會扣 ${money(status.value.fee)} 點數；點數不足就不能發單。確定開啟？`)) return;
+  if (next && !confirm(`開啟後，沒有免收資格的出單者每出一張單都會扣 ${money(status.value.fee)} 點數；點數不足就不能出單。確定開啟？`)) return;
   return save({ enabled: next }, next ? '已開啟平台服務費' : '已關閉平台服務費');
 }
 
@@ -51,8 +51,8 @@ onMounted(() => load().catch((e) => (error.value = (e as Error).message)));
       目前：<strong>{{ status.enabled ? '開啟' : '關閉' }}</strong>，每單 {{ money(status.fee) }}
     </p>
     <ul class="muted">
-      <li>只向派單者收，接單司機永遠不收。</li>
-      <li>發單時從點數扣，單被取消會全額退回；點數不足就不能發單。</li>
+      <li>只向出單者收，接單司機永遠不收。</li>
+      <li>出單時從點數扣，單被取消會全額退回；點數不足就不能出單。</li>
       <li>團隊、公司方案與全站免費期期間免收。</li>
     </ul>
     <form class="row" @submit.prevent="save({ fee: Number(fee) }, '金額已更新')">

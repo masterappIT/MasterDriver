@@ -131,7 +131,7 @@ onMounted(load);
 </script>
 
 <template>
-  <RouterLink to="/users" class="hint">← 用戶</RouterLink>
+  <RouterLink to="/users" class="hint">返回用戶</RouterLink>
   <div v-if="error" class="notice error">{{ error }}</div>
   <div v-if="message" class="notice">{{ message }}</div>
   <template v-if="user">
@@ -153,7 +153,7 @@ onMounted(load);
         </div>
       </div>
       <div class="card">
-        <div class="muted">每月發單額度</div>
+        <div class="muted">每月出單額度</div>
         <div class="stat">{{ quotaText(user.entitlements.orderCreate) }}</div>
         <div class="hint">來源：{{ SOURCE[user.entitlements.orderCreate.source] }}</div>
       </div>

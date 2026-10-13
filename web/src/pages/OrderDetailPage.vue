@@ -2,12 +2,16 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
+import BottomSheet from '../components/BottomSheet.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
+import RoutePoints from '../components/RoutePoints.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import { money, pickup, shortTime, type Money } from '../format';
+import PageBack from '../components/PageBack.vue';
+import AppIcon from '../components/AppIcon.vue';
 import { t } from '../i18n';
 import { MAX_JOURNEY_LEGS, legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
@@ -63,7 +67,6 @@ const id = computed(() => String(route.params.id));
 const order = ref<Detail | null>(null);
 const error = ref('');
 const busy = ref(false);
-const justSent = route.query.sent === '1';
 const editingPrices = ref(false);
 const prices = reactive({ currency: 'HKD', driver: '', passenger: '' });
 
@@ -96,8 +99,31 @@ async function load() {
   }
 }
 
-async function act(path: string, done: string, confirmText?: string) {
-  if (confirmText && !confirm(t(confirmText))) return;
+/** An action waiting for the driver to confirm it in the bottom sheet, with what will follow. */
+const pending = ref<{ path: string; done: string; question: string; note: string | null; label: string } | null>(null);
+
+/** What cancelling sets off, said before the driver confirms it. */
+const cancelNote = computed(() => {
+  const o = order.value;
+  if (!o) return null;
+  const lines = [
+    o.serviceFee ? (o.journey ? '平台服務費整個接駁行程只收一次，全部段都取消才退回。' : '平台服務費會退回。') : null,
+    o.status === 'ASSIGNED' && !selfDriven.value ? '已接單的司機打開連結會看到已取消，請另外通知他。' : null,
+  ].filter(Boolean);
+  return lines.length ? lines.join('') : null;
+});
+
+function ask(path: string, done: string, question: string, label: string, note: string | null = null) {
+  pending.value = { path, done, question, note, label };
+}
+
+async function confirmPending() {
+  const action = pending.value;
+  pending.value = null;
+  if (action) await act(action.path, action.done);
+}
+
+async function act(path: string, done: string) {
   busy.value = true;
   try {
     order.value = await api<Detail>('POST', `/orders/${id.value}/${path}`);
@@ -189,14 +215,16 @@ watch(id, () => {
 
 <template>
   <div class="page">
-    <RouterLink to="/app/orders" class="hint">← {{ t('我的單') }}</RouterLink>
+    <PageBack :title="t('單詳情')" fallback="/app/orders" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="order">
-      <div v-if="justSent && isDispatcher" class="notice">
-        ✅ {{ t('單已發出。複製下面的文字貼到群裡，司機點連結就能搶。') }}
-        <template v-if="order.journey?.legCount === 1">{{ t('這是接駁單的第 1 段，接著按「加接駁段」發下一段。') }}</template>
-      </div>
+      <!-- Where the order stands: 已出單, 有人接, 乘客確認. -->
+      <ol v-if="order.status !== 'CANCELLED'" class="detail__steps" :aria-label="t('進度')">
+        <li class="done">{{ t('已出單') }}</li>
+        <li :class="{ done: order.claimedAt }">{{ order.driver?.name ? t(`${order.driver.name} 接單`) : t('有人接') }}</li>
+        <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
+      </ol>
 
       <section class="card">
         <div class="detail__top">
@@ -206,7 +234,7 @@ watch(id, () => {
           </strong>
           <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
         </div>
-        <div class="detail__route">{{ t(order.origin) }} → {{ t(order.destination) }}</div>
+        <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" /></div>
         <p v-if="order.journey" class="muted">{{ t(`接駁位置：${order.journey.transferPlaces.join('、')}`) }}</p>
         <p v-if="order.requiredPlates.length" class="muted">{{ t(plateRequirement(order.requiredPlates)) }}</p>
         <p v-if="order.waypoints.length" class="muted">{{ t(`途經：${order.waypoints.join('、')}`) }}</p>
@@ -224,21 +252,24 @@ watch(id, () => {
       <section v-if="order.journey" class="card">
         <h2>{{ t(`接駁行程（${order.journey.legCount} 段）`) }}</h2>
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
-        <RouterLink v-if="canAddLeg" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`">＋ {{ t('加接駁段') }}</RouterLink>
+        <RouterLink v-if="canAddLeg" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
       </section>
       <section v-else-if="canAddLeg" class="card">
-        <p class="hint detail__leg-hint">{{ t('乘客中途要換車？加一段接駁，另外派給下一段的司機。乘客自行過關不算接駁，下一程請另外發單。') }}</p>
-        <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`">＋ {{ t('加接駁段') }}</RouterLink>
+        <p class="hint detail__leg-hint">{{ t('乘客中途要換車？加一段接駁，另外派給下一段的司機。乘客自行過關不算接駁，下一程請另外出單。') }}</p>
+        <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
       </section>
 
       <!-- Dispatcher: texts to paste into groups and to the passenger -->
       <section v-if="isDispatcher && order.share && live" class="card">
         <template v-if="!selfDriven">
-          <h2>{{ t('貼到群裡') }}</h2>
+          <h2>{{ t('要貼的文字') }}</h2>
           <pre class="detail__share">{{ t(order.share.dispatch.wechat) }}</pre>
-          <button class="button block large" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">{{ t('複製，貼到微信群') }}</button>
-          <a v-if="!inWeChat" class="button secondary block detail__gap" :href="whatsappLink(t(order.share.dispatch.whatsapp))" target="_blank" rel="noopener">
-            {{ t('分享到 WhatsApp') }}
+          <div class="detail__pair detail__pair--stack">
+            <button class="button" type="button" @click="copy(order.share.dispatch.wechat, '已複製，貼到微信群吧')">{{ t('複製到微信群') }}</button>
+            <button class="button" type="button" @click="copy(order.share.dispatch.whatsapp, '已複製，貼到 WhatsApp 群吧')">{{ t('複製到 WhatsApp') }}</button>
+          </div>
+          <a v-if="!inWeChat" class="detail__wa" :href="whatsappLink(t(order.share.dispatch.whatsapp))" target="_blank" rel="noopener">
+            {{ t('直接用 WhatsApp 傳送') }}
           </a>
           <div v-if="order.status === 'OPEN'" class="detail__gap">
             <p class="hint">
@@ -312,7 +343,7 @@ watch(id, () => {
       <section class="card">
         <h2>{{ t('乘客') }}</h2>
         <p v-if="order.passengerContact">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}：<strong>{{ order.passengerContact }}</strong></p>
-        <p v-else class="notice">{{ t(`乘客電話將於 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡派單者。`) }}</p>
+        <p v-else class="notice">{{ t(`乘客電話將於 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡出單者。`) }}</p>
         <div v-if="isDispatcher" class="detail__reveal">
           <template v-if="!editingReveal">
             <span class="hint">{{ t(`接單司機看到乘客電話：${revealLabel(order.contactRevealMinutes ?? null)}`) }}</span>
@@ -336,28 +367,90 @@ watch(id, () => {
       </section>
 
       <section v-if="live" class="card row">
-        <button v-if="order.status === 'ASSIGNED'" class="button" type="button" :disabled="busy" @click="act('complete', '已完成', '確定這趟行程已完成？')">{{ t('標記完成') }}</button>
+        <button v-if="order.status === 'ASSIGNED'" class="button" type="button" :disabled="busy" @click="ask('complete', '已完成', '確定這趟行程已完成？', '標記完成')">{{ t('標記完成') }}</button>
         <template v-if="isDispatcher">
-          <button v-if="order.status === 'ASSIGNED'" class="button secondary" type="button" :disabled="busy" @click="act('reopen', '已重新開放搶單', selfDriven ? '把這段放到群裡讓司機搶？' : '收回這張單，重新讓司機搶？')">
+          <button
+            v-if="order.status === 'ASSIGNED'"
+            class="button secondary"
+            type="button"
+            :disabled="busy"
+            @click="
+              selfDriven
+                ? ask('reopen', '已重新開放搶單', '把這段放到群裡讓司機搶？', '放到群裡搶')
+                : ask('reopen', '已重新開放搶單', '收回這張單，重新讓司機搶？', '改派', '原本接單的司機打開連結會看到單已改派，請另外通知他。')
+            "
+          >
             {{ selfDriven ? t('放到群裡搶') : t('改派') }}
           </button>
-          <button class="button secondary" type="button" :disabled="busy" @click="act('cancel', '已取消', cancelQuestion)">{{ order.journey ? t('取消這一段') : t('取消這張單') }}</button>
+          <button class="button secondary" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? '取消這一段' : '取消這張單', cancelNote)">
+            {{ order.journey ? t('取消這一段') : t('取消這張單') }}
+          </button>
         </template>
       </section>
+
+      <BottomSheet v-if="pending" :title="t(pending.label)" @close="pending = null">
+        <p class="detail__question">{{ t(pending.question) }}</p>
+        <p v-if="pending.note" class="hint">{{ t(pending.note) }}</p>
+        <div class="detail__pair">
+          <button class="button secondary" type="button" @click="pending = null">{{ t('先不要') }}</button>
+          <button class="button" type="button" :disabled="busy" @click="confirmPending">{{ t(pending.label) }}</button>
+        </div>
+      </BottomSheet>
     </template>
   </div>
 </template>
 
 <style scoped>
+.detail__steps {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-xs);
+  margin: var(--space-md) 0 var(--space-lg);
+  padding: 0;
+  text-align: center;
+  font-size: var(--font-caption);
+  color: var(--color-text-muted);
+}
+.detail__steps li {
+  padding-top: var(--space-sm);
+  border-top: 3px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+.detail__steps li.done {
+  border-top-color: var(--color-teal);
+  color: var(--color-text);
+  font-weight: 700;
+}
+.detail__pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+/* The two copy buttons get a full row each so "複製到 WhatsApp" never wraps. */
+.detail__pair--stack {
+  grid-template-columns: 1fr;
+}
+.detail__wa {
+  display: block;
+  margin-top: var(--space-md);
+  text-align: center;
+  font-size: var(--font-label);
+}
+.detail__question {
+  margin: 0 0 var(--space-sm);
+  font-weight: 600;
+}
+.detail__question + .hint {
+  margin: 0 0 var(--space-lg);
+}
 .detail__top {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 .detail__route {
-  font-size: 18px;
-  font-weight: 600;
-  margin: var(--space-xs) 0;
+  margin: var(--space-md) 0;
 }
 .detail__share {
   white-space: pre-wrap;

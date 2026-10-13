@@ -27,7 +27,7 @@ async function copyLink(url: string) {
 <template>
   <section v-if="groups.length" class="card">
     <button class="button secondary block" type="button" @click="open = !open">
-      {{ t(`加入 ${dispatcherName ?? '派單者'} 的派單群`) }} {{ open ? '▲' : '▼' }}
+      {{ t(`加入 ${dispatcherName ?? '出單者'} 的派單群`) }}
     </button>
     <div v-if="open" class="join-groups">
       <div v-for="group in groups" :key="group.id" class="join-groups__item">

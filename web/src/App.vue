@@ -24,10 +24,11 @@ onMounted(async () => {
 
 <style scoped>
 .announcement {
-  background: #fff6e0;
-  color: var(--color-label);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
   padding: var(--space-sm) var(--space-lg);
   font-size: var(--font-label);
+  text-align: center;
 }
 .toast {
   position: fixed;
@@ -35,7 +36,7 @@ onMounted(async () => {
   top: 40%;
   transform: translateX(-50%);
   max-width: 80vw;
-  background: rgba(23, 35, 61, 0.88);
+  background: rgba(20, 32, 51, 0.9);
   color: var(--color-on-primary);
   padding: var(--space-md) var(--space-lg);
   border-radius: var(--radius-input);

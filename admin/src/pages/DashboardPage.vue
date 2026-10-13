@@ -82,7 +82,7 @@ onMounted(load);
         <small>近 7 天新增 {{ data.users.newThisWeek }}</small>
       </article>
       <RouterLink to="/orders" class="dashboard__card dashboard__card--link">
-        <span>今日發單</span>
+        <span>今日出單</span>
         <strong>{{ data.orders.today }}</strong>
         <small>近 7 天 {{ data.orders.thisWeek }} 張・查看訂單</small>
       </RouterLink>

@@ -3,16 +3,22 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
-import BrandMark from '../components/BrandMark.vue';
+import AppIcon from '../components/AppIcon.vue';
+import BrandHeader from '../components/BrandHeader.vue';
+import InlineStatus from '../components/InlineStatus.vue';
 import JoinGroups, { type OfferedGroup } from '../components/JoinGroups.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import PlateTag from '../components/PlateTag.vue';
 import ProfileForm from '../components/ProfileForm.vue';
+import RoutePoints from '../components/RoutePoints.vue';
+import SectionHeading from '../components/SectionHeading.vue';
+import { timeUntil } from '../relative-time';
 import SignInForm from '../components/SignInForm.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { copyText } from '../device';
 import { money, pickup, plates, shortTime } from '../format';
+import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
@@ -40,6 +46,8 @@ interface ClaimView {
   contactRevealAt?: string | null;
   dispatcherPhone?: string;
   groupInvites: OfferedGroup[];
+  /** Trips the dispatcher took and finished in the tool, counted like the 名片頁 figure. */
+  dispatcherCompletedTrips?: number;
 }
 
 const POLL_MS = 5000;
@@ -53,6 +61,17 @@ const sheet = ref<'signIn' | 'profile' | null>(null);
 let poller: ReturnType<typeof setInterval> | undefined;
 
 const canClaim = computed(() => order.value?.status === 'OPEN' && order.value.viewer === 'other');
+
+/** Ticks every half minute so "2 小時後" stays right while the page is open. */
+const now = ref(new Date());
+let clock: ReturnType<typeof setInterval> | undefined;
+const untilPickup = computed(() => (order.value ? timeUntil(order.value.pickupAt, now.value) : null));
+
+/** "4人｜3件行李｜7座", the same line as in the group text. */
+const loadLine = computed(() => {
+  const o = order.value;
+  return o ? [`${o.passengers}人`, `${o.luggage}件行李`, o.vehicleType].filter(Boolean).join('｜') : '';
+});
 
 async function load() {
   try {
@@ -121,97 +140,147 @@ async function copy(text: string, done: string) {
 }
 
 onMounted(async () => {
+  clock = setInterval(() => (now.value = new Date()), 30_000);
   await load();
   poll();
 });
-onBeforeUnmount(() => clearInterval(poller));
+onBeforeUnmount(() => {
+  clearInterval(poller);
+  clearInterval(clock);
+});
 </script>
 
 <template>
   <div class="page claim-page">
-    <header class="claim-page__brand">
-      <RouterLink to="/" class="claim-page__home"><BrandMark /></RouterLink>
-      <span>{{ t('跨境師傅幫｜有單就派，有空就接') }}</span>
-    </header>
+    <PageBack fallback="/app/pool" only-in-app />
+    <BrandHeader />
 
-    <div v-if="error" class="notice error">{{ error }}</div>
+    <div v-if="error && !order" class="card claim-page__state">
+      <AppIcon name="error" :size="40" />
+      <p>{{ error }}</p>
+    </div>
+    <InlineStatus v-else-if="error" icon="error" tone="error">{{ error }}</InlineStatus>
+    <div v-else-if="!order" class="claim-page__state claim-page__state--loading" role="status">{{ t('載入中…') }}</div>
 
     <template v-if="order">
-      <div v-if="lost" class="notice">{{ t('慢了一步，這張單已被其他司機接走。') }}</div>
+      <InlineStatus v-if="lost" icon="cancel">{{ t('慢了一步，這張單已被其他司機接走。') }}</InlineStatus>
+      <InlineStatus v-else-if="order.viewer === 'other' && order.status === 'CANCELLED'" icon="cancel">{{ t('這張單已被取消。') }}</InlineStatus>
+      <InlineStatus v-else-if="order.viewer === 'other' && order.status !== 'OPEN'" icon="info">{{ t('這張單已被接走。') }}</InlineStatus>
 
-      <section class="card claim-page__order">
-        <div class="claim-page__top">
-          <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
-          <span v-if="order.driverPrice" class="claim-page__price">{{ money(order.driverPrice) }}</span>
-        </div>
-        <div class="claim-page__time">{{ pickup(order.pickupAt) }}</div>
-        <p v-if="order.journey || order.requiredPlates.length" class="claim-page__leg">
-          <template v-if="order.journey">
-            <span class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
-            <span class="muted">{{ t(`接駁位置：${order.journey.transferPlaces.join('、')}`) }}</span>
+      <!-- The winning driver: first paste it back into the group, then the passenger. -->
+      <template v-if="order.viewer === 'driver'">
+        <section class="card claim-page__won">
+          <strong>{{ t('你接到這張單了') }}</strong>
+          <span>{{ t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`) }}</span>
+        </section>
+
+        <section class="card">
+          <p class="claim-page__label">{{ t('下一步：貼回群裡，讓大家知道單已有人接') }}</p>
+          <pre class="claim-page__group-text">{{ t(claimedMessage) }}</pre>
+          <button class="button block" type="button" @click="copy(claimedMessage, '已複製，可貼回群裡')">
+            <AppIcon name="copy" :size="18" />{{ t('複製「已接單」貼回群') }}
+          </button>
+        </section>
+
+        <section class="card">
+          <p class="claim-page__label">{{ t('乘客') }}</p>
+          <p v-if="!order.passengerContact" class="claim-page__reveal">
+            {{ t(`乘客電話將於 ${shortTime(order.contactRevealAt ?? null)} 顯示。之前如需安排，請聯絡出單者。`) }}
+          </p>
+          <template v-else>
+            <div class="claim-page__person">
+              <strong>{{ order.passengerName ?? t('乘客') }}</strong>
+              <span class="claim-page__number">{{ order.passengerContact }}</span>
+            </div>
+            <div class="claim-page__buttons">
+              <a class="button secondary" :href="`tel:${order.passengerContact?.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電乘客') }}</a>
+              <button class="button secondary" type="button" @click="copy(order.passengerContact ?? '', '已複製號碼')">
+                <AppIcon name="copy" :size="18" />{{ t('複製號碼') }}
+              </button>
+            </div>
           </template>
-          <span v-if="order.requiredPlates.length" class="leg-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
-        </p>
-        <div class="claim-page__route">
-          <div>{{ t(order.origin) }}</div>
-          <div v-for="stop in order.waypoints" :key="stop" class="claim-page__stop">{{ t(`途經：${stop}`) }}</div>
-          <div class="claim-page__arrow">↓</div>
-          <div>{{ t(order.destination) }}</div>
+        </section>
+
+        <section class="card">
+          <dl class="claim-page__facts">
+            <template v-if="order.dispatcherPhone">
+              <dt>{{ t('出單者') }}</dt>
+              <dd>
+                {{ order.dispatcherName ? t(order.dispatcherName) : '' }}
+                <a :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`">{{ order.dispatcherPhone }}</a>
+              </dd>
+            </template>
+            <template v-if="session.profile?.hkPlate || session.profile?.macauPlate || session.profile?.mainlandPlate">
+              <dt>{{ t('你的車牌') }}</dt>
+              <dd><PlateTag :hk="session.profile?.hkPlate" :macau="session.profile?.macauPlate" :mainland="session.profile?.mainlandPlate" /></dd>
+            </template>
+          </dl>
+        </section>
+      </template>
+
+      <InlineStatus v-else-if="order.viewer === 'dispatcher'" icon="info">{{ t('這是你出的單。') }}</InlineStatus>
+
+      <!-- The order, in the same order as the group text: time, route, load, price, notes. -->
+      <section class="card claim-page__order">
+        <div class="claim-page__tags">
+          <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
+          <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
+          <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
         </div>
-        <div class="row claim-page__load">
-          <span>{{ t(`${order.passengers} 人`) }}</span>
-          <span>{{ t(`${order.luggage} 件行李`) }}</span>
-          <span v-if="order.vehicleType">{{ t(order.vehicleType) }}</span>
+
+        <div class="claim-page__when">
+          <span class="claim-page__time">{{ pickup(order.pickupAt) }}</span>
+          <span v-if="untilPickup && order.status === 'OPEN'" class="claim-page__until">{{ t(untilPickup) }}</span>
         </div>
-        <p v-if="order.notes" class="claim-page__notes">{{ t(`備註：${order.notes}`) }}</p>
-        <p class="hint">{{ t(`發單：${order.dispatcherName ?? '—'}`) }}</p>
+
+        <RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" />
+        <p v-if="order.journey" class="claim-page__transfer">{{ t(`接駁位置：${order.journey.transferPlaces.join('、')}`) }}</p>
+
+        <div class="claim-page__load-row">
+          <span class="claim-page__load">{{ t(loadLine) }}</span>
+          <span v-if="order.driverPrice && !canClaim" class="claim-page__price">{{ money(order.driverPrice) }}</span>
+        </div>
+
+        <p v-if="order.notes" class="claim-page__notes"><strong>{{ t('備註') }}</strong>{{ t(order.notes) }}</p>
+      </section>
+
+      <section v-if="order.viewer !== 'driver'" class="card claim-page__dispatcher">
+        <div>
+          <span class="claim-page__label">{{ t('出單者') }}</span>
+          <strong>{{ order.dispatcherName ? t(order.dispatcherName) : '—' }}</strong>
+        </div>
+        <span v-if="order.dispatcherCompletedTrips" class="claim-page__trips">{{ t(`已在師傅幫完成 ${order.dispatcherCompletedTrips} 張單`) }}</span>
       </section>
 
       <section v-if="order.journey" class="card">
-        <h2>{{ t('整個行程') }}</h2>
-        <p v-if="order.viewer === 'driver'" class="hint">{{ t('其他段的司機搶到後會顯示在這裡；電話與乘客電話同時顯示，方便接駁時聯絡。') }}</p>
+        <SectionHeading
+          :title="t('整個行程')"
+          :description="order.viewer === 'driver' ? t('其他段的司機搶到後會顯示在這裡；電話與乘客電話同時顯示，方便接駁時聯絡。') : undefined"
+        />
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
       </section>
 
-      <section v-if="order.viewer === 'driver'" class="card">
-        <h2>{{ t('乘客資料') }}</h2>
-        <p v-if="!order.passengerContact" class="notice">
-          {{ t(`乘客電話將於 ${shortTime(order.contactRevealAt ?? null)} 顯示。之前如需安排，請聯絡派單者。`) }}
-        </p>
-        <p v-else>{{ order.passengerName ?? t('乘客') }}：<strong>{{ order.passengerContact }}</strong></p>
-        <div v-if="order.passengerContact" class="row">
-          <a class="button" :href="`tel:${order.passengerContact?.replace(/\s/g, '')}`">{{ t('致電乘客') }}</a>
-          <button class="button secondary" type="button" @click="copy(order.passengerContact ?? '', '已複製號碼')">{{ t('複製號碼') }}</button>
-        </div>
-        <button class="button block claim-page__share" type="button" @click="copy(claimedMessage, '已複製，可貼回群裡')">
-          {{ t('複製「已接單」訊息貼回群') }}
-        </button>
-        <p class="hint">
-          <PlateTag :hk="session.profile?.hkPlate" :macau="session.profile?.macauPlate" :mainland="session.profile?.mainlandPlate" />
-        </p>
-        <p v-if="order.dispatcherPhone" class="claim-page__dispatcher">
-          {{ t(`派單者 ${order.dispatcherName ?? ''}`) }}：<a :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`">{{ order.dispatcherPhone }}</a>
-        </p>
-        <RouterLink v-if="order.id" :to="`/app/orders/${order.id}`">{{ t('在「我的單」查看這張單') }}</RouterLink>
-      </section>
-
-      <section v-else-if="order.viewer === 'dispatcher'" class="card">
-        <p>{{ t('這是你發的單。') }}</p>
-        <RouterLink v-if="order.id" class="button block" :to="`/app/orders/${order.id}`">{{ t('管理這張單') }}</RouterLink>
-      </section>
-
-      <p v-else-if="order.status !== 'OPEN'" class="notice">
-        {{ order.status === 'CANCELLED' ? t('這張單已被取消。') : t('這張單已被接走。') }}
-      </p>
+      <RouterLink v-if="order.viewer === 'dispatcher' && order.id" class="button block" :to="`/app/orders/${order.id}`">{{ t('管理這張單') }}</RouterLink>
+      <RouterLink v-if="order.viewer === 'driver' && order.id" class="claim-page__more" :to="`/app/orders/${order.id}`">{{ t('在「訂單」查看這張單') }}</RouterLink>
 
       <JoinGroups v-if="order.viewer !== 'dispatcher'" :groups="order.groupInvites" :dispatcher-name="order.dispatcherName" />
 
-      <p class="hint claim-page__support">{{ t('使用上有問題？') }}<RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink></p>
-
       <AdBanner position="CLAIM_PAGE" />
 
-      <div v-if="canClaim" class="action-bar">
-        <button class="button block large" type="button" :disabled="busy" @click="claim">{{ t('立即搶單') }}</button>
+      <footer class="claim-page__footer">
+        <RouterLink v-if="order.viewer === 'other'" to="/">{{ t('這張單用師傅幫出單 · 免費使用') }}</RouterLink>
+        <span>{{ t('使用上有問題？') }}<RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink></span>
+      </footer>
+
+      <!-- Price on the left and the button on the right, within reach of one thumb. -->
+      <div v-if="canClaim" class="action-bar claim-page__bar">
+        <div v-if="order.driverPrice" class="claim-page__bar-price">
+          <span>{{ t('司機價') }}</span>
+          <strong>{{ money(order.driverPrice) }}</strong>
+        </div>
+        <button class="button large claim-page__claim" type="button" :disabled="busy" @click="claim">
+          {{ busy ? t('搶單中…') : t('立即搶單') }}
+        </button>
       </div>
     </template>
 
@@ -225,67 +294,210 @@ onBeforeUnmount(() => clearInterval(poller));
 </template>
 
 <style scoped>
-.claim-page__home {
-  color: var(--color-text);
-}
-.claim-page__support {
-  text-align: center;
-}
-.claim-page__brand {
+.claim-page {
   display: flex;
   flex-direction: column;
-  margin-bottom: var(--space-lg);
 }
-.claim-page__brand span {
+.claim-page > .card,
+.claim-page > :deep(.inline-status) {
+  margin-bottom: var(--space-md);
+}
+.claim-page__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+.claim-page__state p {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-body-large);
+  font-weight: 600;
+}
+.claim-page__state--loading {
+  padding: var(--space-xl) 0;
+}
+.claim-page__label {
+  display: block;
+  margin: 0 0 var(--space-sm);
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
 }
-.claim-page__top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.claim-page__price {
-  font-size: 24px;
-  font-weight: 700;
-}
-.claim-page__time {
-  font-size: 22px;
-  font-weight: 700;
-  margin: var(--space-md) 0;
-}
-.claim-page__route {
-  font-size: 18px;
-  font-weight: 600;
-}
-.claim-page__stop {
-  font-size: var(--font-body);
-  font-weight: 400;
-  color: var(--color-text-secondary);
-}
-.claim-page__arrow {
-  color: var(--color-text-muted);
-}
-.claim-page__load {
-  margin: var(--space-md) 0;
-  color: var(--color-label);
-}
-.claim-page__leg {
+.claim-page__tags {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-sm);
   align-items: center;
-  margin: 0 0 var(--space-md);
+}
+.claim-page__when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm) var(--space-md);
+  margin: var(--space-md) 0 var(--space-lg);
+}
+.claim-page__time {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.claim-page__until {
+  color: var(--color-teal);
+  font-size: var(--font-label);
+  font-weight: 700;
+}
+.claim-page__transfer {
+  margin: var(--space-md) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+}
+.claim-page__load-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-divider);
+}
+.claim-page__load {
+  color: var(--color-label);
+  font-weight: 600;
+}
+.claim-page__price,
+.claim-page__bar-price strong {
+  color: var(--color-gold-ink);
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .claim-page__notes {
-  background: var(--color-background);
-  border-radius: var(--radius-input);
+  display: flex;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0 0;
   padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-input);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  overflow-wrap: anywhere;
+}
+.claim-page__notes strong {
+  flex-shrink: 0;
 }
 .claim-page__dispatcher {
-  margin: var(--space-md) 0 var(--space-sm);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
 }
-.claim-page__share {
+.claim-page__dispatcher div {
+  display: flex;
+  flex-direction: column;
+}
+.claim-page__dispatcher .claim-page__label {
+  margin: 0;
+}
+.claim-page__trips {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  text-align: right;
+}
+.claim-page__won {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  text-align: center;
+  background: var(--color-tint);
+}
+.claim-page__won strong {
+  font-size: 20px;
+}
+.claim-page__won span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+}
+/* The text exactly as it will be pasted, so the driver sees it before copying. */
+.claim-page__group-text {
+  margin: 0 0 var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-input);
+  background: var(--color-background);
+  font: inherit;
+  font-size: var(--font-label);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.claim-page__person {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.claim-page__number {
+  font-variant-numeric: tabular-nums;
+}
+.claim-page__reveal {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+.claim-page__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
   margin-top: var(--space-md);
+}
+.claim-page__facts {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: var(--space-sm) 0;
+  margin: 0;
+}
+.claim-page__facts dt {
+  color: var(--color-text-secondary);
+}
+.claim-page__facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.claim-page__more {
+  display: block;
+  margin-bottom: var(--space-md);
+  text-align: center;
+}
+.claim-page > .button.block {
+  margin-bottom: var(--space-md);
+}
+.claim-page__footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  font-size: var(--font-caption);
+}
+.claim-page__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+}
+.claim-page__bar-price {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.claim-page__bar-price span {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+.claim-page__claim {
+  flex: 1;
 }
 </style>

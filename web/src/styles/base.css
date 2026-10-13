@@ -1,25 +1,50 @@
-/* Values from docs/DESIGN.md (Master Travel driver tokens). Use the variables; never hard-code. */
+/*
+ * 通關玻璃: MasterDriver's own look (docs/DESIGN.md). A light page washed with harbour blue
+ * and teal, translucent cards, frosted bars, and Hong Kong plate gold for what a driver must
+ * notice first: an open order, its price, the plates it needs. Use the variables; never hard-code.
+ */
 :root {
-  --color-background: #f4f7fb;
+  --color-background: #edf2f7;
+  /* Two faint washes behind everything: harbour blue top left, teal on the right. */
+  --wash-blue: rgba(31, 95, 214, 0.14);
+  --wash-teal: rgba(14, 159, 154, 0.12);
   --color-surface: #ffffff;
-  --color-text: #17233d;
-  --color-text-secondary: #65738b;
-  --color-text-muted: #98a3b5;
-  --color-label: #41506a;
-  --color-border: #dbe3ef;
-  --color-divider: #e8edf4;
-  --color-primary: #3568e8;
-  --color-primary-dark: #1e4fc7;
+  /* Cards: white glass over the washes; solid white where text sits on photos or inputs. */
+  --color-card: rgba(255, 255, 255, 0.84);
+  --color-card-border: rgba(255, 255, 255, 0.95);
+  --color-text: #142033;
+  --color-text-secondary: #556579;
+  --color-text-muted: #8f9db0;
+  --color-label: #34445a;
+  --color-border: #d3dce7;
+  --color-divider: #e2e8ef;
+  --color-primary: #1f5fd6;
+  --color-primary-dark: #1749a8;
   --color-on-primary: #ffffff;
-  --color-tint: #e8f0ff;
-  --color-nav-inactive: #8793a8;
-  --color-nav-active: #245bd6;
+  --color-tint: #e5edfb;
+  --color-teal: #0e9f9a;
+  /* Hong Kong plate gold: fills for chips and dots, a darker ink where gold is text. */
+  --color-gold: #e6a206;
+  --color-gold-ink: #8a5a00;
+  --color-gold-tint: #fff3d6;
+  --color-route-origin: var(--color-teal);
+  --color-route-destination: var(--color-gold);
+  --color-nav-inactive: #7d8ca0;
+  --color-nav-active: var(--color-primary);
+  --color-error: #c03a3a;
+  --color-error-tint: #fdecec;
+  /* Frosted glass for the floating navigation and the bottom action bar. */
+  --color-glass: rgba(255, 255, 255, 0.66);
+  --color-glass-fallback: rgba(255, 255, 255, 0.95);
+  --color-glass-border: rgba(255, 255, 255, 0.8);
+  --color-glass-active: rgba(31, 95, 214, 0.12);
+  --blur-glass: 20px;
 
-  --status-open: #e6a206;
-  --status-assigned: #3568e8;
-  --status-confirmed: #25c987;
-  --status-completed: #98a3b5;
-  --status-cancelled: #65738b;
+  --status-open: var(--color-gold);
+  --status-assigned: var(--color-primary);
+  --status-confirmed: #1a9e6e;
+  --status-completed: #8f9db0;
+  --status-cancelled: #556579;
   --plate-gold: #e6a206;
   --plate-black: #000000;
 
@@ -29,11 +54,11 @@
   --space-lg: 16px;
   --space-xl: 24px;
 
-  --radius-card: 16px;
+  --radius-card: 20px;
   --radius-input: 12px;
   --radius-pill: 100px;
-  --shadow-card: 0 8px 18px rgba(0, 0, 0, 0.08);
-  --shadow-floating: 0 10px 24px rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 6px 20px rgba(20, 32, 51, 0.06);
+  --shadow-floating: 0 10px 28px rgba(20, 32, 51, 0.14);
 
   --font-caption: 12px;
   --font-label: 13px;
@@ -41,7 +66,9 @@
   --font-body-large: 16px;
 
   --max-width: 430px;
-  --tab-height: 60px;
+  --tab-height: 64px;
+  /* Gap between the floating navigation and the bottom of the screen. */
+  --tab-offset: 12px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -53,7 +80,12 @@
 html,
 body {
   margin: 0;
-  background: var(--color-background);
+  /* Fixed washes stay put while the page scrolls; iOS ignores fixed and scrolls them, which is fine. */
+  background:
+    radial-gradient(120% 60% at 0% 0%, var(--wash-blue), transparent 60%),
+    radial-gradient(90% 50% at 100% 35%, var(--wash-teal), transparent 60%),
+    var(--color-background);
+  background-attachment: fixed;
   color: var(--color-text);
   /* System fonts only: no web-font download, so pages open fast inside WeChat (docs/DESIGN.md). */
   font-family: -apple-system, 'PingFang TC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
@@ -84,11 +116,12 @@ h2 {
 
 .page {
   padding: var(--space-lg);
-  padding-bottom: calc(var(--tab-height) + var(--space-xl) + var(--safe-bottom));
+  padding-bottom: calc(var(--tab-height) + var(--tab-offset) + var(--space-xl) + var(--safe-bottom));
 }
 
 .card {
-  background: var(--color-surface);
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-card);
   padding: var(--space-lg);
@@ -115,6 +148,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: var(--space-sm);
   border: none;
   border-radius: var(--radius-input);
   min-height: 44px;
@@ -194,6 +228,13 @@ h2 {
   cursor: pointer;
 }
 
+/* A chip that is switched on: the filter in use. */
+.chip.chip--on {
+  border-color: var(--color-text);
+  background: var(--color-text);
+  color: var(--color-surface);
+}
+
 .notice {
   border-radius: var(--radius-input);
   padding: var(--space-md);
@@ -203,8 +244,8 @@ h2 {
 }
 
 .notice.error {
-  background: #fdecec;
-  color: #c03a3a;
+  background: var(--color-error-tint);
+  color: var(--color-error);
 }
 
 /* Bottom action bar that stays above the phone's home indicator. */
@@ -216,9 +257,30 @@ h2 {
   width: 100%;
   max-width: var(--max-width);
   padding: var(--space-md) var(--space-lg) calc(var(--space-md) + var(--safe-bottom));
-  background: var(--color-surface);
+  border-top: 1px solid var(--color-glass-border);
+  background: var(--color-glass);
+  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(180%);
+  backdrop-filter: blur(var(--blur-glass)) saturate(180%);
   box-shadow: var(--shadow-floating);
   z-index: 10;
+}
+/* Without backdrop blur (some older Android WebViews) the bars turn near-solid so text stays readable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .action-bar {
+    background: var(--color-glass-fallback);
+  }
+}
+
+/* A tag that must be noticed: the plates an order needs, a note. Gold, after Hong Kong plates. */
+.gold-tag {
+  display: inline-block;
+  padding: 1px var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 /* 接駁: "第 2／2 段" next to an order's time. */

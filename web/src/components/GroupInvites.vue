@@ -3,6 +3,7 @@ import { onMounted, reactive, ref } from 'vue';
 import { api, errorText } from '../api';
 import { shortTime } from '../format';
 import { imageForUpload } from '../image';
+import AppIcon from './AppIcon.vue';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
@@ -125,7 +126,7 @@ onMounted(() => run(() => api<Invite[]>('GET', '/me/group-invites')));
         <button class="button secondary" type="button" @click="adding = false">{{ t('取消') }}</button>
       </div>
     </form>
-    <button v-else-if="invites.length < 5" class="button secondary block" type="button" @click="adding = true">＋ {{ t('加入派單群') }}</button>
+    <button v-else-if="invites.length < 5" class="button secondary block" type="button" @click="adding = true"><AppIcon name="add" :size="18" />{{ t('加入派單群') }}</button>
   </section>
 </template>
 

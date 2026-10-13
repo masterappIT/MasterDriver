@@ -5,6 +5,7 @@ import { api, errorText } from '../api';
 import { BOOKING_STATUS, bookingOpen, type DriverBooking } from '../booking';
 import { copyText } from '../device';
 import { money, pickup, shortTime } from '../format';
+import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
@@ -65,14 +66,14 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <RouterLink to="/app/bookings" class="hint">← {{ t('預約') }}</RouterLink>
+    <PageBack :title="t('預約詳情')" fallback="/app/bookings" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="booking">
       <section class="card">
         <p class="booking-detail__status">{{ t(BOOKING_STATUS[booking.status].driver) }}</p>
         <strong>{{ pickup(booking.pickupAt) }}</strong>
-        <div class="booking-detail__route">{{ t(booking.origin) }} → {{ t(booking.destination) }}</div>
+        <div class="booking-detail__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
         <p class="muted">{{ t(`${booking.passengers}人・${booking.luggage}件行李`) }}</p>
         <p v-if="booking.notes">{{ t(`備註：${booking.notes}`) }}</p>
         <p class="hint">
@@ -112,7 +113,7 @@ onMounted(async () => {
       </section>
 
       <template v-if="open">
-        <RouterLink class="button block large booking-detail__order" :to="`/app/new?booking=${booking.id}`">{{ t('成單：帶入發單表格') }}</RouterLink>
+        <RouterLink class="button block large booking-detail__order" :to="`/app/new?booking=${booking.id}`">{{ t('成單：帶入出單表格') }}</RouterLink>
         <p class="hint">{{ t('和乘客談好後按「成單」。之後可以自己做，或派到群裡。') }}</p>
         <button class="button secondary block" type="button" :disabled="busy" @click="decline">{{ t('婉拒') }}</button>
       </template>

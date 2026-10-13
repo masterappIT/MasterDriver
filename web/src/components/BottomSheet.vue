@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t } from '../i18n';
+import AppIcon from './AppIcon.vue';
 
 defineProps<{ title: string }>();
 const emit = defineEmits<{ close: [] }>();
@@ -10,7 +11,7 @@ const emit = defineEmits<{ close: [] }>();
     <section class="bottom-sheet__panel" role="dialog" aria-modal="true" :aria-label="title">
       <header class="bottom-sheet__header">
         <h2>{{ title }}</h2>
-        <button class="bottom-sheet__close" type="button" :aria-label="t('關閉')" @click="emit('close')">×</button>
+        <button class="bottom-sheet__close" type="button" :aria-label="t('關閉')" @click="emit('close')"><AppIcon name="close" /></button>
       </header>
       <slot />
     </section>

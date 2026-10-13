@@ -15,7 +15,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
 <template>
   <ol class="journey-legs">
     <li v-for="leg in legs" :key="leg.legIndex" class="journey-legs__item">
-      <p v-if="leg.legIndex > 1" class="journey-legs__handoff">↓ {{ t(`接駁位置：${leg.origin}`) }}</p>
+      <p v-if="leg.legIndex > 1" class="journey-legs__handoff">{{ t(`接駁位置：${leg.origin}`) }}</p>
       <component
         :is="leg.id && leg.legIndex !== current ? 'RouterLink' : 'div'"
         :to="leg.id ? `/app/orders/${leg.id}` : undefined"
@@ -27,7 +27,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
           <StatusBadge :status="leg.status" />
         </div>
         <div class="journey-legs__time">{{ pickup(leg.pickupAt) }}</div>
-        <div>{{ t(leg.origin) }} → {{ t(leg.destination) }}</div>
+        <div>{{ t(`${leg.origin} 至 ${leg.destination}`) }}</div>
         <div v-if="leg.driver && leg.legIndex !== current" class="journey-legs__driver">
           <span>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</span>
           <PlateTag :hk="leg.driver.hkPlate" :macau="leg.driver.macauPlate" :mainland="leg.driver.mainlandPlate" />

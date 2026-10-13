@@ -96,23 +96,23 @@ onMounted(async () => {
       <p class="hint">
         {{
           !credits.serviceFee.enabled
-            ? t('目前發單不收服務費。')
+            ? t('目前出單不收服務費。')
             : credits.serviceFee.exempt
               ? t('你目前免收平台服務費。')
-              : t(`每發一張單扣 ${money(credits.serviceFee.feePerOrder)}，取消會退回。充值請聯絡客服。`)
+              : t(`每出一張單扣 ${money(credits.serviceFee.feePerOrder)}，取消會退回。充值請聯絡客服。`)
         }}
       </p>
     </section>
 
     <section class="card">
-      <h2>{{ t('發單預設') }}</h2>
+      <h2>{{ t('出單預設') }}</h2>
       <label class="field">
         {{ t('接單司機何時看到乘客電話') }}
         <RevealSelect v-model="reveal" @update:model-value="saveReveal" />
-        <span class="hint">{{ t('每張單發出時也可以另外調整。你自己隨時都看得到。') }}</span>
+        <span class="hint">{{ t('每張單出單時也可以另外調整。你自己隨時都看得到。') }}</span>
       </label>
-      <label class="row"><input v-model="poolByDefault" type="checkbox" @change="savePool" /> {{ t('新發的單預設同時放到接單池') }}</label>
-      <p class="hint">{{ t('接單池是所有登入的司機都看得到的單。不勾的話，單只給拿到連結的人；每張單發出時也可以另外調整。') }}</p>
+      <label class="row"><input v-model="poolByDefault" type="checkbox" @change="savePool" /> {{ t('新出的單預設同時放到接單池') }}</label>
+      <p class="hint">{{ t('接單池是所有登入的司機都看得到的單。不勾的話，單只給拿到連結的人；每張單出單時也可以另外調整。') }}</p>
     </section>
 
     <section class="card">
@@ -151,7 +151,7 @@ onMounted(async () => {
 
     <a v-if="settings?.upgradeUrl" class="card me__upgrade" :href="settings.upgradeUrl" target="_blank" rel="noopener">
       <strong>{{ t('想擁有自己品牌的小程序和 App？') }}</strong>
-      <span class="muted">{{ t('了解 Master Travel：報價、收款、結算、司機管理一站搞定 →') }}</span>
+      <span class="muted">{{ t('了解 Master Travel：報價、收款、結算、司機管理一站搞定') }}</span>
     </a>
 
     <button class="button secondary block" type="button" @click="logout">{{ t('登出') }}</button>

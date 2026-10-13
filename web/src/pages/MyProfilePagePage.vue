@@ -2,6 +2,8 @@
 import { onMounted, reactive, ref } from 'vue';
 import { api, apiFetch, errorText } from '../api';
 import { copyText } from '../device';
+import PageBack from '../components/PageBack.vue';
+import AppIcon from '../components/AppIcon.vue';
 import { t } from '../i18n';
 import { imageForSupport } from '../support';
 import { toast } from '../toast';
@@ -115,8 +117,7 @@ onMounted(async () => {
 
 <template>
   <div class="page my-page">
-    <RouterLink to="/app/me" class="hint">← {{ t('我的') }}</RouterLink>
-    <h1>{{ t('我的名片頁') }}</h1>
+    <PageBack :title="t('我的名片頁')" fallback="/app/me" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="page">
@@ -142,7 +143,7 @@ onMounted(async () => {
         </label>
         <label class="field">
           {{ t('常走路線（一行一條，最多 8 條）') }}
-          <textarea v-model="form.routes" class="textarea" :placeholder="t('香港機場 ⇄ 深圳灣口岸\n香港市區 ⇄ 澳門')" />
+          <textarea v-model="form.routes" class="textarea" :placeholder="t('香港機場 往返 深圳灣口岸\n香港市區 往返 澳門')" />
         </label>
         <label class="field">{{ t('服務地區（用頓號分隔）') }}<input v-model="form.regions" class="input" :placeholder="t('香港、深圳、澳門、珠海')" /></label>
         <div class="field">
@@ -175,7 +176,7 @@ onMounted(async () => {
           :disabled="busy"
           @click="picker?.click()"
         >
-          ＋ {{ t('加照片') }}
+          <AppIcon name="add" :size="18" />{{ t('加照片') }}
         </button>
         <input ref="picker" class="my-page__picker" type="file" accept="image/*" @change="picked" />
         <p class="hint">{{ t('請只放自己車輛的照片，不要拍到乘客或他人的車牌。') }}</p>

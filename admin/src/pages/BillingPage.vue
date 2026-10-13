@@ -95,7 +95,7 @@ onMounted(() => run(() => api('GET', '/billing'), ''));
   <template v-if="data">
     <div class="card">
       <h2>全站免費期與限時免費</h2>
-      <p class="hint">判斷順序：個別贈送 → 單一功能限時免費 → 全站免費期、訂閱、預設方案三者取最優惠者。</p>
+      <p class="hint">判斷順序：先看個別贈送，再看單一功能限時免費，最後在全站免費期、訂閱、預設方案三者中取最優惠者。</p>
       <div class="table-wrap">
         <table class="table">
           <thead>

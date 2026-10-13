@@ -35,7 +35,7 @@ interface OrderDetail {
 }
 
 const TIMELINE: Record<string, string> = {
-  createdAt: '發單',
+  createdAt: '出單',
   claimedAt: '被搶到',
   passengerConfirmedAt: '乘客確認',
   completedAt: '完成',
@@ -56,10 +56,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <RouterLink to="/orders" class="hint">← 訂單</RouterLink>
+  <RouterLink to="/orders" class="hint">返回訂單</RouterLink>
   <div v-if="error" class="notice error">{{ error }}</div>
   <template v-if="order">
-    <h1>{{ order.origin }} → {{ order.destination }}　<StatusBadge :status="order.status" /></h1>
+    <h1>{{ order.origin }} 至 {{ order.destination }}　<StatusBadge :status="order.status" /></h1>
     <div class="card">
       <div class="row">
         <span>出發：{{ dateTime(order.pickupAt) }}</span>
@@ -93,7 +93,7 @@ onMounted(async () => {
     <div class="card">
       <h2>相關人員</h2>
       <p>
-        派單者：<RouterLink :to="`/users/${order.dispatcher.id}`">{{ order.dispatcher.name ?? '未填姓名' }}（{{ order.dispatcher.phone }}）</RouterLink>
+        出單者：<RouterLink :to="`/users/${order.dispatcher.id}`">{{ order.dispatcher.name ?? '未填姓名' }}（{{ order.dispatcher.phone }}）</RouterLink>
       </p>
       <p v-if="order.driver">
         接單司機：{{ order.driver.name ?? '未填姓名' }}（{{ order.driver.phone }}）

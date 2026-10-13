@@ -86,7 +86,7 @@ onMounted(load);
       <thead>
         <tr>
           <th>#</th>
-          <th>派單者</th>
+          <th>出單者</th>
           <th>分數</th>
           <th>單量／完成</th>
           <th>司機數</th>

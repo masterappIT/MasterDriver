@@ -99,7 +99,7 @@ async function save() {
 
 <template>
   <form @submit.prevent="save">
-    <p class="muted">{{ t('只需填一次。搶到單後，派單者和乘客會看到你的姓名與車牌。') }}</p>
+    <p class="muted">{{ t('只需填一次。搶到單後，出單者和乘客會看到你的姓名與車牌。') }}</p>
     <label class="field">{{ t('姓名或稱呼') }}<input v-model="form.name" class="input" maxlength="30" :placeholder="t('例如：李師傅')" required /></label>
 
     <div class="field">

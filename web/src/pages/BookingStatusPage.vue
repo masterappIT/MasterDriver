@@ -67,14 +67,14 @@ onBeforeUnmount(() => clearInterval(poller));
 
     <template v-if="booking">
       <div v-if="justSent" class="notice">
-        ✅ {{ t('預約已送出。請保存這個頁面的連結，司機回覆後在這裡看得到；司機也可能直接用你留的聯絡方式找你。') }}
+        {{ t('預約已送出。請保存這個頁面的連結，司機回覆後在這裡看得到；司機也可能直接用你留的聯絡方式找你。') }}
         <button class="chip booking__copy" type="button" @click="copyLink">{{ t('複製連結') }}</button>
       </div>
 
       <section class="card">
         <p class="booking__status">{{ t(BOOKING_STATUS[booking.status].passenger) }}</p>
         <strong>{{ pickup(booking.pickupAt) }}</strong>
-        <div>{{ t(booking.origin) }} → {{ t(booking.destination) }}</div>
+        <div>{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
         <p class="muted">{{ t(`${booking.passengers} 人・${booking.luggage} 件行李`) }}</p>
         <p v-if="booking.notes">{{ t(`備註：${booking.notes}`) }}</p>
         <p class="hint">{{ t(`司機：${booking.driverName ?? '—'}`) }}</p>

@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { errorText, session } from '../api';
 import { shortTime } from '../format';
+import PageBack from '../components/PageBack.vue';
+import AppIcon from '../components/AppIcon.vue';
 import { t } from '../i18n';
 import {
   IMAGE_MAX_BYTES,
@@ -19,7 +20,6 @@ import {
 import { toast } from '../toast';
 
 const POLL_MS = 5000;
-const router = useRouter();
 const messages = ref<SupportMessage[]>([]);
 const hasEarlier = ref(false);
 const uploads = ref({ images: true, videos: false });
@@ -153,10 +153,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page support">
-    <header class="support__head">
-      <a class="hint" href="#" @click.prevent="router.back()">← {{ t('返回') }}</a>
-      <h1>{{ t('客服') }}</h1>
-    </header>
+    <PageBack :title="t('客服')" :fallback="session.user ? '/app/me' : '/'" />
 
     <p v-if="!session.user" class="notice">
       {{ t('你尚未登入。訪客對話只保存在這個瀏覽器，清除瀏覽資料後無法找回；請在訊息裡留下電話或微信，方便我們回覆。') }}
@@ -182,7 +179,7 @@ onBeforeUnmount(() => {
             <template v-else>
               <video v-if="files[message.media.id]?.startsWith('blob:')" class="support__video" :src="files[message.media.id]" controls playsinline />
               <button v-else class="button secondary" type="button" :disabled="files[message.media.id] === 'loading'" @click="open(message.media.id)">
-                ▶ {{ files[message.media.id] === 'loading' ? t('影片載入中…') : t(`播放影片（${megabytes(message.media.sizeBytes)}）`) }}
+                {{ files[message.media.id] === 'loading' ? t('影片載入中…') : t(`播放影片（${megabytes(message.media.sizeBytes)}）`) }}
               </button>
             </template>
           </template>
@@ -196,7 +193,7 @@ onBeforeUnmount(() => {
     <form class="action-bar support__bar" @submit.prevent="submit">
       <div v-if="error" class="notice error support__error">{{ error }}</div>
       <div class="support__compose">
-        <button v-if="uploads.images" class="button secondary support__attach" type="button" :disabled="sending" :aria-label="t('傳送圖片或影片')" @click="picker?.click()">＋</button>
+        <button v-if="uploads.images" class="button secondary support__attach" type="button" :disabled="sending" :aria-label="t('傳送圖片或影片')" @click="picker?.click()"><AppIcon name="add" /></button>
         <input ref="picker" class="support__picker" type="file" :accept="uploads.videos ? 'image/*,video/*' : 'image/*'" @change="picked" />
         <textarea v-model="draft" class="textarea support__input" rows="1" maxlength="2000" :placeholder="t('輸入訊息')" />
         <button class="button" type="submit" :disabled="sending || !draft.trim()">{{ sending ? t('傳送中') : t('傳送') }}</button>
@@ -208,9 +205,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .support {
   padding-bottom: calc(120px + var(--safe-bottom));
-}
-.support__head h1 {
-  margin-top: var(--space-xs);
 }
 .support__earlier {
   display: block;

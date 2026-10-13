@@ -76,7 +76,7 @@ onMounted(load);
           <th>狀態</th>
           <th>司機價</th>
           <th>服務費</th>
-          <th>派單者</th>
+          <th>出單者</th>
           <th>接單司機</th>
           <th>搶單次數</th>
         </tr>
@@ -84,7 +84,7 @@ onMounted(load);
       <tbody>
         <tr v-for="order in result.items" :key="order.id">
           <td class="nowrap"><RouterLink :to="`/orders/${order.id}`">{{ dateTime(order.pickupAt) }}</RouterLink></td>
-          <td class="wide">{{ order.origin }} → {{ order.destination }}</td>
+          <td class="wide">{{ order.origin }} 至 {{ order.destination }}</td>
           <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
           <td class="nowrap">{{ money(order.driverPrice) }}</td>
           <td class="nowrap">{{ hkd(order.serviceFee) }}</td>

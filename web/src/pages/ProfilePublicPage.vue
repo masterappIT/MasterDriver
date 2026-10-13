@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, errorText } from '../api';
 import BrandMark from '../components/BrandMark.vue';
 import { fromLocalInput, toLocalInput } from '../format';
+import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 
 interface Page {
@@ -32,6 +33,10 @@ const page = ref<Page | null>(null);
 const error = ref('');
 const formError = ref('');
 const busy = ref(false);
+/** The booking form, and whether it is on screen (the bottom button hides while it is). */
+const formEl = ref<HTMLFormElement | null>(null);
+const formInView = ref(false);
+let watcher: IntersectionObserver | undefined;
 const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
 const form = reactive({
   pickupAt: toLocalInput(tomorrow),
@@ -74,6 +79,12 @@ async function submit() {
   }
 }
 
+/** The bottom button: bring the form up and put the cursor in its first field. */
+function goToForm() {
+  formEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  formEl.value?.querySelector('input')?.focus({ preventScroll: true });
+}
+
 onMounted(async () => {
   try {
     page.value = await api<Page>('GET', `/public/profiles/${code}`);
@@ -81,17 +92,28 @@ onMounted(async () => {
   } catch (e) {
     error.value = errorText(e);
   }
+  await nextTick();
+  if (formEl.value && 'IntersectionObserver' in window) {
+    watcher = new IntersectionObserver(([entry]) => (formInView.value = entry.isIntersecting), { threshold: 0.15 });
+    watcher.observe(formEl.value);
+  }
 });
+onBeforeUnmount(() => watcher?.disconnect());
 </script>
 
 <template>
   <div class="page profile">
+    <PageBack fallback="/app/profile-page" only-in-app />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="page">
       <div v-if="page.mine && !page.published" class="notice">
-        {{ t('這是預覽，只有你看得到。到「我的 → 我的名片頁」公開後，乘客才打得開。') }}
+        {{ t('這是預覽，只有你看得到。到「我的」裡的「我的名片頁」公開後，乘客才打得開。') }}
       </div>
+
+      <section v-if="page.photos.length" class="profile__photos">
+        <img v-for="photo in page.photos" :key="photo.id" class="profile__photo" :src="photo.url" :alt="t('車輛照片')" loading="lazy" />
+      </section>
 
       <section class="card">
         <h1 class="profile__name">{{ page.name ? t(page.name) : t('司機') }}</h1>
@@ -100,10 +122,6 @@ onMounted(async () => {
         </p>
         <p v-if="page.completedTrips > 0" class="profile__trips">{{ t(`已在師傅幫完成 ${page.completedTrips} 張單`) }}</p>
         <p v-if="page.intro" class="profile__intro">{{ t(page.intro) }}</p>
-      </section>
-
-      <section v-if="page.photos.length" class="profile__photos">
-        <img v-for="photo in page.photos" :key="photo.id" class="profile__photo" :src="photo.url" :alt="t('車輛照片')" loading="lazy" />
       </section>
 
       <section v-if="page.routes.length || page.regions.length || page.languages.length" class="card">
@@ -125,7 +143,7 @@ onMounted(async () => {
         </p>
       </section>
 
-      <form v-if="page.published" class="card" @submit.prevent="submit">
+      <form v-if="page.published" ref="formEl" class="card profile__form" @submit.prevent="submit">
         <h2>{{ t('預約行程') }}</h2>
         <p class="hint profile__form-hint">{{ t('送出後司機會回覆報價。不用註冊，也不用先付款。') }}</p>
         <div v-if="formError" class="notice error">{{ formError }}</div>
@@ -153,13 +171,21 @@ onMounted(async () => {
         </p>
         <RouterLink to="/" class="profile__brand"><BrandMark /><span>{{ t('由 MasterDriver 跨境師傅幫提供') }}</span></RouterLink>
       </footer>
+
+      <div v-if="page.published && !formInView" class="action-bar">
+        <button class="button block large" type="button" @click="goToForm">{{ t('預約這位師傅') }}</button>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
 .profile {
-  padding-bottom: calc(var(--space-xl) + var(--safe-bottom));
+  /* Room for the bottom button. */
+  padding-bottom: calc(96px + var(--safe-bottom));
+}
+.profile__form {
+  scroll-margin-top: var(--space-lg);
 }
 .profile__name {
   margin-bottom: var(--space-xs);
@@ -169,8 +195,8 @@ onMounted(async () => {
   margin: var(--space-sm) 0 0;
   padding: 2px var(--space-md);
   border-radius: var(--radius-pill);
-  background: var(--color-tint);
-  color: var(--color-primary-dark);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
   font-size: var(--font-label);
   font-weight: 600;
 }
@@ -185,10 +211,14 @@ onMounted(async () => {
   overflow-x: auto;
   margin-bottom: var(--space-lg);
   scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.profile__photos::-webkit-scrollbar {
+  display: none;
 }
 .profile__photo {
-  flex: 0 0 82%;
-  height: 200px;
+  flex: 0 0 86%;
+  height: 220px;
   object-fit: cover;
   border-radius: var(--radius-card);
   scroll-snap-align: start;

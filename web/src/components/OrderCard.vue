@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { money, pickup } from '../format';
 import { t } from '../i18n';
 import { legLabel, plateRequirement, type PlateRegion } from '../journey';
@@ -25,46 +26,87 @@ export interface OrderSummary {
 }
 
 /** `pool`: an order in the 接單池, which opens its claim page instead of the order's own page. */
-defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' | 'pool' }>();
+const props = defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' | 'pool' }>();
+
+/** "4人｜3件行李｜7座", the same line as in the group text. */
+const load = computed(() => [`${props.order.passengers}人`, `${props.order.luggage}件行李`, props.order.vehicleType].filter(Boolean).join('｜'));
 </script>
 
 <template>
   <RouterLink :to="role === 'pool' ? `/o/${order.code}` : `/app/orders/${order.id}`" class="card order-card">
     <div class="order-card__top">
-      <strong>
-        {{ pickup(order.pickupAt) }}
-        <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
-        <span v-if="role === 'pool' && order.requiredPlates?.length" class="leg-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
-      </strong>
-      <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
+      <strong class="order-card__time">{{ pickup(order.pickupAt) }}</strong>
+      <span v-if="role === 'pool' && order.driverPrice" class="order-card__price">{{ money(order.driverPrice) }}</span>
+      <StatusBadge v-else-if="role !== 'pool'" :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
     </div>
-    <div class="order-card__route">{{ t(order.origin) }} → {{ t(order.destination) }}</div>
-    <div class="muted">
-      {{ t(`${order.passengers}人・${order.luggage}件行李`) }}<template v-if="order.vehicleType">・{{ t(order.vehicleType) }}</template>
-      <template v-if="order.driverPrice">・{{ money(order.driverPrice) }}</template>
+    <div class="order-card__route">{{ t(`${order.origin} 至 ${order.destination}`) }}</div>
+    <div class="order-card__meta">
+      <span>{{ t(load) }}</span>
+      <span v-if="order.requiredPlates?.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
+      <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
     </div>
-    <div class="hint">
+    <div class="order-card__foot">
       <template v-if="role === 'dispatched'">
         {{ order.selfDrive && order.status === 'ASSIGNED' ? t('自己做') : order.driver?.name ? t(`司機：${order.driver.name}`) : t('等待司機搶單') }}
+        <span v-if="order.driverPrice" class="order-card__foot-price">{{ money(order.driverPrice) }}</span>
       </template>
-      <template v-else>{{ t(`派單：${order.dispatcherName ?? '—'}`) }}</template>
+      <template v-else>
+        {{ t(`出單者：${order.dispatcherName ?? '—'}`) }}
+        <span v-if="role === 'claimed' && order.driverPrice" class="order-card__foot-price">{{ money(order.driverPrice) }}</span>
+      </template>
     </div>
   </RouterLink>
 </template>
 
 <style scoped>
 .order-card {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
   color: var(--color-text);
+  margin-bottom: var(--space-md);
 }
 .order-card__top {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: var(--space-sm);
+}
+.order-card__time {
+  font-size: var(--font-body-large);
+  font-variant-numeric: tabular-nums;
+}
+.order-card__price {
+  color: var(--color-gold-ink);
+  font-size: var(--font-body-large);
+  font-weight: 700;
+  white-space: nowrap;
 }
 .order-card__route {
   font-size: var(--font-body-large);
   font-weight: 600;
-  margin: var(--space-xs) 0;
+  overflow-wrap: anywhere;
+}
+.order-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+  color: var(--color-label);
+  font-size: var(--font-label);
+}
+.order-card__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  margin-top: var(--space-xs);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-divider);
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+.order-card__foot-price {
+  color: var(--color-gold-ink);
+  font-weight: 700;
 }
 </style>

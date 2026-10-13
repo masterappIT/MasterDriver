@@ -60,12 +60,12 @@ const ERROR_TEXT: Record<string, string> = {
   SMS_NOT_CONFIGURED: '暫時無法發送簡訊，請聯絡客服',
   SMS_SEND_FAILED: '簡訊發送失敗，請稍後再試',
   ORDER_NOT_FOUND: '找不到這張單',
-  CANNOT_CLAIM_OWN_ORDER: '不能搶自己發的單',
+  CANNOT_CLAIM_OWN_ORDER: '不能搶自己出的單',
   PROFILE_REQUIRED: '請先填寫司機資料',
   TEAM_ONLY: '這張單只限車隊成員搶',
   INVALID_ORDER_STATUS: '這張單的狀態已經改變，請重新整理',
   DRIVER_PRICE_LOCKED: '已有司機接單，司機價不能再改',
-  QUOTA_EXCEEDED: '本月發單額度已用完',
+  QUOTA_EXCEEDED: '本月出單額度已用完',
   FEATURE_NOT_AVAILABLE: '你目前的方案沒有這個功能',
   INSUFFICIENT_CREDITS: '點數不足，請先充值',
   QR_IMAGE_INVALID: '請上傳 400 KB 以內的 PNG、JPG 或 WebP 圖片',
@@ -107,6 +107,8 @@ export class ApiError extends Error {
     const messages = issues.map((issue) => issue.message);
     const text = messages.includes(INVALID_PHONE)
       ? '手機號碼格式不正確'
+      : messages.includes('INVALID_PASSENGER_PHONE')
+        ? '乘客電話格式不正確：請選區號，香港和澳門填 8 位數字，內地填 11 位手機號碼'
       : messages.includes('WHATSAPP_INVITE_INVALID')
         ? 'WhatsApp 群連結應該是 https://chat.whatsapp.com/ 開頭'
         : messages.includes('QR_IMAGE_REQUIRED')

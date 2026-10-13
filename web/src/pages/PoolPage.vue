@@ -30,6 +30,18 @@ async function load() {
   }
 }
 
+/** "YYYY-MM-DD" in Hong Kong, `days` from today, for the 今天 / 明天 chips. */
+function hongKongDay(days: number) {
+  return new Date(Date.now() + 8 * 60 * 60 * 1000 + days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+const today = hongKongDay(0);
+const tomorrow = hongKongDay(1);
+
+function pickDay(day: string) {
+  date.value = date.value === day ? '' : day;
+  void load();
+}
+
 function clear() {
   date.value = '';
   keyword.value = '';
@@ -49,7 +61,11 @@ onMounted(load);
     </section>
 
     <template v-else>
-      <p class="hint">{{ t('派單的人自己選擇放進來的單。先到先得，和群裡的連結是同一張單。') }}</p>
+      <p class="hint">{{ t('出單者自己選擇放進來的單。先到先得，和群裡的連結是同一張單。') }}</p>
+      <div class="chips pool-page__days">
+        <button class="chip" :class="{ 'chip--on': date === today }" type="button" :aria-pressed="date === today" @click="pickDay(today)">{{ t('今天') }}</button>
+        <button class="chip" :class="{ 'chip--on': date === tomorrow }" type="button" :aria-pressed="date === tomorrow" @click="pickDay(tomorrow)">{{ t('明天') }}</button>
+      </div>
       <form class="pool-page__filters" @submit.prevent="load">
         <input v-model="date" class="input" type="date" :aria-label="t('出發日期')" @change="load" />
         <input v-model="keyword" class="input" type="search" maxlength="40" :placeholder="t('地點，例如：機場')" :aria-label="t('地點')" />
@@ -69,6 +85,10 @@ onMounted(load);
 </template>
 
 <style scoped>
+.pool-page__days {
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
 .pool-page__filters {
   display: flex;
   gap: var(--space-sm);

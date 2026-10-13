@@ -236,12 +236,12 @@ onBeforeUnmount(() => {
 
     <section v-if="thread" class="card support__thread">
       <header class="support__who">
-        <a class="hint support__back" href="#" @click.prevent="router.push('/support')">← 對話列表</a>
+        <a class="hint support__back" href="#" @click.prevent="router.push('/support')">返回對話列表</a>
         <div>
           <strong>{{ who(thread.conversation) }}</strong>
           <span class="muted">　{{ thread.conversation.phone ?? '未登入的訪客，無法主動聯絡，請請對方留下電話或微信' }}</span>
         </div>
-        <RouterLink v-if="thread.conversation.userId" :to="`/users/${thread.conversation.userId}`" class="hint">查看用戶 →</RouterLink>
+        <RouterLink v-if="thread.conversation.userId" :to="`/users/${thread.conversation.userId}`" class="hint">查看用戶</RouterLink>
       </header>
 
       <div class="support__messages">
@@ -263,7 +263,7 @@ onBeforeUnmount(() => {
               <template v-else>
                 <video v-if="files[message.media.id]?.startsWith('blob:')" class="support__media" :src="files[message.media.id]" controls />
                 <button v-else class="button secondary" type="button" :disabled="files[message.media.id] === 'loading'" @click="openFile(message.media.id)">
-                  ▶ {{ files[message.media.id] === 'loading' ? '影片載入中…' : `播放影片（${megabytes(message.media.sizeBytes)}）` }}
+                  {{ files[message.media.id] === 'loading' ? '影片載入中…' : `播放影片（${megabytes(message.media.sizeBytes)}）` }}
                 </button>
               </template>
             </template>
@@ -275,7 +275,7 @@ onBeforeUnmount(() => {
       </div>
 
       <form class="support__compose" @submit.prevent="reply">
-        <button v-if="thread.uploads.images" class="button secondary" type="button" :disabled="sending" title="傳送圖片或影片" @click="picker?.click()">＋</button>
+        <button v-if="thread.uploads.images" class="button secondary" type="button" :disabled="sending" title="傳送圖片或影片" @click="picker?.click()">附件</button>
         <input ref="picker" class="support__picker" type="file" accept="image/png,image/jpeg,image/webp,video/mp4,video/quicktime,video/webm" @change="picked" />
         <textarea v-model="draft" class="input support__input" rows="2" maxlength="2000" placeholder="輸入回覆（Enter 傳送，Shift+Enter 換行）" @keydown="onKey" />
         <button class="button" type="submit" :disabled="sending || !draft.trim()">{{ sending ? '傳送中' : '傳送' }}</button>

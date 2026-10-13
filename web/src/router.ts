@@ -25,6 +25,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/pool', component: () => import('./pages/PoolPage.vue'), meta: { app: true } },
   { path: '/app/new', component: () => import('./pages/NewOrderPage.vue'), meta: { app: true } },
   { path: '/app/orders', component: () => import('./pages/OrdersPage.vue'), meta: { app: true } },
+  { path: '/app/orders/:id/share', component: () => import('./pages/SharePage.vue'), meta: { app: true } },
   { path: '/app/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { app: true } },
   { path: '/app/me', component: () => import('./pages/MePage.vue'), meta: { app: true } },
   { path: '/app/profile-page', component: () => import('./pages/MyProfilePagePage.vue'), meta: { app: true } },
