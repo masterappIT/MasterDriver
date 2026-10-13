@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: master_driver
+      POSTGRES_PASSWORD: master_driver
+      POSTGRES_DB: master_driver
+    ports:
+      # 5433 is used by Master Travel's local database.
+      - "5434:5432"
+    volumes:
+      - master-driver-postgres:/var/lib/postgresql/data
+
+volumes:
+  master-driver-postgres:

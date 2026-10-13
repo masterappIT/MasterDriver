@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../backend/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users and sign-in
+// ---------------------------------------------------------------------------
+
+/// A verified phone number. Every user can both dispatch and claim orders.
+model User {
+  id          String   @id @default(cuid())
+  countryCode String
+  phone       String
+  locale      String   @default("zh-Hant")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profile               DriverProfile?
+  sessions              Session[]
+  dispatchedOrders      Order[]               @relation("OrderDispatcher")
+  claimedOrders         Order[]               @relation("OrderClaimer")
+  claims                OrderClaim[]
+  subscriptions         Subscription[]
+  entitlementOverrides  EntitlementOverride[]
+  usages                Usage[]
+
+  @@unique([countryCode, phone])
+}
+
+/// Filled in once, the first time a driver claims an order.
+model DriverProfile {
+  userId        String   @id
+  name          String
+  hkPlate       String?
+  macauPlate    String?
+  mainlandPlate String?
+  vehicleType   String?
+  seats         Int?
+  color         String?
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum VerificationMode {
+  SMS
+  DEVELOPMENT
+}
+
+/// One-time sign-in code. Only a salted hash of the code is stored. The mode and
+/// hash are fixed when the code is requested; changing the development setting
+/// later never changes how an issued code is checked.
+model VerificationCode {
+  id          String           @id @default(cuid())
+  countryCode String
+  phone       String
+  mode        VerificationMode @default(SMS)
+  codeHash    String
+  ip          String?
+  attempts    Int       @default(0)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([countryCode, phone, createdAt])
+  @@index([ip, createdAt])
+}
+
+/// Development-mode sign-in ("登入配置 → 開發模式登入"), kept apart from SMS settings.
+/// When enabled, new sign-in requests send no SMS and accept the configured code.
+/// Only the code's hash is stored and it is never returned by any API.
+model PhoneLoginDevelopmentSetting {
+  id                   String   @id @default("default")
+  enabled              Boolean  @default(false)
+  verificationCodeHash String
+  updatedAt            DateTime @updatedAt
+  updatedBy            String?
+}
+
+/// Long-lived sign-in. Only a hash of the bearer token is stored.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  tokenHash  String    @unique
+  userAgent  String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+enum OrderStatus {
+  OPEN
+  ASSIGNED
+  COMPLETED
+  CANCELLED
+}
+
+/// Who may claim an order. TEAM is reserved for the paid team tier.
+enum ClaimScope {
+  PUBLIC
+  TEAM
+}
+
+enum Currency {
+  HKD
+  CNY
+  MOP
+}
+
+model Order {
+  id                   String      @id @default(cuid())
+  /// Unguessable code used in the dispatch link (/o/{code}).
+  code                 String      @unique
+  /// Unguessable code used in the passenger-confirmation link (/c/{confirmCode}).
+  confirmCode          String      @unique
+  dispatcherId         String
+  scope                ClaimScope  @default(PUBLIC)
+  status               OrderStatus @default(OPEN)
+  pickupAt             DateTime
+  origin               String
+  destination          String
+  waypoints            String[]    @default([])
+  passengers           Int
+  luggage              Int         @default(0)
+  vehicleType          String?
+  /// What the dispatcher pays the driver, in minor units (cents). Shown in the
+  /// group text and on the claim page. Null when left blank.
+  driverPriceMinor     Int?
+  driverCurrency       Currency    @default(HKD)
+  /// What the passenger pays, in minor units. Never shown to drivers.
+  passengerPriceMinor  Int?
+  passengerCurrency    Currency    @default(HKD)
+  /// Whether the passenger-confirmation page shows the passenger price.
+  showPassengerPrice   Boolean     @default(false)
+  notes                String?
+  passengerName        String?
+  /// Visible only to the dispatcher and the driver who claimed the order.
+  passengerContact     String
+  claimedById          String?
+  claimedAt            DateTime?
+  passengerConfirmedAt DateTime?
+  completedAt          DateTime?
+  cancelledAt          DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+
+  dispatcher User         @relation("OrderDispatcher", fields: [dispatcherId], references: [id])
+  claimedBy  User?        @relation("OrderClaimer", fields: [claimedById], references: [id])
+  claims     OrderClaim[]
+
+  @@index([dispatcherId, createdAt])
+  @@index([claimedById, createdAt])
+}
+
+enum ClaimResult {
+  WON
+  LOST
+}
+
+/// Every claim attempt, won or lost, kept as evidence for disputes.
+model OrderClaim {
+  id        String      @id @default(cuid())
+  orderId   String
+  driverId  String
+  result    ClaimResult
+  createdAt DateTime    @default(now())
+
+  order  Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver User  @relation(fields: [driverId], references: [id])
+
+  @@index([orderId, createdAt])
+  @@index([driverId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Billing control (entitlements). Payment providers only feed Subscription;
+// whether a feature is usable is always decided here.
+// ---------------------------------------------------------------------------
+
+enum FeatureKind {
+  SWITCH
+  QUOTA
+}
+
+model Feature {
+  key         String      @id
+  name        String
+  kind        FeatureKind
+  description String?
+
+  planFeatures PlanFeature[]
+}
+
+model Plan {
+  key       String  @id
+  name      String
+  rank      Int
+  isDefault Boolean @default(false)
+
+  features      PlanFeature[]
+  subscriptions Subscription[]
+}
+
+model PlanFeature {
+  planKey    String
+  featureKey String
+  enabled    Boolean @default(true)
+  /// Monthly quota for QUOTA features. Null means unlimited.
+  quota      Int?
+
+  plan    Plan    @relation(fields: [planKey], references: [key], onDelete: Cascade)
+  feature Feature @relation(fields: [featureKey], references: [key], onDelete: Cascade)
+
+  @@id([planKey, featureKey])
+}
+
+enum SubscriptionSource {
+  STRIPE
+  ALIPAY_HK
+  MANUAL
+  GIFT
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  planKey                String
+  source                 SubscriptionSource
+  status                 SubscriptionStatus @default(ACTIVE)
+  startsAt               DateTime
+  endsAt                 DateTime?
+  externalCustomerId     String?
+  externalSubscriptionId String?            @unique
+  note                   String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan Plan @relation(fields: [planKey], references: [key])
+
+  @@index([userId, status])
+}
+
+/// Site-wide switches. With planKey set, everyone gets that plan's features
+/// (e.g. the launch free period). With featureKey set, that one feature is free
+/// and unlimited for everyone.
+model BillingPolicy {
+  id         String    @id @default(cuid())
+  name       String
+  planKey    String?
+  featureKey String?
+  startsAt   DateTime
+  endsAt     DateTime?
+  active     Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+}
+
+/// Per-user grants: a trial, a gift, or a Master Travel customer upgrade.
+model EntitlementOverride {
+  id         String    @id @default(cuid())
+  userId     String
+  planKey    String?
+  featureKey String?
+  enabled    Boolean?
+  quota      Int?
+  startsAt   DateTime
+  endsAt     DateTime?
+  reason     String
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Quota consumption per calendar month (period = "YYYY-MM", Hong Kong time).
+model Usage {
+  userId     String
+  featureKey String
+  period     String
+  used       Int    @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, featureKey, period])
+}
+
+model BillingAudit {
+  id        String   @id @default(cuid())
+  actor     String
+  action    String
+  payload   Json
+  createdAt DateTime @default(now())
+}

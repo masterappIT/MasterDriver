@@ -1,0 +1,30 @@
+{
+  "name": "masterdriver",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "backend"
+  ],
+  "scripts": {
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose stop postgres",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "build:shared": "npm --workspace shared run build",
+    "dev:api": "npm run build:shared && npm --workspace backend run dev",
+    "build:api": "npm run build:shared && npm --workspace backend run build",
+    "test:shared": "npm --workspace shared run test",
+    "test:api": "npm run build:shared && npm --workspace backend run test",
+    "test:api:db": "npm run build:shared && npm --workspace backend run test:db",
+    "verify:api": "npm run test:shared && npm run build:api && npm run test:api && npx prisma validate --schema prisma/schema.prisma",
+    "dev-login": "npm run build:shared && npm --workspace backend run dev-login --"
+  },
+  "allowScripts": {
+    "prisma@6.19.3": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "esbuild@0.28.2": true
+  }
+}
