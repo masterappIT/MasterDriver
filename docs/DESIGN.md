@@ -51,13 +51,21 @@ Master Travel 沒有對應的頁面（發單成功分享頁、空車廣播、名
 
 ### 平台後台專用
 
-後台另加三個 Master Travel 沒有的顏色，只用於後台的危險操作與提示，不用於司機與乘客頁面：
+2026-10-14 起，平台後台（`admin/`）參照 **Master Travel 最新的管理後台**（`admin/src/styles/`，commit `c902bb5a`），與用戶端的乘客端風格分開；數值定義在 `admin/src/styles/base.css`，沿用記錄見 `docs/REUSE.md`。
 
 | Token | 值 | 用途 |
 |---|---|---|
-| `--color-danger` | `#d64545` | 停用、關閉等危險按鈕與錯誤文字 |
-| `--color-danger-tint` | `#fdecec` | 錯誤提示底色 |
-| `--color-warning-tint` | `#fff6e0` | 警告提示底色（例如開發模式登入開啟中） |
+| `--color-background` | `#f3f6fb` | 頁面底色（右上加淡藍光暈） |
+| `--color-text` | `#12243b` | 主要文字、標題 |
+| `--color-text-secondary` | `#647892` | 次要文字 |
+| `--color-label` | `#526985` | 表單標籤 |
+| `--color-primary` | `#1769e0` | 主按鈕（漸層至 `#3f8df0`）、連結 |
+| `--gradient-side` | `#12243b → #1b3557 → #56657e` | 左側選單底色 |
+| `--color-nav-active-bg` | `#3c76c5` | 選單選中 |
+| `--color-danger` | `#d74b4b` | 停用、刪除等危險按鈕 |
+| `--color-danger-tint`／`--color-warning-tint` | `#ffe4e4`／`#fff3cc` | 錯誤、警告提示底色（例如開發模式登入開啟中） |
+
+卡片圓角 20 px、邊框 `#e1e8f2`、陰影 `0 12px 32px rgba(39,72,111,.08)`；輸入框與按鈕圓角 10 px、高 40–44 px；表格標題 11 px、字距加寬。單的狀態在後台用淺底彩字的膠囊：待搶黃、已派藍、乘客已確認與已完成綠、已取消紅，並一定顯示文字。手機寬度下側欄變成頂列，選單由右上按鈕展開並可橫向滑動。
 
 ## 單的狀態顏色
 

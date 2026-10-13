@@ -1,28 +1,52 @@
-/* Values from docs/DESIGN.md (Master Travel driver tokens). Use the variables; never hard-code. */
+/*
+ * Platform admin styles, following the Master Travel admin (admin/src/styles/*.css at c902bb5a9,
+ * see docs/REUSE.md). Token names are shared by the pages; use the variables, never hard-code.
+ */
 :root {
-  --color-background: #f4f7fb;
+  --color-background: #f3f6fb;
   --color-surface: #ffffff;
-  --color-text: #17233d;
-  --color-text-secondary: #65738b;
-  --color-text-muted: #98a3b5;
-  --color-label: #41506a;
+  --color-text: #12243b;
+  --color-text-secondary: #647892;
+  --color-text-muted: #8a9ab0;
+  --color-label: #526985;
   --color-border: #dbe3ef;
-  --color-divider: #e8edf4;
-  --color-primary: #3568e8;
-  --color-primary-dark: #1e4fc7;
+  --color-divider: #edf1f6;
+  --color-card-border: #e1e8f2;
+  --color-field-border: #ccd8e7;
+  --color-field: #f8fafd;
+  --color-field-text: #29415f;
+  --color-focus: #4a8df0;
+  --color-primary: #1769e0;
+  --color-primary-dark: #155dcc;
   --color-on-primary: #ffffff;
-  --color-tint: #e8f0ff;
-  --color-nav-inactive: #8793a8;
-  --color-nav-active: #245bd6;
-  --color-danger: #d64545;
-  --color-danger-tint: #fdecec;
-  --color-warning-tint: #fff6e0;
+  --color-tint: #edf5ff;
+  --color-danger: #d74b4b;
+  --color-danger-text: #a52b2b;
+  --color-danger-tint: #ffe4e4;
+  --color-warning-text: #8b6200;
+  --color-warning-tint: #fff3cc;
+  --color-info-text: #245687;
 
-  --status-open: #e6a206;
-  --status-assigned: #3568e8;
-  --status-confirmed: #25c987;
-  --status-completed: #98a3b5;
-  --status-cancelled: #65738b;
+  /* Side navigation (dark panel). */
+  --color-side: #12243b;
+  --gradient-side: linear-gradient(155deg, #12243b 0%, #1b3557 58%, #56657e 140%);
+  --color-nav-inactive: #b9c8da;
+  --color-nav-sub: #9fb3cd;
+  --color-nav-active: #ffffff;
+  --color-nav-active-bg: #3c76c5;
+  --color-nav-hover-bg: rgba(255, 255, 255, 0.09);
+
+  /* Status pills: text on a light background. */
+  --status-open: #8b6200;
+  --status-open-bg: #fff3cc;
+  --status-assigned: #125dbb;
+  --status-assigned-bg: #e2efff;
+  --status-confirmed: #137044;
+  --status-confirmed-bg: #def6e9;
+  --status-completed: #137044;
+  --status-completed-bg: #def6e9;
+  --status-cancelled: #a52b2b;
+  --status-cancelled-bg: #ffe4e4;
 
   --space-xs: 4px;
   --space-sm: 8px;
@@ -30,29 +54,54 @@
   --space-lg: 16px;
   --space-xl: 24px;
 
-  --radius-card: 16px;
-  --radius-input: 12px;
-  --radius-pill: 100px;
-  --shadow-card: 0 8px 18px rgba(0, 0, 0, 0.08);
+  --radius-card: 20px;
+  --radius-input: 10px;
+  --radius-pill: 999px;
+  --shadow-card: 0 12px 32px rgba(39, 72, 111, 0.08);
+  --shadow-primary: 0 6px 14px rgba(23, 105, 224, 0.16);
+  --gradient-primary: linear-gradient(135deg, #1769e0, #3f8df0);
 
   --font-caption: 12px;
   --font-label: 13px;
   --font-body: 14px;
   --font-body-large: 16px;
   --font-title: 20px;
+  --admin-content-max-width: 1280px;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  min-width: 320px;
   background: var(--color-background);
   color: var(--color-text);
-  font-family: 'PingFang TC', 'PingFang SC', 'Microsoft JhengHei', 'Noto Sans TC', system-ui, sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC',
+    'PingFang SC', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
   font-size: var(--font-body);
   line-height: 1.5;
+  font-synthesis: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid rgba(74, 141, 240, 0.32);
+  outline-offset: 2px;
 }
 
 a {
@@ -60,22 +109,40 @@ a {
   text-decoration: none;
 }
 
+a:hover {
+  text-decoration: underline;
+}
+
 h1 {
-  margin: 0 0 var(--space-lg);
-  font-size: var(--font-title);
+  margin: 0 0 26px;
+  color: var(--color-text);
+  font-size: clamp(28px, 4vw, 38px);
+  line-height: 1.1;
+  letter-spacing: -0.045em;
 }
 
 h2 {
   margin: 0 0 var(--space-md);
-  font-size: var(--font-body-large);
+  color: var(--color-text);
+  font-size: var(--font-title);
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  display: block;
+  color: #59708e;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
 }
 
 .card {
-  background: var(--color-surface);
+  margin-bottom: 18px;
+  padding: 24px 28px;
+  border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.94);
   box-shadow: var(--shadow-card);
-  padding: var(--space-xl);
-  margin-bottom: var(--space-xl);
 }
 
 .muted {
@@ -96,76 +163,140 @@ h2 {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--space-lg);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 18px;
+}
+
+.grid > .card {
+  margin-bottom: 0;
 }
 
 .button {
-  border: none;
-  border-radius: var(--radius-input);
-  padding: var(--space-sm) var(--space-lg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 40px;
-  font: inherit;
-  cursor: pointer;
-  background: var(--color-primary);
+  padding: 9px 16px;
+  border: 0;
+  border-radius: var(--radius-input);
   color: var(--color-on-primary);
+  background: var(--gradient-primary);
+  box-shadow: var(--shadow-primary);
+  font-size: var(--font-label);
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease,
+    filter 0.16s ease, transform 0.16s ease;
 }
 
-.button:hover {
-  background: var(--color-primary-dark);
+.button:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  text-decoration: none;
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.98);
 }
 
 .button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .button.secondary {
-  background: var(--color-tint);
-  color: var(--color-primary-dark);
+  border: 1px solid var(--color-border);
+  color: #425974;
+  background: #e8eef6;
+  box-shadow: none;
+}
+
+.button.secondary:hover:not(:disabled) {
+  border-color: #9bbce8;
+  color: var(--color-primary);
+  background: #f5f9ff;
+  filter: none;
 }
 
 .button.danger {
   background: var(--color-danger);
+  box-shadow: none;
 }
 
 .input,
 .select {
-  border: 1px solid var(--color-border);
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-field-border);
   border-radius: var(--radius-input);
-  padding: var(--space-sm) var(--space-md);
-  min-height: 40px;
-  font: inherit;
+  outline: 0;
+  color: var(--color-field-text);
+  background: var(--color-field);
+  font-size: var(--font-body);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
+}
+
+textarea.input {
+  line-height: 1.5;
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--color-focus);
   background: var(--color-surface);
-  color: var(--color-text);
+  box-shadow: 0 0 0 3px rgba(74, 141, 240, 0.13);
+}
+
+.input:disabled,
+.select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 7px;
   color: var(--color-label);
-  font-size: var(--font-label);
+  font-size: var(--font-caption);
+  font-weight: 750;
+}
+
+.field .hint {
+  font-weight: 400;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
+  text-align: left;
+  font-size: var(--font-body);
 }
 
 .table th,
 .table td {
-  text-align: left;
-  padding: var(--space-sm) var(--space-md);
+  padding: 14px 16px;
   border-bottom: 1px solid var(--color-divider);
+  text-align: left;
   vertical-align: top;
 }
 
 .table th {
-  color: var(--color-text-secondary);
-  font-weight: 500;
-  font-size: var(--font-label);
+  color: #667a94;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover td {
+  background: #fafcff;
 }
 
 .table .nowrap {
@@ -177,26 +308,114 @@ h2 {
 }
 
 .table-wrap {
+  min-width: 0;
   overflow-x: auto;
 }
 
+/* A card that holds a table: the table runs edge to edge, like the Master Travel list panels. */
+.card.table-wrap {
+  padding: 0;
+}
+
+.card.table-wrap > :not(table) {
+  margin-right: 28px;
+  margin-left: 28px;
+}
+
+.card.table-wrap > h2:first-child {
+  margin-top: 24px;
+}
+
+.card.table-wrap > .hint:not(:last-child) {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.card.table-wrap > .table th,
+.card.table-wrap > .table td {
+  padding: 16px 20px;
+}
+
+.card.table-wrap > .table th:first-child,
+.card.table-wrap > .table td:first-child {
+  padding-left: 28px;
+}
+
+.card.table-wrap > .table th:last-child,
+.card.table-wrap > .table td:last-child {
+  padding-right: 28px;
+}
+
+.card.table-wrap > .table thead th {
+  border-top: 1px solid var(--color-divider);
+}
+
+.card.table-wrap > .table:first-child thead th {
+  border-top: 0;
+}
+
 .notice {
-  border-radius: var(--radius-input);
-  padding: var(--space-md) var(--space-lg);
   margin-bottom: var(--space-lg);
-  background: var(--color-tint);
+  padding: 13px 16px;
+  border: 1px solid #cfe0f6;
+  border-radius: 14px;
+  color: var(--color-info-text);
+  background: #f5f9ff;
 }
 
 .notice.warning {
+  border-color: #f1dc9b;
+  color: var(--color-warning-text);
   background: var(--color-warning-tint);
 }
 
 .notice.error {
+  border-color: #f5c2c2;
+  color: var(--color-danger-text);
   background: var(--color-danger-tint);
-  color: var(--color-danger);
 }
 
 .stat {
-  font-size: 28px;
-  font-weight: 600;
+  margin-top: 14px;
+  color: var(--color-text);
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+@media (max-width: 700px) {
+  .card {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .card.table-wrap > :not(table) {
+    margin-right: 16px;
+    margin-left: 16px;
+  }
+
+  .card.table-wrap > h2:first-child {
+    margin-top: 16px;
+  }
+
+  .card.table-wrap > .table th,
+  .card.table-wrap > .table td {
+    padding: 13px 14px;
+  }
+
+  .card.table-wrap > .table th:first-child,
+  .card.table-wrap > .table td:first-child {
+    padding-left: 16px;
+  }
+
+  .card.table-wrap > .table th:last-child,
+  .card.table-wrap > .table td:last-child {
+    padding-right: 16px;
+  }
+
+  .stat {
+    margin-top: 7px;
+    font-size: 26px;
+  }
 }

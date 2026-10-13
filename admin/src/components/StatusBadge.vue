@@ -5,34 +5,50 @@ defineProps<{ status: string; confirmed?: boolean }>();
 </script>
 
 <template>
-  <span class="status-badge" :class="`status-badge--${status.toLowerCase()}`">
+  <span
+    class="status-badge"
+    :class="[`status-badge--${status.toLowerCase()}`, { 'status-badge--confirmed': confirmed && status === 'ASSIGNED' }]"
+  >
     {{ ORDER_STATUS[status] ?? status }}<template v-if="confirmed && status === 'ASSIGNED'">・乘客已確認</template>
   </span>
 </template>
 
 <style scoped>
+/* Light pill with coloured text, as the Master Travel admin shows trip statuses. */
 .status-badge {
   display: inline-block;
-  padding: 2px var(--space-sm);
+  padding: 6px 10px;
   border-radius: var(--radius-pill);
-  font-size: var(--font-caption);
-  color: var(--color-on-primary);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: 0;
+  vertical-align: middle;
   white-space: nowrap;
 }
 
 .status-badge--open {
-  background: var(--status-open);
+  color: var(--status-open);
+  background: var(--status-open-bg);
 }
 
 .status-badge--assigned {
-  background: var(--status-assigned);
+  color: var(--status-assigned);
+  background: var(--status-assigned-bg);
+}
+
+.status-badge--assigned.status-badge--confirmed {
+  color: var(--status-confirmed);
+  background: var(--status-confirmed-bg);
 }
 
 .status-badge--completed {
-  background: var(--status-completed);
+  color: var(--status-completed);
+  background: var(--status-completed-bg);
 }
 
 .status-badge--cancelled {
-  background: var(--status-cancelled);
+  color: var(--status-cancelled);
+  background: var(--status-cancelled-bg);
 }
 </style>

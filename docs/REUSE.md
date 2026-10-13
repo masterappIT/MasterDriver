@@ -36,13 +36,14 @@
 | 司機端 Flutter 頁面與規則，例如 `driver/lib/core/vehicle_plate_rules.dart`、`order_invite/order_invite_page.dart` | Dart / Flutter，無法在 Vue 使用 | 依其邏輯與版式用 TypeScript、Vue 3 重寫 |
 | Stripe 與 AlipayHK 收款設定，例如 `backend/src/stripe-channel-config.ts`、`backend/src/finance-channel.ts`、`admin/src/pages/payments/` | 綁定 Master Travel 的收款通道與財務中心 | 參考設定驗證與通道設定的做法；MasterDriver 只用 Stripe、AlipayHK 收訂閱，不做乘客收款 |
 | 手機驗證碼登入流程 | 綁定 Master Travel 的帳號、session 與資料表 | 參考流程，依本專案資料結構重寫 |
+| 後台外觀與版面：`admin/src/styles/`（`tokens.css`、`layout.css`、`components.css`、`tables.css`、`overlays.css`、`auth.css`、`dashboard.css`）、`admin/src/main.js` 的外框與選單、`admin/src/pages/dashboard/` | 原生 JS 與全域樣式，並綁定 Master Travel 的頁面、權限與多語 | 沿用顏色、圓角、陰影、側欄、卡片、表格、按鈕、輸入框、分頁、登入頁與總覽卡片的樣式數值，用 Vue 3 元件與本專案的 token 名稱重寫；選單順序與分組參照它，但項目與用詞按本專案的頁面；不帶入它的頁面、權限、多語與 Logo 上傳 |
 | 內置客服，`docs/INTERNAL-SUPPORT-REQUIREMENTS.md`、`backend/src/main.ts` 的客服 API、`src/pages/support/chat.vue`、`admin/src/pages/support/` | Express、uni-app、Flutter 與原生 JS 後台，並綁定 Master Travel 的乘客、司機帳號 | 沿用設計（共用收件匣、訪客憑證只存雜湊、訊息去重、定時讀取、私有媒體），用 NestJS 與 Vue 3 重寫；兩邊各有各的資料庫與收件匣 |
 
 ### C. 不沿用
 
 - 報價、計價、路線定價、收款、退款、結算、錢包、會員、積分、優惠券。
 - 地圖與定位（本專案不用地圖）。
-- Master Travel 的後台、權限、登入設定。
+- Master Travel 後台的程式、權限與登入設定。後台的**外觀與版面**可以參照（2026-10-14 決定，見 B 類「後台外觀與版面」），但頁面內容與功能按本專案需求，不照搬它的頁面。
 - 任何含 Master Travel 金鑰、正式網址或 AppID 的設定。
 
 ## 沿用記錄
@@ -64,3 +65,4 @@
 | 2026-10-13 | `.github/workflows/deploy-production.yml`、`quality-gates.yml` | 同名檔案 | `c902bb5a` | 相同的步驟順序與「commit 仍是 main 最新」檢查；移除 Flutter、小程序、分享圖片服務與每月重建；加上 `DEPLOY_ENABLED` 開關 |
 | 2026-10-13 | `backend/Dockerfile` | `backend/Dockerfile` | `c902bb5a` | 依同樣的兩階段做法重寫：Node 24、npm workspaces（`shared` 與 `backend`）、不含 GeoIP 資料 |
 | 2026-10-14 | `shared/src/vehicle-plate.ts`、`web/src/components/ProfileForm.vue` | 車牌規則與加車頁：`driver/lib/core/vehicle_plate_rules.dart`、`driver/lib/add_vehicle_page.dart`、`admin/src/pages/drivers/vehicle-plates.js`、`backend/src/main.ts` 的 `normalizeVehiclePlateData`／`validVehiclePlateData` | `c902bb5a` | 依同樣的規則用 TypeScript 與 Vue 3 重寫（來源沒有測試，測試為本專案自寫）：歸屬地與車牌類型改用代碼（`HK`／`MACAU`／`MAINLAND`、`SINGLE`／`DUAL`／`TRIPLE`）；內地車牌多接受簡體「粤」與沒有間隔號的寫法並統一格式；車輛類別不沿用（它綁定 Master Travel 的後台車輛目錄與計價），車型由司機自己打字；不收車輛相片 |
+| 2026-10-14 | `admin/src/styles/base.css`、`admin/src/App.vue`、`admin/src/pages/LoginPage.vue`、`admin/src/pages/DashboardPage.vue`、`admin/src/components/PagerBar.vue`、`StatusBadge.vue` | 後台外觀與版面：`admin/src/styles/{tokens,layout,components,tables,overlays,auth,dashboard,users}.css`、`admin/src/pages/dashboard/DashboardActionCard.css`、`admin/src/main.js` 的外框 | `c902bb5a` | 依同樣的數值用 Vue 3 重寫，沒有複製程式：沿用深色漸層側欄、卡片、表格、按鈕、輸入框、置中分頁、淺底狀態標籤、深藍登入頁與總覽卡片；手機版改為頂列加可橫向滑動的選單。按本專案需求調整：選單用本專案的頁面與用詞，「開發模式登入」與「簡訊通道」歸在「登入配置」下；總覽的「待處理事項」只放客服待回覆（後台不派單）；登入頁不放語言切換與 Master Travel 的版權列；登入錯誤字改淺紅色以便在深色底上看清楚 |
