@@ -35,15 +35,15 @@ MasterDriver 跨境師傅幫（簡稱「師傅幫」）是 MasterApp 旗下的�
 
 ## 規劃中的目錄結構
 
-技術選擇待拍板；以下為建議結構，建立時同步更新本表。
+目前的目錄結構：
 
 | 目錄 | 用途 | 建議技術 |
 |---|---|---|
-| `web/` | 司機與乘客使用的輕量網頁（發單、搶單、乘客確認、名片頁）；日後延伸到微信小程序和 App | Vue 3 + Vite（不用 uni-app、Flutter Web） |
+| `web/` | 司機與乘客使用的輕量網頁：搶單頁、乘客確認頁、登入、首頁、發單、我的單、單詳情、我的 | Vue 3 + Vite（不用 uni-app、Flutter Web） |
 | `backend/` | API、驗證碼登入、搶單一致性、收費控制 | NestJS |
 | `miniprogram/` | 之後的 MasterDriver 微信小程序 | 原生小程序 |
 | `app/` | 之後的 MasterDriver App | Capacitor 包裝 `web/` |
-| `admin/` | 平台後台（收費控制、廣告、潛在客戶） | Vue 3 + Vite |
+| `admin/` | 平台後台 | Vue 3 + Vite |
 | `prisma/` | 資料庫 schema 與 migration | Prisma + PostgreSQL |
 | `shared/` | 跨端共用型別與契約 | TypeScript |
 | `docs/` | 規劃、決定、架構與維運文件 | Markdown |

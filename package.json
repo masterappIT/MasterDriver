@@ -5,7 +5,8 @@
   "workspaces": [
     "shared",
     "backend",
-    "admin"
+    "admin",
+    "web"
   ],
   "scripts": {
     "db:up": "docker compose up -d postgres",
@@ -25,7 +26,10 @@
     "admin": "npm run build:shared && npm --workspace backend run admin --",
     "dev:admin": "npm --workspace admin run dev",
     "build:admin": "npm run build:shared && npm --workspace admin run build",
-    "verify:admin": "npm run build:admin"
+    "verify:admin": "npm run build:admin",
+    "dev:web": "npm --workspace web run dev",
+    "build:web": "npm --workspace web run build",
+    "verify:web": "npm --workspace web run test && npm run build:web"
   },
   "allowScripts": {
     "prisma@6.19.3": true,

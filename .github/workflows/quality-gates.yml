@@ -38,3 +38,4 @@ jobs:
       - run: npm run verify:api
       - run: npm run test:api:db
       - run: npm run verify:admin
+      - run: npm run verify:web

@@ -46,6 +46,8 @@
 
 | 日期 | 本專案檔案 | Master Travel 來源 | 來源 commit | 調整內容 |
 |---|---|---|---|---|
+| 2026-10-13 | `web/src/i18n/zh-hans-map.ts` | `src/i18n/zh-hans-map.ts`（由 OpenCC 資料產生） | `c1691339` | 原樣複製 |
+| 2026-10-13 | `web/src/i18n/convert.ts` | `src/i18n/index.ts` 的繁轉簡邏輯 | `c902bb5a` | 同樣的詞組優先、逐字轉換與快取；改為瀏覽器版本，並在需要簡體時才載入 |
 | 2026-10-13 | `backend/src/channels/stripe-config.ts` | `backend/src/stripe-channel-config.ts` | `e4a82aa2` | 原樣複製；設定的儲存、加密與 API 改由本專案的 `payment-channels.service.ts` 處理 |
 | 2026-10-13 | `backend/src/channels/stripe-config.test.ts` | `backend/src/stripe-channel-config.test.ts` | `e4a82aa2` | 只改 import 路徑 |
 | 2026-10-13 | `backend/src/channels/alipayhk-config.ts` | `backend/src/main.ts` 的 AlipayHK 設定驗證與金鑰檢查 | `c902bb5a` | 依同樣規則重寫成獨立函式（HTTPS 網關、2160 開頭 16 位商戶、PKCS8／SPKI 金鑰） |

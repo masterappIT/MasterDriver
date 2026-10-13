@@ -1,0 +1,222 @@
+/* Values from docs/DESIGN.md (Master Travel driver tokens). Use the variables; never hard-code. */
+:root {
+  --color-background: #f4f7fb;
+  --color-surface: #ffffff;
+  --color-text: #17233d;
+  --color-text-secondary: #65738b;
+  --color-text-muted: #98a3b5;
+  --color-label: #41506a;
+  --color-border: #dbe3ef;
+  --color-divider: #e8edf4;
+  --color-primary: #3568e8;
+  --color-primary-dark: #1e4fc7;
+  --color-on-primary: #ffffff;
+  --color-tint: #e8f0ff;
+  --color-nav-inactive: #8793a8;
+  --color-nav-active: #245bd6;
+
+  --status-open: #e6a206;
+  --status-assigned: #3568e8;
+  --status-confirmed: #25c987;
+  --status-completed: #98a3b5;
+  --status-cancelled: #65738b;
+  --plate-gold: #e6a206;
+  --plate-black: #000000;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  --radius-card: 16px;
+  --radius-input: 12px;
+  --radius-pill: 100px;
+  --shadow-card: 0 8px 18px rgba(0, 0, 0, 0.08);
+  --shadow-floating: 0 10px 24px rgba(0, 0, 0, 0.12);
+
+  --font-caption: 12px;
+  --font-label: 13px;
+  --font-body: 14px;
+  --font-body-large: 16px;
+
+  --max-width: 430px;
+  --tab-height: 60px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  /* System fonts only: no web-font download, so pages open fast inside WeChat (docs/DESIGN.md). */
+  font-family: -apple-system, 'PingFang TC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
+  font-size: var(--font-body);
+  line-height: 1.5;
+}
+
+#app {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  min-height: 100vh;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 var(--space-lg);
+}
+
+h2 {
+  font-size: var(--font-body-large);
+  margin: 0 0 var(--space-md);
+}
+
+.page {
+  padding: var(--space-lg);
+  padding-bottom: calc(var(--tab-height) + var(--space-xl) + var(--safe-bottom));
+}
+
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.muted {
+  color: var(--color-text-secondary);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-caption);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-input);
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-lg);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.button:active {
+  background: var(--color-primary-dark);
+}
+
+.button:disabled {
+  opacity: 0.5;
+}
+
+.button.secondary {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+
+.button.block {
+  width: 100%;
+}
+
+.button.large {
+  min-height: 52px;
+  font-size: var(--font-body-large);
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  padding: var(--space-sm) var(--space-md);
+  min-height: 44px;
+  font: inherit;
+  /* 16px stops iOS zooming into the field. */
+  font-size: 16px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  color: var(--color-label);
+  font-size: var(--font-label);
+  margin-bottom: var(--space-md);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.chip {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  padding: 2px var(--space-md);
+  font: inherit;
+  font-size: var(--font-label);
+  color: var(--color-label);
+  cursor: pointer;
+}
+
+.notice {
+  border-radius: var(--radius-input);
+  padding: var(--space-md);
+  margin-bottom: var(--space-lg);
+  background: var(--color-tint);
+  font-size: var(--font-label);
+}
+
+.notice.error {
+  background: #fdecec;
+  color: #c03a3a;
+}
+
+/* Bottom action bar that stays above the phone's home indicator. */
+.action-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: var(--max-width);
+  padding: var(--space-md) var(--space-lg) calc(var(--space-md) + var(--safe-bottom));
+  background: var(--color-surface);
+  box-shadow: var(--shadow-floating);
+  z-index: 10;
+}

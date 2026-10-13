@@ -34,6 +34,19 @@ API 在 `http://localhost:3020/api`，健康檢查為 `GET /api/health`。
 1. **開發模式登入**（建議）：`npm run dev-login -- --on` 開啟後，所有號碼都用指定碼登入（預設 `000000`，可用 `--code=123456` 更換）。狀態只顯示開關，不顯示驗證碼。規則見 `.github/instructions/phone-login-development-mode.instructions.md`。
 2. **簡訊碼印在日誌**：`.env` 的 `DEV_LOG_OTP=true` 時，未開啟開發模式的簡訊碼會印在 API 日誌。正式環境（`NODE_ENV=production`）一律無效。
 
+## 司機與乘客網頁
+
+```bash
+npm run dev:api
+npm run dev:web
+```
+
+- 網頁在 `http://localhost:5180`（與 `.env` 的 `PUBLIC_BASE_URL` 一致，派單連結和乘客確認連結會打開這裡）。
+- 頁面：`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
+- 介面文字只寫繁體；簡體由沿用 Master Travel 的 OpenCC 對照表轉出，只有選用簡體時才下載。+86 帳號預設簡體，可在「我的」切換。
+- 只用系統字型、不依賴 Google 服務；在微信內不顯示「分享到 WhatsApp」（微信會攔截跳轉），改用複製。
+- 搶單頁在單仍是「待搶」時每 5 秒更新一次狀態，讓各群打開同一條連結都能看到「已被接走」。
+
 ## 平台後台
 
 ```bash
@@ -106,6 +119,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 |---|---|
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
 | `npm run verify:admin` | 後台型別檢查與建置 |
+| `npm run verify:web` | 網頁測試（繁簡轉換）、型別檢查與建置 |
 | `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。
