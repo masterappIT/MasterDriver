@@ -34,6 +34,7 @@
 | 司機端 Flutter 頁面與規則，例如 `driver/lib/core/vehicle_plate_rules.dart`、`order_invite/order_invite_page.dart` | Dart / Flutter，無法在 Vue 使用 | 依其邏輯與版式用 TypeScript、Vue 3 重寫 |
 | Stripe 與 AlipayHK 收款設定，例如 `backend/src/stripe-channel-config.ts`、`backend/src/finance-channel.ts`、`admin/src/pages/payments/` | 綁定 Master Travel 的收款通道與財務中心 | 參考設定驗證與通道設定的做法；MasterDriver 只用 Stripe、AlipayHK 收訂閱，不做乘客收款 |
 | 手機驗證碼登入流程 | 綁定 Master Travel 的帳號、session 與資料表 | 參考流程，依本專案資料結構重寫 |
+| 內置客服，`docs/INTERNAL-SUPPORT-REQUIREMENTS.md`、`backend/src/main.ts` 的客服 API、`src/pages/support/chat.vue`、`admin/src/pages/support/` | Express、uni-app、Flutter 與原生 JS 後台，並綁定 Master Travel 的乘客、司機帳號 | 沿用設計（共用收件匣、訪客憑證只存雜湊、訊息去重、定時讀取、私有媒體），用 NestJS 與 Vue 3 重寫；兩邊各有各的資料庫與收件匣 |
 
 ### C. 不沿用
 
@@ -53,3 +54,4 @@
 | 2026-10-13 | `backend/src/channels/alipayhk-config.ts` | `backend/src/main.ts` 的 AlipayHK 設定驗證與金鑰檢查 | `c902bb5a` | 依同樣規則重寫成獨立函式（HTTPS 網關、2160 開頭 16 位商戶、PKCS8／SPKI 金鑰） |
 | 2026-10-13 | `backend/src/channels/sms253.ts`、`sms-channels.service.ts` | `backend/src/main.ts` 的 253 雲通訊呼叫（`requestSms253WithConfig`、`sendSms253`） | `c902bb5a` | 依同樣的請求格式重寫；改為 +86 走國內帳號、+852／+853 走國際帳號；紀錄不保存含驗證碼的簡訊內容 |
 | 2026-10-13 | `backend/src/common/secret-box.ts` | `backend/src/main.ts` 的 `encryptWechatSecret`／`decryptWechatSecret` | `c902bb5a` | 同樣使用 AES-256-GCM；金鑰改用獨立的 `DATA_ENCRYPTION_KEY`，密文加版本前綴 `v1` |
+| 2026-10-13 | `backend/src/support/`、`web/src/pages/SupportPage.vue`、`web/src/support.ts`、`admin/src/pages/SupportPage.vue` | 內置客服：`docs/INTERNAL-SUPPORT-REQUIREMENTS.md`、`prisma/schema.prisma` 的 `Support*` 模型、`backend/src/main.ts` 的客服 API、`backend/src/support-media.ts`、`src/pages/support/chat.vue`、`admin/src/pages/support/` | `c902bb5a` | 依同樣的設計重寫，沒有複製程式：對話參與者改為本專案的用戶與訪客（沒有乘客、司機之分）；客服操作寫入本專案的後台操作紀錄，不另建客服稽核表與客服帳戶；圖片不在伺服器轉檔（由瀏覽器先縮小），另加影片；媒體改為經 API 讀取的私有 Cloud Storage，並在沒有儲存空間時拒收 |

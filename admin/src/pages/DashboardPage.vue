@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { api } from '../api';
+import { api, can } from '../api';
 import { dateTime, hkd, money, ORDER_STATUS } from '../format';
 
 interface Dashboard {
@@ -11,6 +11,7 @@ interface Dashboard {
   creditsOutstanding: number;
   serviceFee: { enabled: boolean; fee: { amount: number; currency: string } };
   developmentLoginEnabled: boolean;
+  supportWaiting: number;
   freePeriods: { name: string; endsAt: string | null }[];
 }
 
@@ -36,6 +37,10 @@ onMounted(async () => {
     <div v-for="period in data.freePeriods" :key="period.name" class="notice">
       全站免費期「{{ period.name }}」生效中{{ period.endsAt ? `，至 ${dateTime(period.endsAt)}` : '，未設結束時間' }}。
     </div>
+
+    <RouterLink v-if="data.supportWaiting > 0 && can.write()" to="/support" class="notice warning dashboard__support">
+      客服有 <strong>{{ data.supportWaiting }}</strong> 個對話等待回覆 →
+    </RouterLink>
 
     <div class="grid">
       <div class="card">
@@ -72,3 +77,9 @@ onMounted(async () => {
     </div>
   </template>
 </template>
+
+<style scoped>
+.dashboard__support {
+  display: block;
+}
+</style>

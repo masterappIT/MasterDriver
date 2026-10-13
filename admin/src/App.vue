@@ -11,6 +11,7 @@ const NAV: { to: string; label: string; roles?: AdminRole[] }[] = [
   { to: '/users', label: '用戶' },
   { to: '/orders', label: '訂單' },
   { to: '/leads', label: '潛在客戶' },
+  { to: '/support', label: '客服', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/billing', label: '收費控制', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/service-fee', label: '平台服務費', roles: ['SUPER_ADMIN', 'OPERATOR'] },
   { to: '/ads', label: '廣告欄位', roles: ['SUPER_ADMIN', 'OPERATOR'] },
@@ -55,7 +56,8 @@ async function logout() {
       </div>
     </aside>
     <main class="admin-shell__main">
-      <RouterView :key="route.fullPath" />
+      <!-- 客服 keeps its inbox while switching conversations; every other page reloads with its URL. -->
+      <RouterView :key="route.path.startsWith('/support') ? '/support' : route.fullPath" />
     </main>
   </div>
   <RouterView v-else />

@@ -28,6 +28,8 @@ async function saveReveal(value: number | null) {
   }
 }
 const editing = ref(false);
+/** 客服 replies not opened yet. */
+const supportUnread = ref(0);
 const settings = ref<Settings | null>(null);
 const credits = ref<{ balance: { amount: number; currency: string }; serviceFee: { enabled: boolean; feePerOrder: { amount: number; currency: string }; exempt: boolean } } | null>(null);
 
@@ -39,6 +41,9 @@ async function logout() {
 onMounted(async () => {
   const preferences = await api<{ contactRevealMinutes: number | null }>('GET', '/me/preferences').catch(() => null);
   if (preferences) reveal.value = preferences.contactRevealMinutes;
+  void api<{ count: number }>('GET', '/support/unread')
+    .then((unread) => (supportUnread.value = unread.count))
+    .catch(() => undefined);
   [settings.value, credits.value] = await Promise.all([
     api<Settings>('GET', '/public/settings').catch(() => null),
     api<NonNullable<typeof credits.value>>('GET', '/me/credits').catch(() => null),
@@ -101,11 +106,15 @@ onMounted(async () => {
       </div>
     </section>
 
-    <section v-if="settings" class="card">
+    <section class="card">
       <h2>{{ t('客服') }}</h2>
-      <p v-if="settings.support.wechatId">{{ t('微信') }}：{{ settings.support.wechatId }}</p>
-      <p v-if="settings.support.whatsapp">WhatsApp：{{ settings.support.whatsapp }}</p>
-      <p v-if="!settings.support.wechatId && !settings.support.whatsapp" class="muted">{{ t('暫未提供') }}</p>
+      <RouterLink class="button secondary block" to="/support">
+        {{ t('聯絡客服') }}<span v-if="supportUnread" class="me__unread">{{ supportUnread }}</span>
+      </RouterLink>
+      <template v-if="settings">
+        <p v-if="settings.support.wechatId" class="me__contact">{{ t('微信') }}：{{ settings.support.wechatId }}</p>
+        <p v-if="settings.support.whatsapp" class="me__contact">WhatsApp：{{ settings.support.whatsapp }}</p>
+      </template>
     </section>
 
     <a v-if="settings?.upgradeUrl" class="card me__upgrade" :href="settings.upgradeUrl" target="_blank" rel="noopener">
@@ -128,6 +137,18 @@ onMounted(async () => {
   align-items: center;
   gap: var(--space-md);
   margin-bottom: var(--space-sm);
+}
+.me__unread {
+  margin-left: var(--space-sm);
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: #e5484d;
+  color: var(--color-on-primary);
+  font-size: var(--font-caption);
+}
+.me__contact {
+  margin: var(--space-md) 0 0;
 }
 .me__chip--on {
   border-color: var(--color-primary);

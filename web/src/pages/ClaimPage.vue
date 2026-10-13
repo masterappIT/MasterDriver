@@ -205,6 +205,8 @@ onBeforeUnmount(() => clearInterval(poller));
 
       <JoinGroups v-if="order.viewer !== 'dispatcher'" :groups="order.groupInvites" :dispatcher-name="order.dispatcherName" />
 
+      <p class="hint claim-page__support">{{ t('使用上有問題？') }}<RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink></p>
+
       <AdBanner position="CLAIM_PAGE" />
 
       <div v-if="canClaim" class="action-bar">
@@ -222,6 +224,9 @@ onBeforeUnmount(() => clearInterval(poller));
 </template>
 
 <style scoped>
+.claim-page__support {
+  text-align: center;
+}
 .claim-page__brand {
   display: flex;
   flex-direction: column;

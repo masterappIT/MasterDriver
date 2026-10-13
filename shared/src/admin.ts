@@ -103,3 +103,12 @@ export const adminPolicyUpdateSchema = z
   })
   .refine((value) => value.active !== undefined || value.endsAt !== undefined, { message: 'NOTHING_TO_UPDATE' });
 export type AdminPolicyUpdate = z.infer<typeof adminPolicyUpdateSchema>;
+
+/** 客服: which conversations the inbox lists. */
+export const adminSupportQuerySchema = pageQuerySchema.extend({
+  filter: z.enum(['waiting', 'all']).default('waiting'),
+});
+export type AdminSupportQuery = z.infer<typeof adminSupportQuerySchema>;
+
+export const adminSupportOpenSchema = z.object({ userId: z.string().trim().min(1).max(40) });
+export type AdminSupportOpen = z.infer<typeof adminSupportOpenSchema>;

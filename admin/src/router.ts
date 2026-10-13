@@ -18,6 +18,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/users/:id', component: () => import('./pages/UserDetailPage.vue'), meta: { title: '用戶詳情' } },
   { path: '/orders', component: () => import('./pages/OrdersPage.vue'), meta: { title: '訂單' } },
   { path: '/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '訂單詳情' } },
+  { path: '/support', component: () => import('./pages/SupportPage.vue'), meta: { title: '客服', roles: WRITE } },
+  { path: '/support/:id', component: () => import('./pages/SupportPage.vue'), meta: { title: '客服', roles: WRITE } },
   { path: '/billing', component: () => import('./pages/BillingPage.vue'), meta: { title: '收費控制', roles: WRITE } },
   { path: '/service-fee', component: () => import('./pages/ServiceFeePage.vue'), meta: { title: '平台服務費', roles: WRITE } },
   {

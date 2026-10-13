@@ -40,6 +40,11 @@ const ERROR_TEXT: Record<string, string> = {
   CHANNEL_NOT_TESTED: '請先通過檢查再啟用',
   SMS_ACCOUNT_REQUIRED: '請先填寫接口網址、帳號和密碼',
   SMS_TEST_PHONE_REQUIRED: '請先填寫測試號碼',
+  SUPPORT_CONVERSATION_NOT_FOUND: '找不到這個對話',
+  SUPPORT_MEDIA_TYPE: '只能傳送圖片（PNG、JPG、WebP）或影片（MP4、MOV、WebM）',
+  SUPPORT_MEDIA_TOO_LARGE: '檔案太大：圖片上限 5 MB，影片上限 25 MB',
+  SUPPORT_MEDIA_UNAVAILABLE: '尚未設定媒體儲存空間，暫時只能傳送文字',
+  SUPPORT_MEDIA_NOT_FOUND: '檔案已過期或不存在',
 };
 
 /** Field-level reasons the API gives for VALIDATION_FAILED. */
@@ -80,6 +85,22 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
     throw new ApiError(response.status, data.code ?? 'UNKNOWN', data.issues);
   }
   return data as T;
+}
+
+/** A request whose body or answer is not JSON (客服 pictures and videos). */
+export async function apiFetch(method: string, path: string, init: { headers?: Record<string, string>; body?: BodyInit } = {}) {
+  const response = await fetch(`/api/admin${path}`, {
+    method,
+    credentials: 'same-origin',
+    headers: { 'x-md-admin': '1', ...init.headers },
+    body: init.body,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401) session.admin = null;
+    throw new ApiError(response.status, data.code ?? 'UNKNOWN', data.issues);
+  }
+  return response;
 }
 
 export const can = {

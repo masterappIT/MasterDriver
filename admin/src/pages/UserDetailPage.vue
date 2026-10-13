@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api, can } from '../api';
 import { CREDIT_ENTRY, dateTime, fromLocalInput, hkd, money, PLAN_NAME } from '../format';
 
@@ -58,6 +58,7 @@ const PLANS = [
 ];
 
 const route = useRoute();
+const router = useRouter();
 const user = ref<UserDetail | null>(null);
 const error = ref('');
 const message = ref('');
@@ -113,6 +114,17 @@ function endOverride(id: string) {
   return run(() => api('DELETE', `/users/${route.params.id}/overrides/${id}`), '已結束贈送');
 }
 
+/** 主動聯繫: opens this user's 客服 conversation, creating it when there is none. */
+async function contact() {
+  error.value = '';
+  try {
+    const { id } = await api<{ id: string }>('POST', '/support/conversations', { userId: route.params.id });
+    await router.push(`/support/${id}`);
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
 const quotaText = (grant: Grant) => (!grant.enabled ? '不可用' : grant.quota === null ? '不限' : `${grant.quota} 張`);
 
 onMounted(load);
@@ -124,6 +136,7 @@ onMounted(load);
   <div v-if="message" class="notice">{{ message }}</div>
   <template v-if="user">
     <h1>{{ user.profile?.name ?? '未填姓名' }}　<span class="muted">{{ user.phone }}</span></h1>
+    <p v-if="can.write()"><button class="button secondary" type="button" @click="contact">用客服聯絡這位用戶</button></p>
 
     <div class="grid">
       <div class="card">

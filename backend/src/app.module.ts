@@ -8,9 +8,10 @@ import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma.module';
 import { PreferencesController, ProfileController } from './profile/profile.controller';
 import { SiteModule } from './site/site.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule],
+  imports: [PrismaModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule, SupportModule],
   controllers: [HealthController, ProfileController, PreferencesController],
 })
 export class AppModule {}

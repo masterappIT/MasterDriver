@@ -11,6 +11,8 @@ node_modules
 .DS_Store
 dist
 backend/generated
+# Local 客服 media (development only)
+.data
 .env
 .env.*
 !.env.example

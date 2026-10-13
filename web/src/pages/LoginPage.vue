@@ -19,12 +19,16 @@ function done() {
     <div class="card">
       <SignInForm @signed-in="done" />
     </div>
+    <p class="hint login-page__support">{{ t('登入遇到問題？') }}<RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink></p>
   </div>
 </template>
 
 <style scoped>
 .login-page {
   padding-top: 15vh;
+}
+.login-page__support {
+  text-align: center;
 }
 .login-page h1 {
   margin-bottom: var(--space-xs);

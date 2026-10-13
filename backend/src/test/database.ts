@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { PrismaClient } from '../../generated/prisma';
 import { AdminAuthService } from '../admin/admin-auth.service';
 import { AdminDataService } from '../admin/admin-data.service';
@@ -18,6 +19,8 @@ import { loadConfig } from '../config';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { OrdersService } from '../orders/orders.service';
 import { SiteService } from '../site/site.service';
+import { LocalMediaStorage } from '../support/media-storage';
+import { SupportService } from '../support/support.service';
 import type { PrismaService } from '../prisma.service';
 
 const root = resolve(__dirname, '../../..');
@@ -25,6 +28,9 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'SupportMessage',
+  'SupportMedia',
+  'SupportConversation',
   'GroupInvite',
   'SmsMessage',
   'SmsChannel',
@@ -94,6 +100,7 @@ export async function setupDatabase() {
   const credits = new CreditsService(prisma);
   const audit = new AuditService(prisma);
   const box = new SecretBox('test-encryption-key');
+  const mediaStorage = new LocalMediaStorage(mkdtempSync(join(tmpdir(), 'md-support-media-')));
   return {
     prisma,
     sms,
@@ -108,6 +115,8 @@ export async function setupDatabase() {
     adminAuth: new AdminAuthService(prisma, audit),
     adminData: new AdminDataService(prisma, audit, credits, commission, entitlements),
     site: new SiteService(prisma),
+    mediaStorage,
+    support: new SupportService(prisma, mediaStorage, audit),
     box,
     paymentChannels: new PaymentChannelsService(prisma, box),
     smsChannels: new SmsChannelsService(prisma, box, { ...config, devLogOtp: false }),

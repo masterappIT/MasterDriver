@@ -59,12 +59,23 @@ npm run dev:admin
 
 - 第一個超級管理員用指令建立，畫面只顯示一次一次性密碼，登入後請到「修改密碼」更換。之後的帳號在「後台帳號」頁建立。
 - 後台在 `http://localhost:5181`，開發時把 `/api` 轉到本機 API。
-- 角色：超級管理員（全部）、營運（收費控制、充值、贈送、廣告、SEO、一般設定，可看開發模式登入但不能改）、銷售（只能查看，看不到乘客資料；可以更新潛在客戶的跟進狀態）。
-- 頁面：總覽、用戶、訂單、潛在客戶、收費控制、平台服務費、廣告欄位、SEO、一般設定、登入配置、付款通道、簡訊通道、後台帳號、操作紀錄、修改密碼。
+- 角色：超級管理員（全部）、營運（客服、收費控制、充值、贈送、廣告、SEO、一般設定，可看開發模式登入但不能改）、銷售（只能查看，看不到乘客資料；可以更新潛在客戶的跟進狀態）。
+- 頁面：總覽、用戶、訂單、潛在客戶、客服、收費控制、平台服務費、廣告欄位、SEO、一般設定、登入配置、付款通道、簡訊通道、後台帳號、操作紀錄、修改密碼。
 - 付款通道（Stripe、AlipayHK）與簡訊通道（253 國內、國際）沿用 Master Travel 的服務商；只有超級管理員可以修改、檢查、發送測試簡訊。
 - 密鑰（Stripe 金鑰、AlipayHK RSA 金鑰、253 密碼）以 AES-256-GCM 加密後存入資料庫，API 永遠不回傳；加密金鑰是 `.env` 的 `DATA_ENCRYPTION_KEY`（本機未設定時使用開發用預設值；正式環境必須由 Secret Manager 提供，更換後已儲存的密鑰會無法讀取）。
 - 驗證碼簡訊：+86 走國內帳號，+852／+853 走國際帳號；對應的通道未啟用時，本機（`DEV_LOG_OTP=true`）把驗證碼印在日誌，正式環境則回傳 `SMS_NOT_CONFIGURED`。發送紀錄不保存含驗證碼的簡訊內容。
 - 安全：後台帳號與司機帳號分開；登入 cookie 只在 `/api/admin` 下有效（httpOnly、SameSite=Strict）；每個後台請求必須帶 `x-md-admin: 1`；同一帳號 15 分鐘內失敗 5 次即暫停登入；所有修改與查看乘客資料都寫入操作紀錄。
+
+## 客服
+
+- 司機端 `/support`（登入與否都能用）；後台 `/support`。兩邊都每 5 秒讀取新訊息，頁面在背景時暫停。
+- 登入的用戶一人一個對話。訪客第一次送出訊息時才建立對話，後端發一個隨機憑證（只存雜湊），瀏覽器放在 `localStorage` 的 `md-support-guest`，之後每個請求帶 `x-md-support-guest`。
+- 每則訊息帶 `clientMessageId`，同一個 id 重送不會重複發出，所以傳送失敗可以直接重試。
+- 圖片與影片：請求內容就是檔案本身（不是表單、不是 base64）。類型由檔案開頭的位元組判斷，不相信 `Content-Type`；圖片上限 5 MB、影片上限 25 MB（Cloud Run 單一請求上限 32 MiB）。司機端送出前會先把大圖縮到 1920 px 並轉成 JPEG。
+- 儲存：資料庫只存紀錄（`SupportMedia`），檔案放私有儲存空間，鍵值為 `support/<對話>/<檔案>.<副檔名>`。本機放 `.data/support-media/`（已列入 `.gitignore`，可用 `SUPPORT_MEDIA_DIR` 更改）；正式環境放 `SUPPORT_MEDIA_BUCKET` 指定的私有 Cloud Storage bucket，以 Cloud Run 服務帳戶的身分存取（需要 `roles/storage.objectAdmin`），不需要金鑰檔。正式環境沒有設定 bucket 時只收文字，上傳回 `SUPPORT_MEDIA_UNAVAILABLE`。
+- 讀取：`<img>`、`<video>` 不直接指向檔案；頁面帶登入資訊向 API 取回後才顯示，所以沒有可以外流的網址。影片按了才下載。
+- 清理：檔案保留 180 天。`npm run support-media -- --purge` 刪除過期檔案並把紀錄標為已過期，正式環境請排程每天執行一次；bucket 另外設定 200 天的生命週期規則作為保險。
+- 上線前要做：建立 bucket（不公開、統一 bucket 層級存取）、授權服務帳戶、設定 `SUPPORT_MEDIA_BUCKET`、排程清理。Cloud Storage 的讀寫只有以假的回應做過單元測試，尚未對真正的 bucket 驗證。
 
 ## 平台服務費與點數（後台完成前用指令）
 
@@ -100,6 +111,12 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET/POST /api/me/group-invites`、`PATCH/DELETE /api/me/group-invites/:id` | 要 | 我的派單群（微信群二維碼、個人微信二維碼、WhatsApp 連結；最多 5 個） |
 | `GET /api/public/group-invites/:id/qr` | — | 二維碼圖片（微信群二維碼過期後不再提供） |
 | `GET /api/me/credits` | 要 | 點數餘額、最近紀錄、目前每單服務費（是否免收） |
+| `POST /api/support/guest` | — | 訪客開始對話，回傳只顯示一次的憑證（同一 IP 每天最多 5 個） |
+| `GET /api/support/thread?after=\|before=` | 可選 | 客服對話的訊息（登入用戶，或帶 `x-md-support-guest` 的訪客）；`after` 只取新訊息 |
+| `GET /api/support/unread` | 可選 | 客服未讀回覆數 |
+| `POST /api/support/messages` | 可選 | 傳文字（`text`、`clientMessageId`） |
+| `POST /api/support/media?clientMessageId=` | 可選 | 傳圖片或影片，請求內容是檔案本身；訪客不能傳影片 |
+| `GET /api/support/media/:id` | 可選 | 讀取自己對話裡的圖片或影片 |
 | `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現）；接駁行程另有 `legs` 列出未取消的各段與司機 |
 | `POST /api/c/:confirmCode/confirm` | — | 乘客按確認；接駁行程一次確認全部未取消的段 |
 
@@ -126,6 +143,6 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
 | `npm run verify:admin` | 後台型別檢查與建置 |
 | `npm run verify:web` | 網頁測試（繁簡轉換）、型別檢查與建置 |
-| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看、接駁位置兩段共用）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
+| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看、接駁位置兩段共用）、客服（對話權限、訊息去重、檔案類型與大小、訪客限制、過期清理）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。

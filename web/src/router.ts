@@ -14,6 +14,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/o/:code', component: () => import('./pages/ClaimPage.vue') },
   { path: '/c/:confirmCode', component: () => import('./pages/ConfirmPage.vue') },
   { path: '/login', component: () => import('./pages/LoginPage.vue') },
+  // 客服: for signed-in users and for guests, so it sits outside the signed-in app.
+  { path: '/support', component: () => import('./pages/SupportPage.vue') },
   { path: '/app', component: () => import('./pages/HomePage.vue'), meta: { app: true } },
   { path: '/app/new', component: () => import('./pages/NewOrderPage.vue'), meta: { app: true } },
   { path: '/app/orders', component: () => import('./pages/OrdersPage.vue'), meta: { app: true } },

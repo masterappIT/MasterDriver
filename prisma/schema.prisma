@@ -36,6 +36,7 @@ model User {
   creditEntries         CreditEntry[]
   lead                  Lead?
   groupInvites          GroupInvite[]
+  supportConversation   SupportConversation?
 
   @@unique([countryCode, phone])
 }
@@ -417,6 +418,7 @@ model Administrator {
 
   sessions  AdminSession[]
   auditLogs AdminAuditLog[]
+  supportMessages SupportMessage[]
 }
 
 model AdminSession {
@@ -673,4 +675,88 @@ model GroupInvite {
   owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId])
+}
+
+// ---------------------------------------------------------------------------
+// Customer support (內置客服): conversations between the platform's staff and
+// a signed-in user or a guest. Rewritten after Master Travel's internal support.
+// ---------------------------------------------------------------------------
+
+enum SupportMessageKind {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+/// One conversation per signed-in user, or per guest token. A guest who later
+/// signs in starts the user's own conversation; the two are never merged.
+model SupportConversation {
+  id                   String    @id @default(cuid())
+  userId               String?   @unique
+  /// Hash of the random token a guest keeps in the browser; the token itself is never stored.
+  guestTokenHash       String?   @unique
+  /// Limits how many guest conversations one address can open.
+  guestIp              String?
+  /// The last message came from the user or guest and no staff has answered it.
+  waiting              Boolean   @default(false)
+  /// Staff messages the user or guest has not opened yet.
+  unreadByParticipant  Int       @default(0)
+  lastMessageAt        DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  user     User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+  media    SupportMedia[]
+
+  @@index([waiting, lastMessageAt])
+  @@index([lastMessageAt])
+  @@index([guestIp, createdAt])
+}
+
+model SupportMessage {
+  id              String             @id @default(cuid())
+  /// Order of messages across the table; clients page and poll by it.
+  seq             Int                @unique @default(autoincrement())
+  conversationId  String
+  fromStaff       Boolean
+  /// The administrator who replied; null for the user's or guest's own messages.
+  staffId         String?
+  kind            SupportMessageKind @default(TEXT)
+  text            String             @default("") @db.Text
+  /// Chosen by the sender, so a retried request never posts the message twice.
+  clientMessageId String
+  mediaId         String?            @unique
+  createdAt       DateTime           @default(now())
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  staff        Administrator?      @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  media        SupportMedia?       @relation(fields: [mediaId], references: [id])
+
+  @@unique([conversationId, fromStaff, clientMessageId])
+  @@index([conversationId, seq])
+}
+
+/// A picture or video sent in a conversation. Only this record is in the
+/// database; the bytes are in private storage under storageKey and are served
+/// through the API to the conversation's participant and to staff only.
+model SupportMedia {
+  id             String             @id
+  conversationId String
+  kind           SupportMessageKind
+  mimeType       String
+  sizeBytes      Int
+  storageKey     String             @unique
+  /// SHA-256 of the stored bytes.
+  checksum       String
+  createdAt      DateTime           @default(now())
+  /// The bytes are removed after this time; the message stays.
+  expiresAt      DateTime
+  deletedAt      DateTime?
+
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message      SupportMessage?
+
+  @@index([conversationId, createdAt])
+  @@index([expiresAt, deletedAt])
 }

@@ -24,6 +24,7 @@
     "dev-login": "npm run build:shared && npm --workspace backend run dev-login --",
     "billing": "npm run build:shared && npm --workspace backend run billing --",
     "admin": "npm run build:shared && npm --workspace backend run admin --",
+    "support-media": "npm run build:shared && npm --workspace backend run support-media --",
     "dev:admin": "npm --workspace admin run dev",
     "build:admin": "npm run build:shared && npm --workspace admin run build",
     "verify:admin": "npm run build:admin",

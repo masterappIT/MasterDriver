@@ -8,6 +8,13 @@ export interface AppConfig {
   sessionCookieSecure: boolean;
   /** Key for provider secrets stored in the database (base64, 32 bytes). */
   dataEncryptionKey: string;
+  /**
+   * Where 客服 pictures and videos are kept. A private Cloud Storage bucket in
+   * every real environment; a local directory only outside production, because
+   * a Cloud Run instance's own disk is lost whenever the instance stops.
+   */
+  supportMediaBucket: string | null;
+  supportMediaDir: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -28,6 +35,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     devLogOtp: !isProduction && env.DEV_LOG_OTP === 'true',
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     dataEncryptionKey: dataEncryptionKey || 'local-development-only-key',
+    supportMediaBucket: env.SUPPORT_MEDIA_BUCKET?.trim() || null,
+    supportMediaDir: isProduction ? null : env.SUPPORT_MEDIA_DIR?.trim() || null,
   };
 }
 

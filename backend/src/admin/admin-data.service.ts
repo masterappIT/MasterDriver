@@ -44,7 +44,7 @@ export class AdminDataService {
   async dashboard(now = new Date()) {
     const today = startOfHongKongDay(now);
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-    const [users, newUsers, ordersToday, ordersWeek, byStatus, claimsWeek, dispatchers, credits, fee, devLogin, freePeriods] =
+    const [users, newUsers, ordersToday, ordersWeek, byStatus, claimsWeek, dispatchers, credits, fee, devLogin, freePeriods, supportWaiting] =
       await Promise.all([
         this.prisma.user.count(),
         this.prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
@@ -60,6 +60,7 @@ export class AdminDataService {
           where: { active: true, planKey: { not: null }, startsAt: { lte: now }, OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
           select: { name: true, endsAt: true },
         }),
+        this.prisma.supportConversation.count({ where: { waiting: true } }),
       ]);
     return {
       users: { total: users, newThisWeek: newUsers },
@@ -73,6 +74,8 @@ export class AdminDataService {
       creditsOutstanding: (credits._sum.balanceMinor ?? 0) / 100,
       serviceFee: fee,
       developmentLoginEnabled: devLogin?.enabled ?? false,
+      /** 客服 conversations whose last message has no reply yet. */
+      supportWaiting,
       freePeriods: freePeriods.map((policy) => ({ name: policy.name, endsAt: policy.endsAt?.toISOString() ?? null })),
     };
   }

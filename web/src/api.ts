@@ -71,6 +71,14 @@ const ERROR_TEXT: Record<string, string> = {
   NOT_LAST_LEG: '只能接在行程的最後一段後面，請重新整理',
   JOURNEY_LEG_LIMIT: '一個行程最多 4 段',
   LEG_BEFORE_PREVIOUS: '這一段的時間不能早於上一段',
+  SUPPORT_MEDIA_TYPE: '只能傳送圖片（PNG、JPG、WebP）或影片（MP4、MOV、WebM）',
+  SUPPORT_MEDIA_TOO_LARGE: '檔案太大：圖片上限 5 MB，影片上限 25 MB',
+  SUPPORT_MEDIA_LIMIT: '今天傳送的圖片和影片已達上限，請改用文字',
+  SUPPORT_MEDIA_UNAVAILABLE: '暫時無法傳送圖片和影片，請先用文字',
+  SUPPORT_MEDIA_NOT_FOUND: '檔案已過期或不存在',
+  SUPPORT_VIDEO_SIGN_IN: '登入後才能傳送影片',
+  SUPPORT_TOO_FAST: '訊息太頻密，請稍等一下再傳',
+  SUPPORT_GUEST_LIMIT: '暫時無法開始新的訪客對話，請登入後再聯絡客服',
   TRANSFER_PLACE_LOCKED: '上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段'
 };
 
@@ -113,6 +121,25 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
     throw new ApiError(response.status, data.code ?? 'UNKNOWN', data);
   }
   return data as T;
+}
+
+/**
+ * A request whose body or answer is not JSON (a picture, a video). Adds the
+ * sign-in token like `api` and fails with the same ApiError.
+ */
+export async function apiFetch(method: string, path: string, init: { headers?: Record<string, string>; body?: BodyInit } = {}) {
+  const token = storedToken();
+  const response = await fetch(`/api${path}`, {
+    method,
+    credentials: 'same-origin',
+    headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...init.headers },
+    body: init.body,
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(response.status, data.code ?? 'UNKNOWN', data);
+  }
+  return response;
 }
 
 /** Message for any error, in the chosen language. */
