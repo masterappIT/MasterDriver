@@ -42,6 +42,9 @@ const route = useRoute();
 const router = useRouter();
 /** 加接駁段: this order follows the order in ?after= as the next leg of the trip. */
 const afterId = typeof route.query.after === 'string' ? route.query.after : '';
+/** 成單: this order is made from a booking request sent through the 名片頁. */
+const bookingId = typeof route.query.booking === 'string' ? route.query.booking : '';
+const fromBooking = ref(false);
 const previous = ref<PreviousLeg | null>(null);
 const legNumber = computed(() => (previous.value?.journey?.legIndex ?? 1) + 1);
 /** The 接駁位置 can still move while no other driver holds the previous leg. */
@@ -173,6 +176,7 @@ async function submit() {
       passengerContact: form.passengerContact,
       contactRevealMinutes: form.contactRevealMinutes,
       afterOrderId: afterId || undefined,
+      bookingId: fromBooking.value ? bookingId : undefined,
       transfer: !afterId && form.transfer,
       requiredPlates: afterId || form.transfer ? form.requiredPlates : [],
       selfDrive: form.selfDrive,
@@ -205,6 +209,39 @@ async function loadPrevious() {
   }
 }
 
+/** The passenger's request fills the form; the quote becomes the passenger price, shown on their confirmation page. */
+async function loadBooking() {
+  try {
+    const booking = await api<{
+      pickupAt: string;
+      origin: string;
+      destination: string;
+      passengers: number;
+      luggage: number;
+      passengerName: string | null;
+      passengerContact: string;
+      notes: string | null;
+      quote: { amount: number; currency: string } | null;
+    }>('GET', `/me/bookings/${bookingId}`);
+    Object.assign(form, {
+      pickupAt: toLocalInput(new Date(booking.pickupAt)),
+      origin: booking.origin,
+      destination: booking.destination,
+      passengers: String(booking.passengers),
+      luggage: String(booking.luggage),
+      passengerName: booking.passengerName ?? '',
+      passengerContact: booking.passengerContact,
+      notes: booking.notes ?? '',
+      ...(booking.quote
+        ? { currency: booking.quote.currency, passengerPrice: String(booking.quote.amount), showPassengerPrice: true }
+        : {}),
+    });
+    fromBooking.value = true;
+  } catch (e) {
+    error.value = errorText(e);
+  }
+}
+
 onMounted(async () => {
   const [orders, preferences] = await Promise.all([
     api<PastOrder[]>('GET', '/orders?role=dispatched').catch(() => []),
@@ -213,6 +250,7 @@ onMounted(async () => {
   past.value = orders;
   if (preferences) form.contactRevealMinutes = preferences.contactRevealMinutes;
   if (afterId) await loadPrevious();
+  else if (bookingId) await loadBooking();
 });
 </script>
 
@@ -231,7 +269,11 @@ onMounted(async () => {
       <p class="hint">{{ t('同一位乘客，已帶入接駁位置、人數、行李和乘客資料。這一段另外貼到群裡搶，平台服務費整個行程只收一次。') }}</p>
     </div>
 
-    <div v-if="!afterId" class="card quick-line">
+    <div v-if="fromBooking" class="notice">
+      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後發出；想自己做就勾最下面的「這段我自己做」，否則填司機價派到群裡。') }}
+    </div>
+
+    <div v-if="!afterId && !fromBooking" class="card quick-line">
       <label class="field">
         {{ t('一句話發單') }}
         <textarea

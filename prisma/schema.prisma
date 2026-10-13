@@ -37,6 +37,7 @@ model User {
   lead                  Lead?
   groupInvites          GroupInvite[]
   supportConversation   SupportConversation?
+  profilePage           ProfilePage?
 
   @@unique([countryCode, phone])
 }
@@ -193,6 +194,7 @@ model Order {
   claimedBy   User?        @relation("OrderClaimer", fields: [claimedById], references: [id])
   claims      OrderClaim[]
   journeyHead Order?       @relation("Journey", fields: [journeyId], references: [id])
+  booking     BookingRequest?
   journeyLegs Order[]      @relation("Journey")
 
   @@unique([journeyId, legIndex])
@@ -497,6 +499,10 @@ model LimitSetting {
   supportMessagesPerMinute            Int      @default(20)
   /// 客服: guest conversations one address may open in 24 hours.
   supportGuestConversationsPerIpPerDay Int     @default(5)
+  /// 名片頁: booking requests one address may send in 24 hours.
+  bookingPerIpPerDay                  Int      @default(5)
+  /// 名片頁: booking requests one page may receive in 24 hours.
+  bookingPerPagePerDay                Int      @default(30)
   updatedAt                           DateTime @updatedAt
   updatedBy                           String?
 }
@@ -786,4 +792,99 @@ model SupportMedia {
 
   @@index([conversationId, createdAt])
   @@index([expiresAt, deletedAt])
+}
+
+// ---------------------------------------------------------------------------
+// 名片頁 and booking requests: a driver's own public page, where a passenger
+// can ask for a trip. The platform lists nobody, sets no price and takes no
+// payment; the driver answers each request personally.
+// ---------------------------------------------------------------------------
+
+/// One page per user. The name and vehicle come from DriverProfile; what is
+/// here is what only the page shows.
+model ProfilePage {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  /// Unguessable code in the page's address (/p/{code}).
+  code      String   @unique
+  /// Nobody but the owner sees the page until it is published.
+  published Boolean  @default(false)
+  intro     String   @default("")
+  routes    String[] @default([])
+  languages String[] @default([])
+  regions   String[] @default([])
+  wechatId  String   @default("")
+  whatsapp  String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos   ProfilePhoto[]
+  bookings BookingRequest[]
+}
+
+/// A vehicle photo. The bytes are in the media storage under storageKey and
+/// are served through the API while the page is published.
+model ProfilePhoto {
+  id         String   @id
+  pageId     String
+  storageKey String   @unique
+  mimeType   String
+  sizeBytes  Int
+  createdAt  DateTime @default(now())
+
+  page ProfilePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId, createdAt])
+}
+
+enum BookingStatus {
+  /// Sent by the passenger; the driver has not answered.
+  PENDING
+  /// The driver quoted a price.
+  QUOTED
+  /// The passenger agreed to the quote.
+  ACCEPTED
+  /// The driver made it into an order.
+  ORDERED
+  /// The driver cannot take it.
+  DECLINED
+  /// The passenger withdrew it.
+  CANCELLED
+}
+
+model BookingRequest {
+  id               String        @id @default(cuid())
+  pageId           String
+  /// Unguessable code of the passenger's own link (/b/{code}).
+  code             String        @unique
+  status           BookingStatus @default(PENDING)
+  pickupAt         DateTime
+  origin           String
+  destination      String
+  passengers       Int
+  luggage          Int           @default(0)
+  passengerName    String?
+  passengerContact String
+  notes            String?
+  /// The driver's quote; what the passenger pays is agreed between the two of them.
+  quoteMinor       Int?
+  quoteCurrency    Currency      @default(HKD)
+  quoteNote        String?
+  quotedAt         DateTime?
+  /// Something the driver has not opened yet: a new request, or the passenger's answer.
+  driverUnread     Boolean       @default(true)
+  /// The order made from this request; its confirmation page is where the passenger continues.
+  orderId          String?       @unique
+  /// Where the passenger came from (?from= on the page link), for the driver's own counting.
+  source           String?
+  ip               String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  page  ProfilePage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  order Order?      @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([pageId, createdAt])
+  @@index([ip, createdAt])
 }

@@ -163,9 +163,10 @@ openssl rand -base64 32 | tr -d '\n' | gcloud secrets create masterdriver-data-e
 ```bash
 gcloud storage buckets create "gs://${PROJECT_ID}-support-media" --location="$REGION" \
   --uniform-bucket-level-access --public-access-prevention
-# 保險：程式每天清除超過 180 天的檔案，bucket 自己再在 200 天時刪除
+# 保險：程式每天清除超過 180 天的客服檔案，bucket 自己再在 200 天時刪除。
+# 只限 support/ 路徑：同一個 bucket 的 profile/ 是名片頁的車輛照片，不能自動刪除。
 cat > /tmp/lifecycle.json <<'JSON'
-{"rule":[{"action":{"type":"Delete"},"condition":{"age":200}}]}
+{"rule":[{"action":{"type":"Delete"},"condition":{"age":200,"matchesPrefix":["support/"]}}]}
 JSON
 gcloud storage buckets update "gs://${PROJECT_ID}-support-media" --lifecycle-file=/tmp/lifecycle.json
 ```

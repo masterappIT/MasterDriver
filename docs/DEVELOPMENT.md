@@ -42,7 +42,7 @@ npm run dev:web
 ```
 
 - 網頁在 `http://localhost:5180`（與 `.env` 的 `PUBLIC_BASE_URL` 一致，派單連結和乘客確認連結會打開這裡）。
-- 頁面：`/` 平台首頁（未登入時顯示；登入後轉到 `/app`）、`/legal/terms` 與 `/legal/privacy`（後台「一般設定」的條款內容）、`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
+- 頁面：`/` 平台首頁（未登入時顯示；登入後轉到 `/app`）、`/legal/terms` 與 `/legal/privacy`（後台「一般設定」的條款內容）、`/p/:code` 名片頁（公開，可預約）、`/b/:code` 乘客的預約連結、`/app/profile-page` 編輯名片頁、`/app/bookings` 與 `/app/bookings/:id` 司機的預約、`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
 - 發單頁最上方的「一句話發單」用 `shared/src/quick-order.ts` 解析（時間、起終點、座位、人數、行李、價格、備註；繁簡皆可），只負責填入下方表格，不會直接發出。測試案例取自實際的微信群訊息。
 - 平台首頁的標題、描述與分享圖在瀏覽器裡套用後台「SEO → 首頁」的設定。`index.html` 固定帶 `noindex`，所以**首頁目前不會被搜尋引擎收錄**，不執行腳本的分享預覽（例如微信、WhatsApp 的連結預覽）也讀不到這些設定；要收錄和預覽，需要由伺服器輸出每一頁的標題與摘要，這還沒做。
 - Logo 在後台「一般設定」上傳，存在資料庫（`SiteLogo`），由 `BrandMark` 元件顯示在首頁、登入頁、搶單頁；網址帶版本，換了 Logo 會立即更新。
@@ -68,6 +68,16 @@ npm run dev:admin
 - 密鑰（Stripe 金鑰、AlipayHK RSA 金鑰、253 密碼）以 AES-256-GCM 加密後存入資料庫，API 永遠不回傳；加密金鑰是 `.env` 的 `DATA_ENCRYPTION_KEY`（本機未設定時使用開發用預設值；正式環境必須由 Secret Manager 提供，更換後已儲存的密鑰會無法讀取）。
 - 驗證碼簡訊：+86 走國內帳號，+852／+853 走國際帳號；對應的通道未啟用時，本機（`DEV_LOG_OTP=true`）把驗證碼印在日誌，正式環境則回傳 `SMS_NOT_CONFIGURED`。發送紀錄不保存含驗證碼的簡訊內容。
 - 安全：後台帳號與司機帳號分開；登入 cookie 只在 `/api/admin` 下有效（httpOnly、SameSite=Strict）；每個後台請求必須帶 `x-md-admin: 1`；同一帳號 15 分鐘內失敗 5 次即暫停登入；所有修改與查看乘客資料都寫入操作紀錄。
+
+## 名片頁與預約
+
+- 一人一個名片頁（`ProfilePage`），第一次打開「我的名片頁」時建立，預設不公開；公開前要先有司機資料。姓名、車型、座位、車色取自司機資料，完成單數是 `claimedById` 為本人且已完成的單數，不能自填。
+- 車輛照片最多 3 張，和客服檔案用同一個媒體儲存，鍵值為 `profile/<名片頁>/<照片>.<副檔名>`；公開的名片頁照片由 `GET /api/public/profiles/:code/photos/:id` 提供，未公開時只有本人讀得到。
+- 預約（`BookingRequest`）：乘客不用登入，送出後拿到 `/b/<16 位代碼>`，這條連結就是乘客的憑證。狀態為 待回覆 → 已報價 → 乘客同意 → 已成單，或 已婉拒／乘客取消。雙方同時操作時由資料庫的狀態條件決定誰成立。
+- 成單：預約詳情按「成單」打開 `/app/new?booking=<預約 id>`，帶入行程、乘客資料與報價（作為乘客價並顯示給乘客）。發單時送出 `bookingId`，後端在同一個交易裡把預約標為已成單並連到該單；預約不是自己的或已結束時，整張單不會建立。成單後乘客的預約連結會帶他到該單的確認頁 `/c/…`。
+- 司機端的未讀：新預約，以及乘客同意或取消，都會讓該預約變成未讀；司機打開或回覆後清除。沒有推播或簡訊。
+- 上限在後台「防濫用設定」：同一 IP 每天預約數、每個名片頁每天預約數。
+- 名片頁網址可帶 `?from=<來源>`（英數字、底線、連字號，30 字以內），預約會記下來源，供司機自己看哪個平台帶來預約。
 
 ## 客服
 
@@ -120,6 +130,13 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/support/messages` | 可選 | 傳文字（`text`、`clientMessageId`） |
 | `POST /api/support/media?clientMessageId=` | 可選 | 傳圖片或影片，請求內容是檔案本身；訪客不能傳影片 |
 | `GET /api/support/media/:id` | 可選 | 讀取自己對話裡的圖片或影片 |
+| `GET/PUT /api/me/profile-page` | 要 | 我的名片頁（內容、是否公開） |
+| `POST /api/me/profile-page/photos`、`DELETE /api/me/profile-page/photos/:id` | 要 | 車輛照片；上傳時請求內容是圖片本身 |
+| `GET /api/me/bookings`、`/unread`、`/:id` | 要 | 名片頁收到的預約、未讀數、單筆（打開即已讀） |
+| `POST /api/me/bookings/:id/quote`、`/decline` | 要 | 回覆報價（可重複修改）、婉拒 |
+| `GET /api/public/profiles/:code` | 可選 | 名片頁；未公開時只有本人看得到 |
+| `POST /api/public/profiles/:code/bookings` | — | 乘客送出預約，回傳預約連結 |
+| `GET /api/public/bookings/:code`、`POST …/accept`、`…/cancel` | — | 乘客的預約連結：狀態與報價、同意報價、取消 |
 | `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現）；接駁行程另有 `legs` 列出未取消的各段與司機 |
 | `POST /api/c/:confirmCode/confirm` | — | 乘客按確認；接駁行程一次確認全部未取消的段 |
 
@@ -147,6 +164,6 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
 | `npm run verify:admin` | 後台型別檢查與建置 |
 | `npm run verify:web` | 網頁測試（繁簡轉換）、型別檢查與建置 |
-| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看、接駁位置兩段共用）、客服（對話權限、訊息去重、檔案類型與大小、訪客限制、過期清理）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
+| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看、接駁位置兩段共用）、客服（對話權限、訊息去重、檔案類型與大小、訪客限制、過期清理）、名片頁與預約（公開與否、照片、報價到成單、歸屬、上限）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。

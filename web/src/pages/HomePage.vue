@@ -13,12 +13,17 @@ const claimed = ref<Listed[]>([]);
 const fee = ref<{ enabled: boolean; feePerOrder: { amount: number; currency: string }; exempt: boolean } | null>(null);
 const balance = ref<{ amount: number; currency: string } | null>(null);
 const error = ref('');
+/** Booking requests from the 名片頁 that the driver has not opened. */
+const bookingUnread = ref(0);
 
 const active = (orders: Listed[]) =>
   orders.filter((order) => order.status === 'OPEN' || order.status === 'ASSIGNED').sort((a, b) => a.pickupAt.localeCompare(b.pickupAt));
 const upcoming = computed(() => [...active(dispatched.value), ...active(claimed.value)].sort((a, b) => a.pickupAt.localeCompare(b.pickupAt)));
 
 onMounted(async () => {
+  void api<{ count: number }>('GET', '/me/bookings/unread')
+    .then((unread) => (bookingUnread.value = unread.count))
+    .catch(() => undefined);
   try {
     const [sent, taken, credits] = await Promise.all([
       api<Listed[]>('GET', '/orders?role=dispatched'),
@@ -39,6 +44,9 @@ onMounted(async () => {
   <div class="page">
     <h1>{{ t(`你好，${session.profile?.name ?? '師傅'}`) }}</h1>
     <div v-if="error" class="notice error">{{ error }}</div>
+    <RouterLink v-if="bookingUnread" to="/app/bookings" class="notice home-page__bookings">
+      {{ t(`名片頁有 ${bookingUnread} 個預約等你看 →`) }}
+    </RouterLink>
 
     <RouterLink to="/app/new" class="button block large home-page__new">＋ {{ t('發單') }}</RouterLink>
     <p v-if="fee?.enabled && !fee.exempt" class="hint">
@@ -59,6 +67,10 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.home-page__bookings {
+  display: block;
+  color: var(--color-text);
+}
 .home-page__new {
   margin-bottom: var(--space-sm);
 }

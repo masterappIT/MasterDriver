@@ -40,6 +40,8 @@ export const limitSettingUpdateSchema = z
     supportUserMediaPerDay: z.number().int().min(0).max(500),
     supportMessagesPerMinute: z.number().int().min(1).max(120),
     supportGuestConversationsPerIpPerDay: z.number().int().min(0).max(100),
+    bookingPerIpPerDay: z.number().int().min(0).max(100),
+    bookingPerPagePerDay: z.number().int().min(0).max(1000),
   })
   .partial()
   .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });

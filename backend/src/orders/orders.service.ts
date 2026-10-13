@@ -84,6 +84,7 @@ export class OrdersService {
               ? await tx.order.update({ where: { id: placed.id }, data: { journeyId: placed.id, legIndex: 1 }, include: orderInclude })
               : placed;
           if (fee > 0) await this.credits.charge(tx, userId, created.id, fee);
+          if (input.bookingId) await this.takeBooking(tx, userId, input.bookingId, created.id);
           return created;
         });
         return this.withShareTexts(order);
@@ -232,6 +233,19 @@ export class OrdersService {
       data: { passengerConfirmedAt: now },
     });
     return this.getForPassenger(confirmCode);
+  }
+
+  /**
+   * 名片頁: marks the dispatcher's own booking request as made into this
+   * order. A request that is not theirs, or was already answered for good,
+   * stops the order from being created at all.
+   */
+  private async takeBooking(tx: Prisma.TransactionClient, userId: string, bookingId: string, orderId: string) {
+    const taken = await tx.bookingRequest.updateMany({
+      where: { id: bookingId, page: { userId }, orderId: null, status: { in: ['PENDING', 'QUOTED', 'ACCEPTED'] } },
+      data: { status: 'ORDERED', orderId },
+    });
+    if (taken.count === 0) throw apiError(HttpStatus.CONFLICT, 'BOOKING_NOT_OPEN', 'The booking request is no longer open');
   }
 
   /**

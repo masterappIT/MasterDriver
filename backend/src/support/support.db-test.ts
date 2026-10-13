@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { SUPPORT_IMAGE_MAX_BYTES } from '@masterdriver/shared';
-import { UnavailableMediaStorage } from './media-storage';
+import { UnavailableMediaStorage } from '../storage/media-storage';
 import { readLimits } from '../common/limits';
 import { SUPPORT_LIMITS, SupportService, type Participant } from './support.service';
 import { createDriver, rejectsWith, setupDatabase, type TestContext } from '../test/database';

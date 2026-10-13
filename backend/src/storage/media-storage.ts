@@ -3,8 +3,9 @@ import { dirname, resolve, sep } from 'node:path';
 import type { AppConfig } from '../config';
 
 /**
- * Private storage for 客服 pictures and videos. Nothing in it is ever public:
- * the API reads a file back only after checking who is asking.
+ * Storage for uploaded pictures and videos (客服 files, 名片頁 photos). The
+ * bucket itself is never public: every file is read back through the API,
+ * which decides who may see it.
  */
 export interface MediaStorage {
   /** False when no storage is configured; uploads are then refused and text still works. */
@@ -18,7 +19,7 @@ export interface MediaStorage {
 
 export const MEDIA_STORAGE = Symbol('MEDIA_STORAGE');
 
-/** Keys are made by the API (`support/<conversation>/<media>.<ext>`); anything else is a bug. */
+/** Keys are made by the API (`support/<conversation>/<media>.<ext>`, `profile/<page>/<photo>.<ext>`); anything else is a bug. */
 const KEY = /^[A-Za-z0-9_-]+(\/[A-Za-z0-9_-]+)*\.[a-z0-9]+$/;
 function checkKey(key: string) {
   if (!KEY.test(key)) throw new Error('Invalid media storage key');

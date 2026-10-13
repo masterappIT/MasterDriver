@@ -8,7 +8,7 @@ import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
 import { PrismaService } from '../prisma.service';
 import { sniffMedia } from './media-file';
-import { MEDIA_STORAGE, type MediaStorage } from './media-storage';
+import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 
 const MINUTE_MS = 60_000;
 const DAY_MS = 24 * 60 * MINUTE_MS;

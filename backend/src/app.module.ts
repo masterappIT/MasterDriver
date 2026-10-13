@@ -7,11 +7,13 @@ import { HealthController } from './health.controller';
 import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma.module';
 import { PreferencesController, ProfileController } from './profile/profile.controller';
+import { ProfilePagesModule } from './profile-pages/profile-pages.module';
 import { SiteModule } from './site/site.module';
+import { StorageModule } from './storage/storage.module';
 import { SupportModule } from './support/support.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule, SupportModule],
+  imports: [PrismaModule, StorageModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule, SupportModule, ProfilePagesModule],
   controllers: [HealthController, ProfileController, PreferencesController],
 })
 export class AppModule {}

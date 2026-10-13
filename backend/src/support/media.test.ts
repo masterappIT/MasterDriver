@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { sniffMedia } from './media-file';
-import { GcsMediaStorage, LocalMediaStorage, createMediaStorage } from './media-storage';
+import { GcsMediaStorage, LocalMediaStorage, createMediaStorage } from '../storage/media-storage';
 
 const padded = (head: number[] | string) => Buffer.concat([Buffer.from(head as never, 'latin1'), Buffer.alloc(32)]);
 const box = (brand: string) => padded(`\0\0\0\x18ftyp${brand}`);

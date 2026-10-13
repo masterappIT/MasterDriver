@@ -18,8 +18,9 @@ import type { SmsProvider } from '../auth/sms';
 import { loadConfig } from '../config';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { OrdersService } from '../orders/orders.service';
+import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { SiteService } from '../site/site.service';
-import { LocalMediaStorage } from '../support/media-storage';
+import { LocalMediaStorage } from '../storage/media-storage';
 import { SupportService } from '../support/support.service';
 import type { PrismaService } from '../prisma.service';
 
@@ -28,6 +29,9 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'BookingRequest',
+  'ProfilePhoto',
+  'ProfilePage',
   'LimitSetting',
   'SiteLogo',
   'SupportMessage',
@@ -119,6 +123,7 @@ export async function setupDatabase() {
     site: new SiteService(prisma),
     mediaStorage,
     support: new SupportService(prisma, mediaStorage, audit),
+    profilePages: new ProfilePagesService(prisma, mediaStorage, config),
     box,
     paymentChannels: new PaymentChannelsService(prisma, box),
     smsChannels: new SmsChannelsService(prisma, box, { ...config, devLogOtp: false }),

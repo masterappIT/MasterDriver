@@ -1,0 +1,159 @@
+import assert from 'node:assert/strict';
+import { after, before, beforeEach, test } from 'node:test';
+import { createDriver, rejectsWith, sampleOrder, seedPlans, setupDatabase, type TestContext } from '../test/database';
+
+let ctx: TestContext;
+
+before(async () => {
+  ctx = await setupDatabase();
+});
+beforeEach(async () => {
+  await ctx.reset();
+  await seedPlans(ctx, 10);
+});
+after(async () => {
+  await ctx?.prisma.$disconnect();
+});
+
+const jpeg = (size = 64) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(size, 1)]);
+const inAWeek = () => new Date(Date.now() + 7 * 86_400_000).toISOString().replace('Z', '+00:00');
+const request = () => ({
+  pickupAt: inAWeek(),
+  origin: '香港國際機場',
+  destination: '深圳灣口岸',
+  passengers: 3,
+  luggage: 2,
+  passengerName: '王小姐',
+  passengerContact: 'wechat: wang-test',
+});
+
+async function publishedPage(name = '陳師傅') {
+  const userId = await createDriver(ctx, name);
+  const page = await ctx.profilePages.update(userId, { published: true, intro: '十年跨境經驗', routes: ['香港 ⇄ 深圳灣'], languages: ['粵語', '普通話'] });
+  return { userId, code: page.code };
+}
+
+test('a page is private until published, shows what the driver wrote, and counts only trips finished in the tool', async () => {
+  const userId = await createDriver(ctx, '陳師傅');
+  const draft = await ctx.profilePages.mine(userId);
+  assert.equal(draft.published, false);
+  assert.match(draft.url, /^https:\/\/md\.test\/p\/[A-Za-z0-9]{8}$/);
+  assert.equal((await ctx.profilePages.mine(userId)).code, draft.code, 'one page per user');
+  await rejectsWith(ctx.profilePages.publicPage(draft.code), 'PROFILE_PAGE_NOT_FOUND');
+  assert.equal((await ctx.profilePages.publicPage(draft.code, userId)).mine, true, 'the owner previews it');
+
+  await ctx.profilePages.update(userId, { published: true, intro: '十年跨境經驗', routes: ['香港 ⇄ 深圳灣'], whatsapp: '+852 6000 0000' });
+  const dispatcher = await createDriver(ctx);
+  const order = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(order.code, userId);
+  assert.equal((await ctx.profilePages.publicPage(draft.code)).completedTrips, 0, 'claimed is not completed');
+  await ctx.orders.complete(userId, order.id);
+
+  const page = await ctx.profilePages.publicPage(draft.code);
+  assert.deepEqual([page.name, page.intro, page.routes, page.whatsapp, page.completedTrips], ['陳師傅', '十年跨境經驗', ['香港 ⇄ 深圳灣'], '+852 6000 0000', 1]);
+  assert.equal('userId' in page, false);
+
+  const noDetails = (await ctx.prisma.user.create({ data: { countryCode: '+852', phone: '60009999' } })).id;
+  await rejectsWith(ctx.profilePages.update(noDetails, { published: true }), 'PROFILE_REQUIRED');
+});
+
+test('photos: real pictures only, a few per page, public once the page is, gone from storage when removed', async () => {
+  const { userId, code } = await publishedPage();
+  await rejectsWith(ctx.profilePages.addPhoto(userId, Buffer.from('<!doctype html><script>')), 'PHOTO_TYPE');
+  await rejectsWith(ctx.profilePages.addPhoto(userId, Buffer.concat([Buffer.from('\0\0\0\x18ftypisom', 'latin1'), Buffer.alloc(64)])), 'PHOTO_TYPE');
+  let page = await ctx.profilePages.addPhoto(userId, jpeg(10));
+  page = await ctx.profilePages.addPhoto(userId, jpeg(20));
+  page = await ctx.profilePages.addPhoto(userId, jpeg(30));
+  await rejectsWith(ctx.profilePages.addPhoto(userId, jpeg(40)), 'PHOTO_LIMIT');
+  assert.equal(page.photos.length, 3);
+
+  const first = page.photos[0];
+  assert.ok((await ctx.profilePages.photo(code, first.id)).bytes.equals(jpeg(10)));
+  const key = (await ctx.prisma.profilePhoto.findUniqueOrThrow({ where: { id: first.id } })).storageKey;
+  assert.match(key, /^profile\/[a-z0-9]+\/[A-Za-z0-9]{24}\.jpg$/);
+
+  const other = await createDriver(ctx);
+  await rejectsWith(ctx.profilePages.removePhoto(other, first.id), 'PHOTO_NOT_FOUND');
+  await ctx.profilePages.removePhoto(userId, first.id);
+  assert.equal(await ctx.mediaStorage.read(key), null);
+  await rejectsWith(ctx.profilePages.photo(code, first.id), 'PHOTO_NOT_FOUND');
+
+  await ctx.profilePages.update(userId, { published: false });
+  await rejectsWith(ctx.profilePages.photo(code, page.photos[1].id), 'PHOTO_NOT_FOUND');
+  assert.ok(await ctx.profilePages.photo(code, page.photos[1].id, userId), 'the owner still sees it');
+});
+
+test('a booking goes from request to quote to agreement to an order, and the passenger follows it by link', async () => {
+  const { userId, code } = await publishedPage();
+  const sent = await ctx.profilePages.createBooking(code, { ...request(), source: 'xhs' }, '2.2.2.2');
+  assert.match(sent.url, /^https:\/\/md\.test\/b\/[A-Za-z0-9]{16}$/);
+  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1 });
+
+  const [listed] = await ctx.profilePages.bookings(userId);
+  assert.deepEqual([listed.status, listed.unread, listed.source, listed.passengerContact], ['PENDING', true, 'xhs', 'wechat: wang-test']);
+  await ctx.profilePages.booking(userId, listed.id);
+  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 0 });
+
+  await rejectsWith(ctx.profilePages.passengerAccept(sent.code), 'BOOKING_NOT_OPEN');
+  await ctx.profilePages.quote(userId, listed.id, { amount: 900, currency: 'HKD', note: '含隧道費' });
+  let seen = await ctx.profilePages.passengerBooking(sent.code);
+  assert.deepEqual([seen.status, seen.quote, seen.quoteNote, seen.driverName], ['QUOTED', { amount: 900, currency: 'HKD' }, '含隧道費', '陳師傅']);
+  assert.equal('ip' in seen || 'source' in seen, false);
+
+  seen = await ctx.profilePages.passengerAccept(sent.code);
+  assert.equal(seen.status, 'ACCEPTED');
+  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1 }, "the passenger's answer is news for the driver");
+
+  const order = await ctx.orders.create(userId, {
+    ...sampleOrder,
+    pickupAt: listed.pickupAt,
+    origin: listed.origin,
+    destination: listed.destination,
+    passengerContact: listed.passengerContact,
+    bookingId: listed.id,
+  });
+  seen = await ctx.profilePages.passengerBooking(sent.code);
+  assert.equal(seen.status, 'ORDERED');
+  assert.equal(seen.confirmUrl, new URL(order.links.passengerConfirm).pathname);
+  assert.equal((await ctx.profilePages.booking(userId, listed.id)).orderId, order.id);
+
+  await rejectsWith(ctx.orders.create(userId, { ...sampleOrder, bookingId: listed.id }), 'BOOKING_NOT_OPEN');
+  await rejectsWith(ctx.profilePages.quote(userId, listed.id, { amount: 1, currency: 'HKD' }), 'BOOKING_NOT_OPEN');
+  await rejectsWith(ctx.profilePages.passengerCancel(sent.code), 'BOOKING_NOT_OPEN');
+});
+
+test("a booking is its own page owner's: nobody else reads, answers or makes an order from it", async () => {
+  const { userId, code } = await publishedPage();
+  const stranger = await createDriver(ctx);
+  const sent = await ctx.profilePages.createBooking(code, request(), '2.2.2.2');
+  const [mine] = await ctx.profilePages.bookings(userId);
+
+  assert.deepEqual(await ctx.profilePages.bookings(stranger), []);
+  await rejectsWith(ctx.profilePages.booking(stranger, mine.id), 'BOOKING_NOT_FOUND');
+  await rejectsWith(ctx.profilePages.quote(stranger, mine.id, { amount: 1, currency: 'HKD' }), 'BOOKING_NOT_FOUND');
+  await rejectsWith(ctx.orders.create(stranger, { ...sampleOrder, bookingId: mine.id }), 'BOOKING_NOT_OPEN');
+  assert.equal(await ctx.prisma.order.count(), 0, 'the refused order was not created');
+  await rejectsWith(ctx.profilePages.passengerBooking('not-a-code'), 'BOOKING_NOT_FOUND');
+
+  await ctx.profilePages.decline(userId, mine.id);
+  assert.equal((await ctx.profilePages.passengerBooking(sent.code)).status, 'DECLINED');
+  await rejectsWith(ctx.profilePages.passengerCancel(sent.code), 'BOOKING_NOT_OPEN');
+});
+
+test('booking limits from the admin: per address and per page; an unpublished page takes none', async () => {
+  const { userId, code } = await publishedPage();
+  await ctx.site.updateLimits({ bookingPerIpPerDay: 2, bookingPerPagePerDay: 3 }, 'test');
+  await ctx.profilePages.createBooking(code, request(), '3.3.3.3');
+  await ctx.profilePages.createBooking(code, request(), '3.3.3.3');
+  await rejectsWith(ctx.profilePages.createBooking(code, request(), '3.3.3.3'), 'BOOKING_LIMIT');
+  await ctx.profilePages.createBooking(code, request(), '4.4.4.4');
+  await rejectsWith(ctx.profilePages.createBooking(code, request(), '5.5.5.5'), 'BOOKING_PAGE_FULL');
+
+  await ctx.site.updateLimits({ bookingPerPagePerDay: 30 }, 'test');
+  await rejectsWith(
+    ctx.profilePages.createBooking(code, { ...request(), pickupAt: '2020-01-01T10:00:00+08:00' }, '5.5.5.5'),
+    'BOOKING_IN_THE_PAST',
+  );
+  await ctx.profilePages.update(userId, { published: false });
+  await rejectsWith(ctx.profilePages.createBooking(code, request(), '5.5.5.5'), 'PROFILE_PAGE_NOT_FOUND');
+});

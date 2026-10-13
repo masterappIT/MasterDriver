@@ -99,6 +99,8 @@ export const createOrderSchema = z.object({
     .max(PLATE_REGIONS.length)
     .default([])
     .transform((plates) => PLATE_REGIONS.filter((plate) => plates.includes(plate))),
+  /** 名片頁: the booking request this order is made from; it must be the dispatcher's own and still open. */
+  bookingId: z.string().trim().min(1).max(40).optional(),
   /** 這段我自己做: the dispatcher drives this order, so it is not offered for claiming. */
   selfDrive: z.boolean().default(false),
 });

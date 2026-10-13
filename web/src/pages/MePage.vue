@@ -30,6 +30,8 @@ async function saveReveal(value: number | null) {
 const editing = ref(false);
 /** 客服 replies not opened yet. */
 const supportUnread = ref(0);
+/** Booking requests (or passengers' answers) not opened yet. */
+const bookingUnread = ref(0);
 const settings = ref<Settings | null>(null);
 const credits = ref<{ balance: { amount: number; currency: string }; serviceFee: { enabled: boolean; feePerOrder: { amount: number; currency: string }; exempt: boolean } } | null>(null);
 
@@ -41,6 +43,9 @@ async function logout() {
 onMounted(async () => {
   const preferences = await api<{ contactRevealMinutes: number | null }>('GET', '/me/preferences').catch(() => null);
   if (preferences) reveal.value = preferences.contactRevealMinutes;
+  void api<{ count: number }>('GET', '/me/bookings/unread')
+    .then((unread) => (bookingUnread.value = unread.count))
+    .catch(() => undefined);
   void api<{ count: number }>('GET', '/support/unread')
     .then((unread) => (supportUnread.value = unread.count))
     .catch(() => undefined);
@@ -92,6 +97,17 @@ onMounted(async () => {
         <RevealSelect v-model="reveal" @update:model-value="saveReveal" />
         <span class="hint">{{ t('每張單發出時也可以另外調整。你自己隨時都看得到。') }}</span>
       </label>
+    </section>
+
+    <section class="card">
+      <h2>{{ t('名片頁與預約') }}</h2>
+      <p class="hint">{{ t('你自己的公開頁面：放到朋友圈、小紅書或傳給熟客，乘客可以在上面預約，由你回覆報價。') }}</p>
+      <div class="row">
+        <RouterLink class="button secondary" to="/app/profile-page">{{ t('我的名片頁') }}</RouterLink>
+        <RouterLink class="button secondary" to="/app/bookings">
+          {{ t('預約') }}<span v-if="bookingUnread" class="me__unread">{{ bookingUnread }}</span>
+        </RouterLink>
+      </div>
     </section>
 
     <GroupInvites />
