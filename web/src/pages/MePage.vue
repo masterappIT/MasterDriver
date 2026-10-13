@@ -115,7 +115,7 @@ onMounted(async () => {
           <small>
             {{
               !credits.serviceFee.enabled
-                ? t('目前出單不收服務費')
+                ? t('目前不收服務費')
                 : credits.serviceFee.exempt
                   ? t('你目前免收平台服務費')
                   : t(`每出一張單扣 ${money(credits.serviceFee.feePerOrder)}，取消會退回；充值請找客服`)
