@@ -165,7 +165,6 @@ export const spugSettingUpdateSchema = z
   .object({
     enabled: z.boolean(),
     endpoint: httpsUrl,
-    appName: z.string().trim().max(60),
     templateCode: z.string().trim().max(200),
     testPhone,
   })

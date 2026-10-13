@@ -9,7 +9,7 @@ import { SECRET_BOX, SecretBox } from '../common/secret-box';
 import { telemetry } from '../observability/telemetry';
 import { PrismaService } from '../prisma.service';
 import { call253, destinationFor, routeFor, SMS253_DEFAULT_ENDPOINT, SMS253_DEFAULT_TEMPLATE, type Fetch } from './sms253';
-import { callSpug, isSpugTemplateCode, SPUG_DEFAULT_ENDPOINT, spugTemplateCode } from './spug';
+import { callSpug, isSpugTemplateCode, SPUG_CODE_MINUTES, SPUG_DEFAULT_ENDPOINT, spugTemplateCode } from './spug';
 
 const ROUTES: SmsRoute[] = ['DOMESTIC', 'INTERNATIONAL'];
 
@@ -35,7 +35,6 @@ function spugView(row: SpugSetting) {
   return {
     enabled: row.enabled,
     endpoint: row.endpoint,
-    appName: row.appName,
     templateConfigured: Boolean(row.templateCodeEnc),
     testPhone: row.testPhone,
     lastTestedAt: row.lastTestedAt?.toISOString() ?? null,
@@ -124,17 +123,15 @@ export class SmsChannelsService implements SmsProvider {
       throw apiError(HttpStatus.BAD_REQUEST, 'SPUG_TEMPLATE_CODE_INVALID', 'Paste the template URL or code from the Spug console');
     }
     const enabled = input.enabled ?? current.enabled;
-    const appName = input.appName ?? current.appName;
     const endpoint = input.endpoint ?? current.endpoint;
-    if (enabled && !(appName !== '' && endpoint !== '' && (templateCode || current.templateCodeEnc))) {
-      throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the application name and the template before enabling');
+    if (enabled && !(endpoint !== '' && (templateCode || current.templateCodeEnc))) {
+      throw apiError(HttpStatus.CONFLICT, 'SPUG_TEMPLATE_REQUIRED', 'Enter the endpoint and the SMS template before enabling');
     }
     await this.prisma.spugSetting.update({
       where: { id: 'default' },
       data: {
         ...rest,
         endpoint,
-        appName,
         enabled,
         updatedBy: actor,
         ...(templateCode
@@ -208,7 +205,7 @@ export class SmsChannelsService implements SmsProvider {
   async sendVerificationCode(countryCode: string, phone: string, code: string) {
     const row = await this.channel(routeFor(countryCode));
     const spug = row.provider === 'SPUG' ? await this.spugRow() : null;
-    const ready = spug ? spug.enabled && Boolean(spug.appName && spug.templateCodeEnc) : row.enabled && Boolean(this.credentials(row));
+    const ready = spug ? spug.enabled && Boolean(spug.endpoint && spug.templateCodeEnc) : row.enabled && Boolean(this.credentials(row));
     if (!ready) {
       if (this.config.devLogOtp) {
         this.logger.warn(`[development] verification code for ${countryCode} ${phone}: ${code}`);
@@ -235,13 +232,13 @@ export class SmsChannelsService implements SmsProvider {
   }
 
   private async sendSpug(row: SpugSetting, route: SmsRoute, countryCode: string, phone: string, code: string, purpose: 'OTP' | 'TEST') {
-    if (!row.appName || !row.templateCodeEnc) {
-      throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the application name and the template first');
+    if (!row.endpoint || !row.templateCodeEnc) {
+      throw apiError(HttpStatus.CONFLICT, 'SPUG_TEMPLATE_REQUIRED', 'Enter the endpoint and the SMS template first');
     }
     const templateCode = this.box.open(row.templateCodeEnc);
     return this.attempt(route, 'SPUG', countryCode, phone, purpose, async () => {
-      // Spug's own template carries the text; we give the application name, the code and the number.
-      const result = await callSpug(this.fetchImpl, row.endpoint, templateCode, { name: row.appName, code, targets: destinationFor(route, countryCode, phone) });
+      // Spug's official template carries the text; we give the number, the code and how long it lasts.
+      const result = await callSpug(this.fetchImpl, row.endpoint, templateCode, { to: destinationFor(route, countryCode, phone), code, number: SPUG_CODE_MINUTES });
       return { code: result.code, errorMsg: result.errorMsg, sent: result.code === '200' };
     });
   }

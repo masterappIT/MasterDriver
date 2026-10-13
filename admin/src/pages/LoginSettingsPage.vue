@@ -7,8 +7,8 @@ import { dateTime } from '../format';
 /**
  * 登入配置, laid out as Master Travel's 登入配置 (see docs/REUSE.md): one page with a tab per
  * kind of sign-in. MasterDriver has phone sign-in only: 開發模式登入, 簡訊登入 (the 253 accounts
- * for 國內 and 國際, and which provider each sends with) and Spug 推送助手, set up on its own.
- * Each tab is one card that saves as a whole.
+ * for 國內 and 國際, nothing else) and Spug 推送助手 (its one setting, and which number areas send
+ * through it). Each tab is one card that saves as a whole.
  */
 
 type Tab = 'development' | 'sms' | 'spug';
@@ -54,15 +54,10 @@ const ROUTE: Record<Route, { tab: string; numbers: string }> = {
   DOMESTIC: { tab: '國內簡訊', numbers: '+86 內地號碼' },
   INTERNATIONAL: { tab: '國際簡訊', numbers: '+852 香港、+853 澳門號碼' },
 };
-const PROVIDER: Record<Provider, { name: string; about: string }> = {
-  SMS253: { name: '253 雲通訊', about: '用這個號碼區自己的 253 帳號，以我們報備的簽名和範本發送。' },
-  SPUG: { name: 'Spug 推送助手', about: '用「Spug 推送助手」分頁的設定，以 Spug 的簽名和固定範本發送。' },
-};
 
 interface Spug {
   enabled: boolean;
   endpoint: string;
-  appName: string;
   templateConfigured: boolean;
   testPhone: string;
   lastTestedAt: string | null;
@@ -128,10 +123,10 @@ const smsRoute = ref<Route>('DOMESTIC');
 const channels = ref<Channel[]>([]);
 const messages = ref<Message[]>([]);
 const historyLoading = ref(false);
-type ChannelForm = { provider: Provider; enabled: boolean; endpoint: string; account: string; password: string; template: string; testPhone: string };
+type ChannelForm = { enabled: boolean; endpoint: string; account: string; password: string; template: string; testPhone: string };
 const forms = reactive<Record<Route, ChannelForm>>({
-  DOMESTIC: { provider: 'SMS253', enabled: false, endpoint: '', account: '', password: '', template: '', testPhone: '' },
-  INTERNATIONAL: { provider: 'SMS253', enabled: false, endpoint: '', account: '', password: '', template: '', testPhone: '' },
+  DOMESTIC: { enabled: false, endpoint: '', account: '', password: '', template: '', testPhone: '' },
+  INTERNATIONAL: { enabled: false, endpoint: '', account: '', password: '', template: '', testPhone: '' },
 });
 const dirty = reactive<Record<Route, boolean>>({ DOMESTIC: false, INTERNATIONAL: false });
 const smsAnyDirty = computed(() => dirty.DOMESTIC || dirty.INTERNATIONAL);
@@ -148,7 +143,6 @@ function fillChannels(list: Channel[], only?: Route) {
   for (const item of list) {
     if (only && item.route !== only) continue;
     Object.assign(forms[item.route], {
-      provider: item.provider,
       enabled: item.enabled,
       endpoint: item.endpoint,
       account: item.account,
@@ -186,12 +180,17 @@ const status = computed(() => {
   );
 });
 
-/** Whether the provider the route chose can send now; a route on a provider that is off sends nothing. */
+/** Whether a route's 253 account can send, as saved; one that cannot sends no sign-in codes. */
+function ready253(item: Channel) {
+  return Boolean(item.enabled && item.endpoint && item.account && item.passwordConfigured);
+}
+
+/** The route's 253 account as typed here; it is unused while the route sends through Spug. */
+const routeOnSpug = computed(() => channel.value?.provider === 'SPUG');
 const routeReady = computed(() => {
   const item = channel.value;
   if (!item) return true;
-  if (form.value.provider === 'SPUG') return Boolean(spug.value?.enabled && spug.value.templateConfigured && spug.value.appName);
-  return Boolean(form.value.enabled && item.account && item.passwordConfigured);
+  return Boolean(form.value.enabled && form.value.endpoint && form.value.account && item.passwordConfigured);
 });
 
 const routeMessages = computed(() => messages.value.filter((item) => item.route === smsRoute.value && item.provider === 'SMS253').slice(0, 10));
@@ -222,12 +221,6 @@ async function saveSms() {
   } finally {
     smsSaving.value = false;
   }
-}
-
-function chooseProvider(provider: Provider) {
-  if (form.value.provider === provider) return;
-  form.value.provider = provider;
-  changeSms();
 }
 
 function checkConnection() {
@@ -270,7 +263,7 @@ watch(smsRoute, () => (action.message = ''));
 // --------------------------------------------------------- Spug 推送助手
 
 const spug = ref<Spug | null>(null);
-const spugForm = reactive({ enabled: false, endpoint: '', appName: '', templateCode: '', testPhone: '' });
+const spugForm = reactive({ enabled: false, endpoint: '', templateCode: '', testPhone: '' });
 const spugDirty = ref(false);
 const spugSaving = ref(false);
 const spugError = ref('');
@@ -279,9 +272,40 @@ const spugAction = reactive({ loading: false, message: '' });
 
 function fillSpug(value: Spug) {
   spug.value = value;
-  Object.assign(spugForm, { enabled: value.enabled, endpoint: value.endpoint, appName: value.appName, templateCode: '', testPhone: value.testPhone });
+  Object.assign(spugForm, { enabled: value.enabled, endpoint: value.endpoint, templateCode: '', testPhone: value.testPhone });
   spugDirty.value = false;
 }
+
+/** Which number areas send through Spug: ticked here, saved as each route's provider. */
+const spugUse = reactive<Record<Route, boolean>>({ DOMESTIC: false, INTERNATIONAL: false });
+const ROUTES = Object.keys(ROUTE) as Route[];
+const savedOnSpug = (key: Route) => channels.value.find((item) => item.route === key)?.provider === 'SPUG';
+const routesDirty = computed(() => ROUTES.some((key) => spugUse[key] !== savedOnSpug(key)));
+
+function fillSpugUse() {
+  for (const key of ROUTES) spugUse[key] = savedOnSpug(key);
+}
+
+function changeSpugUse() {
+  spugSaved.value = '';
+}
+
+/** Ticked areas get no codes while Spug is off or not filled in, as this form stands. */
+const spugFormReady = computed(() =>
+  Boolean(spugForm.enabled && spugForm.endpoint.trim() && (spug.value?.templateConfigured || spugForm.templateCode.trim())),
+);
+const spugWarnings = computed(() => {
+  const list: string[] = [];
+  const ticked = ROUTES.filter((key) => spugUse[key]).map((key) => ROUTE[key].tab);
+  if (ticked.length && !spugFormReady.value) list.push(`Spug 推送助手尚未啟用或未填好設定，${ticked.join('、')}會收不到驗證碼。`);
+  for (const key of ROUTES) {
+    const item = channels.value.find((row) => row.route === key);
+    if (item && !spugUse[key] && savedOnSpug(key) && !ready253(item)) {
+      list.push(`${ROUTE[key].tab}取消勾選後改用自己的 253 帳號，但該帳號尚未啟用或未填好，會收不到驗證碼。`);
+    }
+  }
+  return list;
+});
 
 function changeSpug() {
   spugDirty.value = true;
@@ -292,23 +316,32 @@ const spugStatus = computed(() => {
   const value = spug.value;
   if (!value) return { key: 'unknown', label: '未檢查', message: '載入中' };
   return stateOf(
-    Boolean(value.appName && value.templateConfigured),
+    Boolean(value.endpoint && value.templateConfigured),
     value.lastTestStatus,
     value.lastTestMessage,
     value.lastTestedAt,
     'Spug 沒有不發簡訊的連線檢查，請用「發送測試簡訊」確認。',
-    '填寫應用名稱和範本網址後保存。',
+    '貼上短信驗證碼範本的調用網址後保存。',
   );
 });
 
-/** The routes sending through Spug now, as saved. */
-const spugRoutes = computed(() => channels.value.filter((item) => item.provider === 'SPUG').map((item) => ROUTE[item.route].tab));
+/** Sets one route's provider; only `provider` is sent, so its 253 account is left as saved. */
+async function saveProvider(key: Route, provider: Provider) {
+  channels.value = await api<Channel[]>('PUT', `/sms-channels/${key}`, { provider });
+}
 
 async function saveSpug() {
   spugSaving.value = true;
   spugError.value = '';
   try {
-    fillSpug(await api<Spug>('PUT', '/sms-spug', { ...spugForm }));
+    // Areas leaving Spug go back to 253 first, and areas joining it switch after Spug is saved,
+    // so no area is left on a Spug that is being turned off.
+    const leaving = ROUTES.filter((key) => !spugUse[key] && savedOnSpug(key));
+    const joining = ROUTES.filter((key) => spugUse[key] && !savedOnSpug(key));
+    for (const key of leaving) await saveProvider(key, 'SMS253');
+    if (spugDirty.value) fillSpug(await api<Spug>('PUT', '/sms-spug', { ...spugForm }));
+    for (const key of joining) await saveProvider(key, 'SPUG');
+    fillSpugUse();
     spugSaved.value = `已保存 ${new Date().toLocaleTimeString('zh-HK', { hour12: false })}`;
   } catch (e) {
     spugError.value = (e as Error).message;
@@ -347,6 +380,7 @@ onMounted(async () => {
     fillDevelopment(status);
     fillChannels(list);
     fillSpug(spugSetting);
+    fillSpugUse();
     await loadHistory();
   } catch (e) {
     pageError.value = (e as Error).message;
@@ -434,7 +468,7 @@ onMounted(async () => {
       <div class="login-settings-card-header">
         <div>
           <h3>簡訊登入</h3>
-          <p>國內、國際各有自己的 253 雲通訊帳號，並各自選用 253 或 Spug 推送助手發送。切換發送服務商不會清空任何一家的設定。密碼加密儲存，後台不會顯示。</p>
+          <p>國內、國際各有自己的 253 雲通訊帳號，以我們報備的簽名和範本發送。密碼加密儲存，後台不會顯示。</p>
         </div>
         <div v-if="channel" class="login-settings-card-meta">
           <span class="badge-internal">253 {{ smsRoute === 'DOMESTIC' ? 'Domestic' : 'International' }}</span>
@@ -451,35 +485,8 @@ onMounted(async () => {
         </button>
       </div>
 
-      <div v-if="channel" class="sms-sender">
-        <div class="sms-sender-heading">
-          <strong>發送服務商</strong>
-          <small>{{ ROUTE[smsRoute].numbers }}的登入驗證碼由這裡選的服務商發出</small>
-        </div>
-        <div class="sms-provider-options" role="radiogroup" aria-label="發送服務商">
-          <button
-            v-for="(item, key) in PROVIDER"
-            :key="key"
-            type="button"
-            role="radio"
-            :aria-checked="form.provider === key"
-            :class="{ active: form.provider === key }"
-            :disabled="!can.superAdmin()"
-            @click="chooseProvider(key)"
-          >
-            {{ item.name }}
-          </button>
-        </div>
-        <small class="wechat-secret-help">{{ PROVIDER[form.provider].about }}</small>
-        <p v-if="!routeReady" class="sms-sender-warning">
-          {{
-            form.provider === 'SPUG'
-              ? 'Spug 推送助手尚未啟用或未填好設定，這個號碼區目前收不到驗證碼。'
-              : '這個號碼區的 253 帳號尚未啟用或未填好，目前收不到驗證碼。'
-          }}
-          <button v-if="form.provider === 'SPUG'" type="button" class="link-button" @click="tab = 'spug'">前往 Spug 推送助手</button>
-        </p>
-      </div>
+      <p v-if="channel && routeOnSpug" class="sms-route-note">{{ ROUTE[smsRoute].tab }}目前不經 253 發送，這裡的帳號暫不使用。</p>
+      <p v-else-if="channel && !routeReady" class="sms-route-note sms-sender-warning">這個號碼區的 253 帳號尚未啟用或未填好，{{ ROUTE[smsRoute].numbers }}目前收不到驗證碼。</p>
 
       <div class="sms-history">
         <div class="sms-history-header">
@@ -503,7 +510,7 @@ onMounted(async () => {
             </tbody>
           </table>
         </div>
-        <p class="wechat-secret-help">只記錄結果，不保存含驗證碼的簡訊內容。經 Spug 發出的紀錄在「Spug 推送助手」分頁。</p>
+        <p class="wechat-secret-help">只記錄結果，不保存含驗證碼的簡訊內容。</p>
       </div>
 
       <div v-if="channel" class="sms-platform-panel">
@@ -566,7 +573,7 @@ onMounted(async () => {
         <div>
           <span class="section-kicker">SPUG PUSH</span>
           <h3>Spug 推送助手</h3>
-          <p>用 Spug 自己已報備的簽名和固定驗證碼範本代發，不用報備我們的公司；簡訊文字不能自訂。國內、國際共用這一份設定，在「簡訊登入」分頁選用 Spug 的號碼區才會經這裡發送。</p>
+          <p>用 Spug 自己已報備的簽名和官方驗證碼範本代發，不用報備我們的公司；簡訊文字不能自訂。國內、國際共用這一份設定；勾選的號碼區經這裡發送，沒勾選的用「簡訊登入」分頁裡各自的 253 帳號。</p>
         </div>
         <div v-if="spug" class="login-settings-card-meta">
           <span class="badge-internal">Spug Push</span>
@@ -579,13 +586,19 @@ onMounted(async () => {
 
       <div v-if="spug" class="sms-sender">
         <div class="sms-sender-heading">
-          <strong>使用中的號碼區</strong>
-          <small>在「簡訊登入」分頁的「發送服務商」選擇</small>
+          <strong>用 Spug 發送的號碼區</strong>
+          <small>改了勾選後按「保存 Spug 設定」才生效；取消勾選不會清空任何設定</small>
         </div>
-        <div class="spug-routes">
-          <span v-for="name in spugRoutes" :key="name" class="spug-route">{{ name }}</span>
-          <span v-if="!spugRoutes.length" class="wechat-secret-help">目前沒有號碼區使用 Spug</span>
+        <div class="spug-route-options">
+          <label v-for="key in ROUTES" :key="key" :class="{ active: spugUse[key] }">
+            <input v-model="spugUse[key]" type="checkbox" :disabled="!can.superAdmin()" @change="changeSpugUse" />
+            <span>
+              <strong>{{ ROUTE[key].tab }}</strong>
+              <small>{{ ROUTE[key].numbers }}</small>
+            </span>
+          </label>
         </div>
+        <p v-for="message in spugWarnings" :key="message" class="sms-sender-warning">{{ message }}</p>
       </div>
 
       <div class="sms-history">
@@ -625,20 +638,16 @@ onMounted(async () => {
             <input v-model="spugForm.endpoint" placeholder="https://push.spug.cc" :disabled="!can.superAdmin()" @input="changeSpug" />
           </label>
           <label>
-            <span>應用名稱（顯示在簡訊裡）</span>
-            <input v-model="spugForm.appName" autocomplete="off" maxlength="60" placeholder="例如：跨境師傅幫" :disabled="!can.superAdmin()" @input="changeSpug" />
-          </label>
-          <label>
             <span>範本網址或編碼</span>
             <input
               v-model="spugForm.templateCode"
               type="password"
               autocomplete="new-password"
-              :placeholder="spug.templateConfigured ? '已配置則留空' : '貼上範本的調用網址'"
+              :placeholder="spug.templateConfigured ? '已配置則留空' : '貼上短信驗證碼範本的調用網址'"
               :disabled="!can.superAdmin()"
               @input="changeSpug"
             />
-            <small class="wechat-secret-help">在 push.spug.cc 建立「短信 → 驗證碼」範本並選「動態推送對象」，把範本的調用網址貼到這裡；只保存其中的編碼，加密儲存。</small>
+            <small class="wechat-secret-help">在 push.spug.cc 控制台的「短信驗證碼」選一個官方範本，把範本詳情裡的調用網址（https://push.spug.cc/sms/…）貼到這裡；只保存其中的編碼，加密儲存。</small>
           </label>
           <label>
             <span>測試手機號碼</span>
@@ -656,9 +665,9 @@ onMounted(async () => {
     <div v-show="tab === 'spug'" class="login-settings-save-bar">
       <span v-if="spugError" class="error-hint">{{ spugError }}</span>
       <span v-else-if="spugSaved" class="success-hint">{{ spugSaved }}</span>
-      <span v-else-if="spugDirty" class="login-settings-note">有未保存的修改</span>
+      <span v-else-if="spugDirty || routesDirty" class="login-settings-note">有未保存的修改</span>
       <span v-else class="login-settings-note">Spug 設定已保存並由後端安全管理</span>
-      <button type="button" class="primary" :disabled="!can.superAdmin() || spugSaving || !spugDirty" @click="saveSpug">{{ spugSaving ? '保存中' : '保存 Spug 設定' }}</button>
+      <button type="button" class="primary" :disabled="!can.superAdmin() || spugSaving || !(spugDirty || routesDirty)" @click="saveSpug">{{ spugSaving ? '保存中' : '保存 Spug 設定' }}</button>
     </div>
   </section>
 </template>

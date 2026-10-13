@@ -728,7 +728,7 @@ model SpugSetting {
   id              String    @id @default("default")
   enabled         Boolean   @default(false)
   endpoint        String    @default("https://push.spug.cc")
-  /// Fills the template's application name, shown in the message.
+  /// No longer used: Spug's /sms official templates take no application name (2026-10-14).
   appName         String    @default("")
   /// The template code: whoever has it can send, so it is kept like a password.
   templateCodeEnc String?

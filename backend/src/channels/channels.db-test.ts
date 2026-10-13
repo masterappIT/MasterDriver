@@ -105,11 +105,13 @@ test('a rejected SMS fails the request; an unconfigured route refuses outside de
 
 test('Spug is set up on its own; a route that chooses it keeps its 253 account, and the template code stays secret', async () => {
   await ctx.smsChannels.save('DOMESTIC', { enabled: true, account: 'cn-acct', password: 'cn-pass' }, 'test');
-  await rejectsWith(ctx.smsChannels.saveSpug({ enabled: true }, 'test'), 'SMS_ACCOUNT_REQUIRED');
+  await rejectsWith(ctx.smsChannels.saveSpug({ enabled: true }, 'test'), 'SPUG_TEMPLATE_REQUIRED');
   await rejectsWith(ctx.smsChannels.saveSpug({ templateCode: 'not a code!' }, 'test'), 'SPUG_TEMPLATE_CODE_INVALID');
-  // The whole URL copied from the Spug console is accepted; only its code is kept.
-  const spug = await ctx.smsChannels.saveSpug({ enabled: true, appName: '跨境師傅幫', templateCode: 'https://push.spug.cc/send/A27LsecretbgEY' }, 'test');
-  assert.deepEqual([spug.enabled, spug.appName, spug.templateConfigured, spug.endpoint], [true, '跨境師傅幫', true, 'https://push.spug.cc']);
+  // A notification template's /send URL is not an SMS template.
+  await rejectsWith(ctx.smsChannels.saveSpug({ templateCode: 'https://push.spug.cc/send/A27LsecretbgEY' }, 'test'), 'SPUG_TEMPLATE_CODE_INVALID');
+  // The whole /sms URL copied from the Spug console is accepted; only its code is kept.
+  const spug = await ctx.smsChannels.saveSpug({ enabled: true, templateCode: 'https://push.spug.cc/sms/A27LsecretbgEY' }, 'test');
+  assert.deepEqual([spug.enabled, spug.templateConfigured, spug.endpoint], [true, true, 'https://push.spug.cc']);
 
   // Choosing Spug for +86 changes no settings: the 253 account is still there, switched on.
   const chosen = (await ctx.smsChannels.save('DOMESTIC', { provider: 'SPUG' }, 'test')).find((c) => c.route === 'DOMESTIC')!;
@@ -118,8 +120,8 @@ test('Spug is set up on its own; a route that chooses it keeps its 253 account, 
   const stub = stubFetch({ code: 200, msg: '请求成功' });
   ctx.smsChannels.fetchImpl = stub.impl;
   await ctx.smsChannels.sendVerificationCode('+86', '13800138000', '480917');
-  assert.equal(stub.calls[0].url, 'https://push.spug.cc/send/A27LsecretbgEY');
-  assert.deepEqual(stub.calls[0].body, { name: '跨境師傅幫', code: '480917', targets: '13800138000' });
+  assert.equal(stub.calls[0].url, 'https://push.spug.cc/sms/A27LsecretbgEY');
+  assert.deepEqual(stub.calls[0].body, { to: '13800138000', code: '480917', number: '10' });
   const logged = await ctx.prisma.smsMessage.findFirstOrThrow();
   assert.deepEqual([logged.provider, logged.route, logged.status], ['SPUG', 'DOMESTIC', 'sent']);
   assert.ok(!JSON.stringify(logged).includes('480917'), 'the code is never stored');
@@ -143,15 +145,15 @@ test('Spug is set up on its own; a route that chooses it keeps its 253 account, 
 });
 
 test('a Spug test message goes to the number typed, under the route its country code belongs to', async () => {
-  await ctx.smsChannels.saveSpug({ appName: '跨境師傅幫', templateCode: 'A27LsecretbgEY', testPhone: '85291234567' }, 'test');
+  await ctx.smsChannels.saveSpug({ templateCode: 'A27LsecretbgEY', testPhone: '85291234567' }, 'test');
   const stub = stubFetch({ code: 200 });
   ctx.smsChannels.fetchImpl = stub.impl;
   const sent = await ctx.smsChannels.testSpug();
   assert.equal(sent.status, 'sent');
-  assert.equal(stub.calls[0].body.targets, '85291234567');
+  assert.equal(stub.calls[0].body.to, '85291234567');
   assert.equal(sent.spug.lastTestStatus, 'success');
   await ctx.smsChannels.testSpug('8613800138000');
-  assert.equal(stub.calls[1].body.targets, '13800138000');
+  assert.equal(stub.calls[1].body.to, '13800138000');
   const routes = (await ctx.prisma.smsMessage.findMany({ orderBy: { createdAt: 'asc' } })).map((row) => [row.route, row.countryCode, row.purpose]);
   assert.deepEqual(routes, [['INTERNATIONAL', '+852', 'TEST'], ['DOMESTIC', '+86', 'TEST']]);
 });

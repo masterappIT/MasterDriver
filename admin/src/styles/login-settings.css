@@ -108,7 +108,6 @@
 .login-settings-admin .login-settings-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 20px 24px; }
 .login-settings-admin .login-settings-form-grid .col-span-2 { grid-column: span 2 / span 2; }
 .login-settings-admin .login-settings-form-grid label,
-.login-settings-admin .sms-provider { display: flex; flex-direction: column; gap: 6px; color: #475569; font-size: 12px; font-weight: 700; }
 .login-settings-admin .login-settings-form-grid input,
 .login-settings-admin .login-settings-form-grid textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 8px; padding: 9px 12px; color: var(--color-text); background: #fff; font: inherit; font-weight: 400; transition: border-color .16s ease, box-shadow .16s ease; resize: vertical; }
 .login-settings-admin .login-settings-form-grid input { min-height: 44px; }
@@ -119,11 +118,6 @@
 .login-settings-admin .login-settings-form-grid textarea:focus { outline: none; border-color: #7eafea; box-shadow: 0 0 0 3px rgba(23, 105, 224, .12); }
 .login-settings-admin .login-settings-form-grid input:disabled,
 .login-settings-admin .login-settings-form-grid textarea:disabled { background: #f8fafc; color: #64748b; }
-.login-settings-admin .sms-provider-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.login-settings-admin .sms-provider-options button { min-height: 40px; border: 1px solid #cbd9e9; border-radius: 9px; padding: 0 10px; background: #fff; color: #526985; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; transition: .16s ease; }
-.login-settings-admin .sms-provider-options button:hover:not(:disabled) { border-color: #8fb6ec; background: #f5f9ff; color: var(--color-primary); }
-.login-settings-admin .sms-provider-options button.active { border-color: var(--color-primary); background: #eaf3ff; color: var(--color-primary); box-shadow: 0 3px 9px rgba(23, 105, 224, .1); }
-.login-settings-admin .sms-provider-options button:disabled { cursor: not-allowed; opacity: .6; }
 .login-settings-admin .sms-actions { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 2px; padding-top: 16px; border-top: 1px solid #edf1f6; }
 .login-settings-admin .sms-actions button { min-height: 40px; border: 1px solid #d5dfeb; border-radius: 10px; padding: 0 16px; color: #526985; background: #f8fafd; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; transition: border-color .16s ease, color .16s ease, background .16s ease, transform .16s ease; }
 .login-settings-admin .sms-actions button:hover:not(:disabled) { border-color: #9bbce8; color: var(--color-primary); background: #f5f9ff; transform: translateY(-1px); }
@@ -165,9 +159,17 @@
 .login-settings-admin .sms-sender-heading small { color: #7b8da4; font-size: 11px; line-height: 1.5; }
 .login-settings-admin .sms-sender .wechat-secret-help { margin-top: 0; }
 .login-settings-admin .sms-sender-warning { margin: 0; padding: 10px 12px; border: 1px solid #ead9ae; border-radius: 9px; background: #fffaf0; color: #92400e; font-size: 12px; font-weight: 650; line-height: 1.5; }
-.login-settings-admin .link-button { margin-left: 6px; padding: 0; border: 0; background: none; color: var(--color-primary); font: inherit; font-weight: 800; cursor: pointer; text-decoration: underline; }
-.login-settings-admin .spug-routes { display: flex; flex-wrap: wrap; gap: 8px; }
-.login-settings-admin .spug-route { padding: 6px 12px; border: 1px solid #b7d2f7; border-radius: 999px; background: #eaf3ff; color: var(--color-primary); font-size: 12px; font-weight: 800; }
+.login-settings-admin .sms-route-note { margin: 16px 24px 0; padding: 10px 14px; border: 1px solid #d9e5ff; border-radius: 10px; background: #f7faff; color: #526985; font-size: 12px; font-weight: 650; line-height: 1.5; }
+.login-settings-admin .sms-route-note.sms-sender-warning { border-color: #ead9ae; background: #fffaf0; color: #92400e; }
+.login-settings-admin .spug-route-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.login-settings-admin .spug-route-options label { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 8px 12px; border: 1px solid #cbd9e9; border-radius: 9px; background: #fff; cursor: pointer; transition: .16s ease; }
+.login-settings-admin .spug-route-options label.active { border-color: var(--color-primary); background: #eaf3ff; box-shadow: 0 3px 9px rgba(23, 105, 224, .1); }
+.login-settings-admin .spug-route-options input { width: 16px; height: 16px; margin: 0; accent-color: var(--color-primary); }
+.login-settings-admin .spug-route-options span { display: grid; gap: 2px; }
+.login-settings-admin .spug-route-options strong { color: #38434a; font-size: 13px; font-weight: 800; }
+.login-settings-admin .spug-route-options small { color: #7b8da4; font-size: 11px; }
 @media (max-width: 760px) {
-  .login-settings-admin .sms-sender { margin-left: 18px; margin-right: 18px; }
+  .login-settings-admin .sms-sender,
+  .login-settings-admin .sms-route-note { margin-left: 18px; margin-right: 18px; }
+  .login-settings-admin .spug-route-options { grid-template-columns: 1fr; }
 }
