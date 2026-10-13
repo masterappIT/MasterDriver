@@ -42,7 +42,7 @@ npm run dev:web
 ```
 
 - 網頁在 `http://localhost:5180`（與 `.env` 的 `PUBLIC_BASE_URL` 一致，派單連結和乘客確認連結會打開這裡）。
-- 頁面：`/` 平台首頁（未登入時顯示；登入後轉到 `/app`）、`/legal/terms` 與 `/legal/privacy`（後台「一般設定」的條款內容）、`/p/:code` 名片頁（公開，可預約）、`/b/:code` 乘客的預約連結、`/app/profile-page` 編輯名片頁、`/app/bookings` 與 `/app/bookings/:id` 司機的預約、`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
+- 頁面：`/` 平台首頁（未登入時顯示；登入後轉到 `/app`）、`/legal/terms` 與 `/legal/privacy`（後台「一般設定」的條款內容）、`/p/:code` 名片頁（公開，可預約）、`/b/:code` 乘客的預約連結、`/app/profile-page` 編輯名片頁、`/app/bookings` 與 `/app/bookings/:id` 司機的預約、`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/pool` 接單池（要先有司機資料）、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
 - 發單頁最上方的「一句話發單」用 `shared/src/quick-order.ts` 解析（時間、起終點、座位、人數、行李、價格、備註；繁簡皆可），只負責填入下方表格，不會直接發出。測試案例取自實際的微信群訊息。
 - 平台首頁的標題、描述與分享圖在瀏覽器裡套用後台「SEO → 首頁」的設定。`index.html` 固定帶 `noindex`，所以**首頁目前不會被搜尋引擎收錄**，不執行腳本的分享預覽（例如微信、WhatsApp 的連結預覽）也讀不到這些設定；要收錄和預覽，需要由伺服器輸出每一頁的標題與摘要，這還沒做。
 - Logo 在後台「一般設定」上傳，存在資料庫（`SiteLogo`），由 `BrandMark` 元件顯示在首頁、登入頁、搶單頁；網址帶版本，換了 Logo 會立即更新。
@@ -110,16 +110,18 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/auth/logout` | 要 | 登出 |
 | `GET /api/me` | 要 | 目前用戶與司機資料 |
 | `GET/PUT /api/me/profile` | 要 | 司機資料（第一次搶單前要填） |
-| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer: true`：接駁單的第 1 段；`afterOrderId`：加接駁段（接在行程最後一段後面，出發地即接駁位置，不再扣額度和服務費）；`requiredPlates`：需要的車牌（只標明）；`selfDrive: true`：這段我自己做（直接算自己接，要先有司機資料） |
+| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer: true`：接駁單的第 1 段；`afterOrderId`：加接駁段（接在行程最後一段後面，出發地即接駁位置，不再扣額度和服務費）；`requiredPlates`：需要的車牌（只標明）；`selfDrive: true`：這段我自己做（直接算自己接，要先有司機資料）；`inPool`：同時放到接單池（不傳時用「我的」的預設值；`selfDrive` 的單一律不進池） |
 | `GET /api/orders?role=dispatched\|claimed` | 要 | 我的派單／我的接單 |
+| `GET /api/orders/pool?date=YYYY-MM-DD&q=地點` | 要 | 接單池：發單者勾選放進來、待搶且未到出發時間的單，不含自己發的；與搶單頁相同的資訊，不含乘客資料；最多 50 張。沒有司機資料時回 `PROFILE_REQUIRED` |
 | `GET /api/orders/:id` | 要 | 單的詳情（發單者或接單司機） |
+| `PATCH /api/orders/:id/pool` | 要 | 把單放進或取出接單池（發單者；只限待搶的單） |
 | `PATCH /api/orders/:id/prices` | 要 | 改司機價、乘客價、是否讓乘客看到乘客價（發單者；司機價在有人接單後鎖定） |
 | `POST /api/orders/:id/cancel` | 要 | 取消（發單者） |
 | `POST /api/orders/:id/reopen` | 要 | 改派：收回並重新開放搶單（發單者） |
 | `POST /api/orders/:id/complete` | 要 | 完成（發單者或接單司機） |
 | `GET /api/o/:code` | 可選 | 搶單頁；只有發單者和接單司機看得到乘客資料 |
 | `POST /api/o/:code/claim` | 要 | 搶單，先到先得；回傳 `WON` 或 `LOST` |
-| `GET/PUT /api/me/preferences` | 要 | 發單預設：接單司機何時看到乘客電話（`contactRevealMinutes`，null 為搶到即顯示） |
+| `GET/PUT /api/me/preferences` | 要 | 發單預設：接單司機何時看到乘客電話（`contactRevealMinutes`，null 為搶到即顯示）、新發的單是否預設放到接單池（`poolByDefault`）；`PUT` 可以只傳其中一項 |
 | `PATCH /api/orders/:id/contact-reveal` | 要 | 逐張調整乘客電話顯示時間（發單者） |
 | `GET/POST /api/me/group-invites`、`PATCH/DELETE /api/me/group-invites/:id` | 要 | 我的派單群（微信群二維碼、個人微信二維碼、WhatsApp 連結；最多 5 個） |
 | `GET /api/public/group-invites/:id/qr` | — | 二維碼圖片（微信群二維碼過期後不再提供） |

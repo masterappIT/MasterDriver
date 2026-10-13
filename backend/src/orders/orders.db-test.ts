@@ -373,3 +373,80 @@ test('這段我自己做: the dispatcher drives the leg, nobody can claim it, an
   const newcomer = await ctx.prisma.user.create({ data: { countryCode: '+86', phone: '13800000001' } });
   await rejectsWith(ctx.orders.create(newcomer.id, { ...sampleOrder, selfDrive: true }), 'PROFILE_REQUIRED');
 });
+
+const BEFORE_PICKUP = new Date('2026-10-14T09:00:00+08:00');
+
+test('接單池 lists only orders their dispatcher ticked, to drivers with details, without passenger details', async () => {
+  const dispatcher = await createDriver(ctx, '派單師傅');
+  const driver = await createDriver(ctx);
+  await ctx.orders.create(dispatcher, sampleOrder);
+  const listed = await ctx.orders.create(dispatcher, { ...sampleOrder, inPool: true, passengerName: '陳先生' });
+  assert.equal(listed.inPool, true);
+
+  const pool = await ctx.orders.pool(driver, {}, BEFORE_PICKUP);
+  assert.deepEqual(pool.map((order) => order.code), [listed.code]);
+  assert.equal(pool[0].viewer, 'other');
+  assert.equal(pool[0].dispatcherName, '派單師傅');
+  for (const hidden of ['id', 'passengerName', 'passengerContact', 'dispatcherPhone', 'passengerPrice', 'links']) {
+    assert.equal(hidden in pool[0], false, hidden);
+  }
+
+  // Their own orders are in 我的單, not in the pool they claim from.
+  assert.deepEqual(await ctx.orders.pool(dispatcher, {}, BEFORE_PICKUP), []);
+
+  const newcomer = await ctx.prisma.user.create({ data: { countryCode: '+86', phone: '13800000001' } });
+  await rejectsWith(ctx.orders.pool(newcomer.id, {}, BEFORE_PICKUP), 'PROFILE_REQUIRED');
+});
+
+test('an order leaves the 接單池 when claimed, taken out, cancelled or past its time, and returns when reopened', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const viewer = await createDriver(ctx);
+  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, inPool: true });
+  const codes = async (now = BEFORE_PICKUP) => (await ctx.orders.pool(viewer, {}, now)).map((order) => order.code);
+
+  assert.deepEqual(await codes(), [created.code]);
+  assert.deepEqual(await codes(new Date('2026-10-15T14:31:00+08:00')), []);
+
+  await ctx.orders.claim(created.code, driver);
+  assert.deepEqual(await codes(), []);
+  await rejectsWith(ctx.orders.setPool(dispatcher, created.id, { inPool: false }), 'INVALID_ORDER_STATUS');
+  await ctx.orders.reopen(dispatcher, created.id);
+  assert.deepEqual(await codes(), [created.code]);
+
+  await rejectsWith(ctx.orders.setPool(driver, created.id, { inPool: false }), 'ORDER_NOT_FOUND');
+  assert.equal((await ctx.orders.setPool(dispatcher, created.id, { inPool: false })).inPool, false);
+  assert.deepEqual(await codes(), []);
+  await ctx.orders.setPool(dispatcher, created.id, { inPool: true });
+  await ctx.orders.cancel(dispatcher, created.id);
+  assert.deepEqual(await codes(), []);
+});
+
+test('the 接單池 default comes from the dispatcher, and 這段我自己做 never enters it', async () => {
+  const dispatcher = await createDriver(ctx);
+  const viewer = await createDriver(ctx);
+  await ctx.prisma.user.update({ where: { id: dispatcher }, data: { poolByDefault: true } });
+
+  const byDefault = await ctx.orders.create(dispatcher, sampleOrder);
+  const optedOut = await ctx.orders.create(dispatcher, { ...sampleOrder, inPool: false });
+  const own = await ctx.orders.create(dispatcher, { ...sampleOrder, selfDrive: true, inPool: true });
+  assert.equal(byDefault.inPool, true);
+  assert.equal(optedOut.inPool, false);
+  assert.equal(own.inPool, false);
+  assert.deepEqual((await ctx.orders.pool(viewer, {}, BEFORE_PICKUP)).map((order) => order.code), [byDefault.code]);
+});
+
+test('the 接單池 filters by Hong Kong day and by a word in the origin or destination, soonest first', async () => {
+  const dispatcher = await createDriver(ctx);
+  const viewer = await createDriver(ctx);
+  const later = await ctx.orders.create(dispatcher, { ...sampleOrder, inPool: true, pickupAt: '2026-10-16T00:30:00+08:00', destination: '澳門機場' });
+  const sooner = await ctx.orders.create(dispatcher, { ...sampleOrder, inPool: true, pickupAt: '2026-10-15T23:30:00+08:00' });
+  const codes = async (query: { date?: string; q?: string }) => (await ctx.orders.pool(viewer, query, BEFORE_PICKUP)).map((order) => order.code);
+
+  assert.deepEqual(await codes({}), [sooner.code, later.code]);
+  assert.deepEqual(await codes({ date: '2026-10-15' }), [sooner.code]);
+  assert.deepEqual(await codes({ date: '2026-10-16' }), [later.code]);
+  assert.deepEqual(await codes({ q: '澳門' }), [later.code]);
+  assert.deepEqual(await codes({ q: '深圳灣' }), [sooner.code, later.code]);
+  assert.deepEqual(await codes({ date: '2026-10-15', q: '澳門' }), []);
+});

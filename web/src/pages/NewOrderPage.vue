@@ -73,6 +73,8 @@ const form = reactive({
   transfer: false,
   requiredPlates: [] as PlateRegion[],
   selfDrive: false,
+  /** 接單池: also list the order for every signed-in driver, not only the groups the link is pasted in. */
+  inPool: false,
 });
 
 /** Places used before, most recent first: one tap fills them in. */
@@ -180,6 +182,7 @@ async function submit() {
       transfer: !afterId && form.transfer,
       requiredPlates: afterId || form.transfer ? form.requiredPlates : [],
       selfDrive: form.selfDrive,
+      inPool: !form.selfDrive && form.inPool,
     });
     await router.replace(`/app/orders/${created.id}?sent=1`);
   } catch (e) {
@@ -245,10 +248,13 @@ async function loadBooking() {
 onMounted(async () => {
   const [orders, preferences] = await Promise.all([
     api<PastOrder[]>('GET', '/orders?role=dispatched').catch(() => []),
-    api<{ contactRevealMinutes: number | null }>('GET', '/me/preferences').catch(() => null),
+    api<{ contactRevealMinutes: number | null; poolByDefault: boolean }>('GET', '/me/preferences').catch(() => null),
   ]);
   past.value = orders;
-  if (preferences) form.contactRevealMinutes = preferences.contactRevealMinutes;
+  if (preferences) {
+    form.contactRevealMinutes = preferences.contactRevealMinutes;
+    form.inPool = preferences.poolByDefault;
+  }
   if (afterId) await loadPrevious();
   else if (bookingId) await loadBooking();
 });
@@ -374,6 +380,13 @@ onMounted(async () => {
       <label class="row"><input v-model="form.selfDrive" type="checkbox" /> {{ t('這段我自己做（不放到群裡搶）') }}</label>
       <p v-if="form.selfDrive" class="hint">
         {{ session.profile ? t('這張單直接算你接，乘客確認頁會顯示你的車牌。之後可按「放到群裡搶」改派。') : t('請先在「我的」填寫司機資料（姓名、車牌），乘客確認頁會顯示。') }}
+      </p>
+    </div>
+
+    <div v-if="!form.selfDrive" class="card">
+      <label class="row"><input v-model="form.inPool" type="checkbox" /> {{ t('同時放到接單池') }}</label>
+      <p class="hint">
+        {{ t('不勾：只有拿到連結的人看得到這張單。勾選：所有登入的司機都能在「接單池」看到並搶，乘客資料仍然只有搶到的司機看得到。預設值可在「我的」修改。') }}
       </p>
     </div>
 

@@ -18,6 +18,17 @@ interface Settings {
 
 const router = useRouter();
 const reveal = ref<number | null>(60);
+const poolByDefault = ref(false);
+
+async function savePool() {
+  try {
+    await api('PUT', '/me/preferences', { poolByDefault: poolByDefault.value });
+    toast('已更新預設值');
+  } catch {
+    poolByDefault.value = !poolByDefault.value;
+    toast('更新失敗，請再試一次');
+  }
+}
 
 async function saveReveal(value: number | null) {
   try {
@@ -41,8 +52,11 @@ async function logout() {
 }
 
 onMounted(async () => {
-  const preferences = await api<{ contactRevealMinutes: number | null }>('GET', '/me/preferences').catch(() => null);
-  if (preferences) reveal.value = preferences.contactRevealMinutes;
+  const preferences = await api<{ contactRevealMinutes: number | null; poolByDefault: boolean }>('GET', '/me/preferences').catch(() => null);
+  if (preferences) {
+    reveal.value = preferences.contactRevealMinutes;
+    poolByDefault.value = preferences.poolByDefault;
+  }
   void api<{ count: number }>('GET', '/me/bookings/unread')
     .then((unread) => (bookingUnread.value = unread.count))
     .catch(() => undefined);
@@ -97,6 +111,8 @@ onMounted(async () => {
         <RevealSelect v-model="reveal" @update:model-value="saveReveal" />
         <span class="hint">{{ t('每張單發出時也可以另外調整。你自己隨時都看得到。') }}</span>
       </label>
+      <label class="row"><input v-model="poolByDefault" type="checkbox" @change="savePool" /> {{ t('新發的單預設同時放到接單池') }}</label>
+      <p class="hint">{{ t('接單池是所有登入的司機都看得到的單。不勾的話，單只給拿到連結的人；每張單發出時也可以另外調整。') }}</p>
     </section>
 
     <section class="card">

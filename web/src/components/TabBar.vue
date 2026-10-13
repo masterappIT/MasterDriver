@@ -5,6 +5,7 @@ import { t } from '../i18n';
 const route = useRoute();
 const TABS = [
   { to: '/app', label: '首頁', match: (path: string) => path === '/app' || path === '/app/new' },
+  { to: '/app/pool', label: '接單池', match: (path: string) => path.startsWith('/app/pool') },
   { to: '/app/orders', label: '我的單', match: (path: string) => path.startsWith('/app/orders') },
   { to: '/app/me', label: '我的', match: (path: string) => path.startsWith('/app/me') },
 ];

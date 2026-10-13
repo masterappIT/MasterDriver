@@ -21,6 +21,8 @@ model User {
   /// Default for new orders: minutes before pickup when the winning driver may see
   /// the passenger's contact. Null means as soon as the order is claimed.
   contactRevealMinutes Int? @default(60)
+  /// Default for new orders: whether they are also listed in the 接單池.
+  poolByDefault Boolean @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -182,6 +184,9 @@ model Order {
   /// Plates the car for this order needs (e.g. a Macau car for the leg after a
   /// 接駁). Shown in the group text and on the claim page; never enforced.
   requiredPlates       PlateRegion[] @default([])
+  /// 接單池: the dispatcher chose to list this order for every signed-in driver,
+  /// besides the groups the link is pasted in. Off unless they tick it.
+  inPool               Boolean     @default(false)
   claimedById          String?
   claimedAt            DateTime?
   passengerConfirmedAt DateTime?
@@ -200,6 +205,7 @@ model Order {
   @@unique([journeyId, legIndex])
   @@index([dispatcherId, createdAt])
   @@index([claimedById, createdAt])
+  @@index([inPool, status, pickupAt])
 }
 
 enum ClaimResult {

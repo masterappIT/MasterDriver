@@ -22,6 +22,7 @@ const routes: RouteRecordRaw[] = [
   // 客服: for signed-in users and for guests, so it sits outside the signed-in app.
   { path: '/support', component: () => import('./pages/SupportPage.vue') },
   { path: '/app', component: () => import('./pages/HomePage.vue'), meta: { app: true } },
+  { path: '/app/pool', component: () => import('./pages/PoolPage.vue'), meta: { app: true } },
   { path: '/app/new', component: () => import('./pages/NewOrderPage.vue'), meta: { app: true } },
   { path: '/app/orders', component: () => import('./pages/OrdersPage.vue'), meta: { app: true } },
   { path: '/app/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { app: true } },

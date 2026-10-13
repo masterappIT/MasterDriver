@@ -2,11 +2,15 @@ import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Query, Use
 import {
   createOrderSchema,
   orderListQuerySchema,
+  poolQuerySchema,
+  poolUpdateSchema,
   contactRevealUpdateSchema,
   updateOrderPricesSchema,
   type ContactRevealUpdate,
   type CreateOrderInput,
   type OrderListQuery,
+  type PoolQuery,
+  type PoolUpdate,
   type UpdateOrderPricesInput,
 } from '@masterdriver/shared';
 import { AuthGuard, CurrentUser, OptionalAuthGuard } from '../auth/auth.guard';
@@ -30,6 +34,12 @@ export class OrdersController {
     return this.orders.list(user.id, query);
   }
 
+  /** 接單池. Declared before `:id` so "pool" is not read as an order id. */
+  @Get('pool')
+  pool(@CurrentUser() user: SessionUser, @Query(new ZodPipe(poolQuerySchema)) query: PoolQuery) {
+    return this.orders.pool(user.id, query);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: SessionUser, @Param('id') id: string) {
     return this.orders.getForParticipant(user.id, id);
@@ -51,6 +61,11 @@ export class OrdersController {
     @Body(new ZodPipe(contactRevealUpdateSchema)) body: ContactRevealUpdate,
   ) {
     return this.orders.setContactReveal(user.id, id, body);
+  }
+
+  @Patch(':id/pool')
+  setPool(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(poolUpdateSchema)) body: PoolUpdate) {
+    return this.orders.setPool(user.id, id, body);
   }
 
   @Post(':id/cancel')

@@ -1,5 +1,13 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { MAX_JOURNEY_LEGS, type ContactRevealUpdate, type CreateOrderInput, type OrderListQuery, type UpdateOrderPricesInput } from '@masterdriver/shared';
+import {
+  MAX_JOURNEY_LEGS,
+  type ContactRevealUpdate,
+  type CreateOrderInput,
+  type OrderListQuery,
+  type PoolQuery,
+  type PoolUpdate,
+  type UpdateOrderPricesInput,
+} from '@masterdriver/shared';
 import { Prisma, type OrderStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
@@ -15,6 +23,7 @@ import { claimedShareText, dispatchShareText, passengerShareText } from './share
 const ORDER_CODE_LENGTH = 10;
 const CONFIRM_CODE_LENGTH = 12;
 const LIST_LIMIT = 50;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ClaimResult = 'WON' | 'LOST';
 
@@ -44,10 +53,11 @@ export class OrdersService {
           // 接駁: a trip uses the quota and pays the service fee once, with its first leg.
           if (!leg) await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
           const fee = leg ? 0 : await this.commission.feeFor(tx, userId, now);
-          const preference =
-            input.contactRevealMinutes === undefined
-              ? (await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { contactRevealMinutes: true } })).contactRevealMinutes
-              : input.contactRevealMinutes;
+          const defaults =
+            input.contactRevealMinutes === undefined || input.inPool === undefined
+              ? await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { contactRevealMinutes: true, poolByDefault: true } })
+              : null;
+          const preference = input.contactRevealMinutes === undefined ? defaults!.contactRevealMinutes : input.contactRevealMinutes;
           const placed = await tx.order.create({
             data: {
               code: randomCode(ORDER_CODE_LENGTH),
@@ -72,6 +82,8 @@ export class OrdersService {
               passengerContact: input.passengerContact,
               contactRevealMinutes: preference,
               requiredPlates: input.requiredPlates,
+              // 這段我自己做 is never offered to others, so it stays out of the 接單池 too.
+              inPool: !input.selfDrive && (input.inPool ?? defaults!.poolByDefault),
               ...(leg ? { journeyId: leg.journeyId, legIndex: leg.legIndex } : {}),
               // 這段我自己做: taken by the dispatcher at once, never offered for claiming.
               ...(input.selfDrive ? { status: 'ASSIGNED' as const, claimedById: userId, claimedAt: now } : {}),
@@ -104,6 +116,35 @@ export class OrdersService {
       include: orderInclude,
     });
     return orders.map((order) => toOrderView(order, viewerOf(order, userId), this.config.publicBaseUrl));
+  }
+
+  /**
+   * 接單池: orders their dispatchers chose to list, still open and not yet due.
+   * Only for signed-in drivers who have filled in their details, the same as
+   * claiming. Each order is shown as on its claim page, so no passenger details.
+   */
+  async pool(userId: string, query: PoolQuery, now = new Date()) {
+    await this.requireProfile(this.prisma, userId);
+    const dayStart = query.date ? new Date(`${query.date}T00:00:00+08:00`) : null;
+    const orders = await this.prisma.order.findMany({
+      where: {
+        inPool: true,
+        status: 'OPEN',
+        scope: 'PUBLIC',
+        dispatcherId: { not: userId },
+        pickupAt: {
+          gte: dayStart && dayStart > now ? dayStart : now,
+          ...(dayStart ? { lt: new Date(dayStart.getTime() + DAY_MS) } : {}),
+        },
+        ...(query.q
+          ? { OR: [{ origin: { contains: query.q, mode: 'insensitive' } }, { destination: { contains: query.q, mode: 'insensitive' } }] }
+          : {}),
+      },
+      orderBy: { pickupAt: 'asc' },
+      take: LIST_LIMIT,
+      include: orderInclude,
+    });
+    return orders.map((order) => toOrderView(order, 'other', this.config.publicBaseUrl, now));
   }
 
   /** An order the user dispatched or claimed, with the texts to share. */
@@ -213,6 +254,11 @@ export class OrdersService {
   /** The dispatcher moves the time the driver sees the passenger's contact; it applies at once. */
   async setContactReveal(userId: string, id: string, input: ContactRevealUpdate) {
     return this.transition(userId, id, ['OPEN', 'ASSIGNED'], { contactRevealMinutes: input.contactRevealMinutes }, 'dispatcher');
+  }
+
+  /** The dispatcher lists the order in the 接單池 or takes it out; it applies at once. */
+  async setPool(userId: string, id: string, input: PoolUpdate) {
+    return this.transition(userId, id, ['OPEN'], { inPool: input.inPool }, 'dispatcher');
   }
 
   async getForPassenger(confirmCode: string) {

@@ -45,6 +45,8 @@ interface Detail {
   contactRevealAt: string | null;
   contactRevealMinutes?: number | null;
   selfDrive?: boolean;
+  /** 接單池: listed for every signed-in driver (dispatcher only). */
+  inPool?: boolean;
   driver: Driver | null;
   driverPrice: Money;
   passengerPrice?: Money;
@@ -100,6 +102,19 @@ async function act(path: string, done: string, confirmText?: string) {
   try {
     order.value = await api<Detail>('POST', `/orders/${id.value}/${path}`);
     toast(done);
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** 接單池: list the order for every signed-in driver, or take it out; only while nobody has claimed it. */
+async function setPool(inPool: boolean) {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/pool`, { inPool });
+    toast(inPool ? '已放到接單池' : '已從接單池取出');
   } catch (e) {
     toast(errorText(e));
   } finally {
@@ -225,6 +240,14 @@ watch(id, () => {
           <a v-if="!inWeChat" class="button secondary block detail__gap" :href="whatsappLink(t(order.share.dispatch.whatsapp))" target="_blank" rel="noopener">
             {{ t('分享到 WhatsApp') }}
           </a>
+          <div v-if="order.status === 'OPEN'" class="detail__gap">
+            <p class="hint">
+              {{ order.inPool ? t('這張單也在接單池，所有登入的司機都看得到並可以搶。') : t('這張單只有拿到連結的人看得到。') }}
+            </p>
+            <button class="button secondary block" type="button" :disabled="busy" @click="setPool(!order.inPool)">
+              {{ order.inPool ? t('從接單池取出') : t('同時放到接單池') }}
+            </button>
+          </div>
         </template>
         <p v-else class="hint">{{ t('這段你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
         <button class="button secondary block detail__gap" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">

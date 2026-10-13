@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { money, pickup } from '../format';
 import { t } from '../i18n';
-import { legLabel } from '../journey';
+import { legLabel, plateRequirement, type PlateRegion } from '../journey';
 import StatusBadge from './StatusBadge.vue';
 
 export interface OrderSummary {
@@ -19,19 +19,22 @@ export interface OrderSummary {
   dispatcherName: string | null;
   driver?: { name: string | null } | null;
   selfDrive?: boolean;
+  requiredPlates?: PlateRegion[];
   /** 接駁: the trip this order is a leg of; legs[0].id (dispatcher only) identifies it. */
   journey?: { legIndex: number; legCount: number; legs: { id?: string }[] } | null;
 }
 
-defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' }>();
+/** `pool`: an order in the 接單池, which opens its claim page instead of the order's own page. */
+defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' | 'pool' }>();
 </script>
 
 <template>
-  <RouterLink :to="`/app/orders/${order.id}`" class="card order-card">
+  <RouterLink :to="role === 'pool' ? `/o/${order.code}` : `/app/orders/${order.id}`" class="card order-card">
     <div class="order-card__top">
       <strong>
         {{ pickup(order.pickupAt) }}
         <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
+        <span v-if="role === 'pool' && order.requiredPlates?.length" class="leg-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
       </strong>
       <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
     </div>

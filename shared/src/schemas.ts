@@ -103,6 +103,8 @@ export const createOrderSchema = z.object({
   bookingId: z.string().trim().min(1).max(40).optional(),
   /** 這段我自己做: the dispatcher drives this order, so it is not offered for claiming. */
   selfDrive: z.boolean().default(false),
+  /** 接單池: also list the order for every signed-in driver. Defaults to the dispatcher's preference. */
+  inPool: z.boolean().optional(),
 });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
@@ -142,6 +144,27 @@ export type CommissionUpdate = z.infer<typeof commissionUpdateSchema>;
 
 export const contactRevealUpdateSchema = z.object({ contactRevealMinutes: contactReveal });
 export type ContactRevealUpdate = z.infer<typeof contactRevealUpdateSchema>;
+
+/** Dispatcher defaults applied to new orders (我的 → 發單預設). */
+export const preferencesUpdateSchema = z
+  .object({ contactRevealMinutes: contactReveal, poolByDefault: z.boolean() })
+  .partial()
+  .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });
+export type PreferencesUpdate = z.infer<typeof preferencesUpdateSchema>;
+
+export const poolUpdateSchema = z.object({ inPool: z.boolean() });
+export type PoolUpdate = z.infer<typeof poolUpdateSchema>;
+
+/** 接單池 filters: a day in Hong Kong time (YYYY-MM-DD) and a word in the origin or destination. */
+export const poolQuerySchema = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine((value) => !Number.isNaN(Date.parse(`${value}T00:00:00+08:00`)))
+    .optional(),
+  q: optionalText(40),
+});
+export type PoolQuery = z.infer<typeof poolQuerySchema>;
 
 export const orderListQuerySchema = z.object({
   role: z.enum(['dispatched', 'claimed']),

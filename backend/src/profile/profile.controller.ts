@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Inject, Put, UseGuards } from '@nestjs/common';
-import { contactRevealUpdateSchema, driverProfileSchema, type ContactRevealUpdate, type DriverProfileInput } from '@masterdriver/shared';
+import { driverProfileSchema, preferencesUpdateSchema, type DriverProfileInput, type PreferencesUpdate } from '@masterdriver/shared';
 import { AuthGuard, CurrentUser } from '../auth/auth.guard';
 import type { SessionUser } from '../auth/auth.service';
 import { ZodPipe } from '../common/zod-pipe';
@@ -31,6 +31,8 @@ export class ProfileController {
   }
 }
 
+const preferenceSelect = { contactRevealMinutes: true, poolByDefault: true } as const;
+
 /** Dispatcher defaults applied to new orders. */
 @Controller('me/preferences')
 @UseGuards(AuthGuard)
@@ -39,11 +41,11 @@ export class PreferencesController {
 
   @Get()
   get(@CurrentUser() user: SessionUser) {
-    return this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { contactRevealMinutes: true } });
+    return this.prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: preferenceSelect });
   }
 
   @Put()
-  save(@CurrentUser() user: SessionUser, @Body(new ZodPipe(contactRevealUpdateSchema)) body: ContactRevealUpdate) {
-    return this.prisma.user.update({ where: { id: user.id }, data: body, select: { contactRevealMinutes: true } });
+  save(@CurrentUser() user: SessionUser, @Body(new ZodPipe(preferencesUpdateSchema)) body: PreferencesUpdate) {
+    return this.prisma.user.update({ where: { id: user.id }, data: body, select: preferenceSelect });
   }
 }

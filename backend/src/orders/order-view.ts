@@ -149,6 +149,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     ...(viewer === 'dispatcher'
       ? {
           contactRevealMinutes: order.contactRevealMinutes,
+          inPool: order.inPool,
           selfDrive: isSelfDriven(order),
           passengerPrice: passengerPriceOf(order),
           serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
