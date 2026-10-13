@@ -4,9 +4,22 @@
 
 本文件只記錄架構與操作方式，不得寫入任何密碼、金鑰或 Secret 的內容（本倉庫公開）。
 
-**目前狀態（2026-10-13）：**「一次性設定」的第 1 到 6 步已在 `master-driver-511510` 完成（服務、映像檔倉庫、資料庫、Secret、客服 bucket、服務帳戶與權限）。**第 7、8 步（讓 GitHub 登入 Google Cloud、GitHub 環境與變數）尚未做**，所以還沒有任何服務部署上去。在第 7、8 步完成並把倉庫變數 `DEPLOY_ENABLED` 設為 `true` 之前，推送到 `main` 只會執行品質閘門，不會部署。
+**目前狀態（2026-10-13）：已部署。**「一次性設定」全部完成，第一次部署由 GitHub Actions 執行成功，資料種子已執行。`DEPLOY_ENABLED` 已是 `true`：**之後每次推送到 `main` 都會自動部署正式環境。**
 
-第 7 步暫緩的原因：2026-10-13 發現 Master Travel 倉庫被植入竊取金鑰的工作流程，masterappIT 帳號可能被盜用；能推送到本倉庫的人就能經這條連結操作雲端資源，所以要先確認帳號安全。使用者於 2026-10-13 決定暫時先不處理，已記在 Master Travel 的 `docs/OPERATIONS.md` 待處理一節；在那一項處理完之前，第 7、8 步維持不做。
+| 服務 | 目前的網址（暫時，等正式網域） |
+|---|---|
+| 司機與乘客網頁 | `https://masterdriver-web-396289477283.asia-east2.run.app` |
+| 平台後台 | `https://masterdriver-admin-396289477283.asia-east2.run.app` |
+| API | 只經上面兩個網址的 `/api` 使用 |
+
+還不能給人用，因為：
+
+- 還沒有正式網域，`*.run.app` 在內地很可能打不開；派單連結目前也是用這個暫時的網址產生。
+- 簡訊通道還沒設定，所以沒有人能登入（取得驗證碼會回 `SMS_NOT_CONFIGURED`）。
+- 還沒有後台帳號（見下方「第一次部署之後」）。
+- 客服檔案的每日清理排程還沒建立。
+
+**安全備註：**2026-10-13 發現 Master Travel 倉庫被植入竊取金鑰的工作流程，masterappIT 帳號可能被盜用；該事項記在 Master Travel 的 `docs/OPERATIONS.md`，使用者決定暫不處理，並明確指示 MasterDriver 仍繼續部署。能推送到本倉庫 `main` 的人就能部署正式環境，所以那件事處理完之前風險仍在。GitHub 到 Google Cloud 的登入已限定為本倉庫、`production` 環境、`main` 分支。
 
 ## 分支
 
@@ -194,14 +207,14 @@ done
 
 ### 7. GitHub 登入 Google Cloud（Workload Identity Federation）
 
-只接受這個倉庫、`production` 環境的工作流程：
+只接受這個倉庫、`production` 環境、`main` 分支的工作流程：
 
 ```bash
 gcloud iam workload-identity-pools create github --location=global
 gcloud iam workload-identity-pools providers create-oidc github --location=global --workload-identity-pool=github \
   --issuer-uri=https://token.actions.githubusercontent.com \
-  --attribute-mapping='google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.environment=assertion.environment' \
-  --attribute-condition="assertion.repository=='masterappIT/MasterDriver' && assertion.environment=='production'"
+  --attribute-mapping='google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.environment=assertion.environment,attribute.ref=assertion.ref' \
+  --attribute-condition="assertion.repository=='masterappIT/MasterDriver' && assertion.environment=='production' && assertion.ref=='refs/heads/main'"
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 gcloud iam service-accounts add-iam-policy-binding "$(sa deploy)" --role=roles/iam.workloadIdentityUser \
   --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/attribute.repository/masterappIT/MasterDriver"
@@ -224,7 +237,7 @@ gcloud iam service-accounts add-iam-policy-binding "$(sa deploy)" --role=roles/i
 | `GCP_MIGRATION_SERVICE_ACCOUNT` | `masterdriver-migrate@…` |
 | `GCP_FRONTEND_SERVICE_ACCOUNT` | `masterdriver-frontend@…` |
 | `GCP_SQL_INSTANCE_NAME` | `masterdriver-db` |
-| `GCP_CLOUD_SQL_CONNECTION_NAME` | `master-driver-511510:asia-east2:masterdriver-db` |
+| `GCP_CLOUD_SQL_CONNECTION_NAME` | `master-driver-511510:asia-east2:masterdriver-db`（用指令設定時整個值要加單引號：zsh 會把變數後面的 `:a` 當成修飾符而改掉內容，第一次部署就是因此失敗） |
 | `GCP_DATABASE_URL_SECRET` | `masterdriver-database-url` |
 | `GCP_OTP_PEPPER_SECRET` | `masterdriver-otp-pepper` |
 | `GCP_DATA_ENCRYPTION_KEY_SECRET` | `masterdriver-data-encryption-key` |
@@ -271,12 +284,20 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 - 微信內分享連結時，未在微信登記的網域可能出現提示頁；是否需要做微信的網域驗證，在實測時一併確認。
 - 網域確定後要更新 `PRODUCTION_WEB_URL`，並在後台「SEO」填入正式網域。
 
+## 已在正式環境驗證（2026-10-13）
+
+- 完整的發布流程：品質閘門、三個映像檔、資料庫備份、migration Job、API 部署與健康檢查、兩個前端。
+- 資料種子 Job 執行成功。
+- 經 `web` 網址的 `/api` 轉發、SPA 路徑、`robots.txt`、`admin` 網址。
+- 客服檔案：以訪客身分上傳一張圖片，寫入私有 bucket 後讀回內容完全相同；不帶憑證讀取回 401。（留下一則測試對話和一個 39 位元組的測試檔。）
+
 ## 尚未驗證
 
-- 第 1 到 6 步的指令已實際執行並核對結果；第 7 到 9 步的指令還沒有執行過。
-- 從本機推送 API 映像檔到映像檔倉庫試了幾次都因上傳逾時失敗（映像檔約 780 MB，本機上行頻寬不足），所以第一次部署要由 GitHub Actions 執行；倉庫目前是空的。
-- 工作流程沒有在 GitHub 上實際跑過部署；已做的是：三個映像檔在本機建置成功，API 映像檔跑過 migration 與資料種子並通過健康檢查，nginx 容器轉發 `/api`、25 MB 以內的上傳、快取與 robots 標頭都在本機確認過，部署腳本通過語法檢查。
-- 客服檔案對真正的 Cloud Storage bucket 的讀寫尚未驗證。
+- **第二次之後的部署路徑**（新版本先不接流量、檢查後才切換）還沒有實際跑過；第一次部署走的是「服務不存在，直接建立」的路徑。下一次推送到 `main` 就會驗證到。
+- 回滾腳本沒有實際執行過。
+- 正式網域、內地連線、微信與 WhatsApp 內的操作。
+- 影片上傳（只驗證了圖片）與客服檔案清理 Job。
+- 從本機推送 API 映像檔會因上傳逾時失敗（映像檔約 780 MB），部署一律由 GitHub Actions 執行。
 
 ## 相關檔案
 

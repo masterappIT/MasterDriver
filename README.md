@@ -8,7 +8,7 @@ MasterDriver 跨境師傅幫（簡稱「師傅幫」）是 MasterApp 旗下的�
 
 ## 專案狀態
 
-第一版開發中（2026-10-13）：後端、司機與乘客網頁、平台後台已有程式，並在本機驗證；尚未部署，也還沒在微信與 WhatsApp 內實測。部署檔案已準備好，雲端資源尚未建立（見 [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md)）。待拍板事項見 [docs/DECISIONS.md](docs/DECISIONS.md)。
+第一版開發中（2026-10-13）：後端、司機與乘客網頁、平台後台已有程式，並在本機驗證；還沒在微信與 WhatsApp 內實測。已部署到 Google Cloud（暫時的 `*.run.app` 網址，尚無正式網域與簡訊通道，還不能給人用），推送到 `main` 會自動部署，見 [docs/PRODUCTION-DEPLOYMENT.md](docs/PRODUCTION-DEPLOYMENT.md)。待拍板事項見 [docs/DECISIONS.md](docs/DECISIONS.md)。
 
 ## 設計紅線
 
