@@ -264,16 +264,22 @@ onBeforeUnmount(() => {
   align-items: flex-end;
 }
 .support__attach {
-  padding: var(--space-sm) var(--space-md);
-  font-size: 20px;
+  flex-shrink: 0;
+  width: 44px;
+  padding: 0;
 }
 .support__picker {
   display: none;
 }
+/* The message box is a capsule, like a chat app's, not a form field. */
 .support__input {
   flex: 1;
   min-width: 0;
   min-height: 44px;
   max-height: 120px;
+  padding: 10px var(--space-lg);
+  border-color: var(--color-card-border);
+  border-radius: 22px;
+  resize: none;
 }
 </style>

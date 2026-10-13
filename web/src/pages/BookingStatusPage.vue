@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
-import { BOOKING_STATUS, bookingOpen, type Booking } from '../booking';
+import { BOOKING_STATUS, bookingOpen, passengerTone, type Booking } from '../booking';
 import { copyText } from '../device';
 import { money, pickup } from '../format';
 import { t } from '../i18n';
@@ -66,24 +66,24 @@ onBeforeUnmount(() => clearInterval(poller));
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="booking">
-      <div v-if="justSent" class="notice">
-        {{ t('預約已送出。請保存這個頁面的連結，司機回覆後在這裡看得到；司機也可能直接用你留的聯絡方式找你。') }}
-        <button class="chip booking__copy" type="button" @click="copyLink">{{ t('複製連結') }}</button>
+      <div v-if="justSent" class="notice booking__sent">
+        <span>{{ t('預約已送出。請保存這個頁面的連結，司機回覆後在這裡看得到；司機也可能直接用你留的聯絡方式找你。') }}</span>
+        <button class="chip" type="button" @click="copyLink">{{ t('複製連結') }}</button>
       </div>
 
-      <section class="card">
-        <p class="booking__status">{{ t(BOOKING_STATUS[booking.status].passenger) }}</p>
-        <strong>{{ pickup(booking.pickupAt) }}</strong>
-        <div>{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
-        <p class="muted">{{ t(`${booking.passengers} 人・${booking.luggage} 件行李`) }}</p>
-        <p v-if="booking.notes">{{ t(`備註：${booking.notes}`) }}</p>
-        <p class="hint">{{ t(`司機：${booking.driverName ?? '—'}`) }}</p>
+      <section class="card booking__trip">
+        <span class="booking__status" :class="`booking__status--${passengerTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].passenger) }}</span>
+        <strong class="booking__time">{{ pickup(booking.pickupAt) }}</strong>
+        <div class="booking__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
+        <p class="booking__load">{{ t(`${booking.passengers}人｜${booking.luggage}件行李`) }}</p>
+        <p v-if="booking.notes" class="booking__note">{{ t(booking.notes) }}</p>
+        <p v-if="booking.driverName" class="hint booking__driver">{{ t(`預約 ${booking.driverName} 的車`) }}</p>
       </section>
 
       <section v-if="booking.quote && booking.status !== 'CANCELLED' && booking.status !== 'DECLINED'" class="card">
-        <h2>{{ t('司機的報價') }}</h2>
-        <p class="booking__price">{{ money(booking.quote) }}</p>
-        <p v-if="booking.quoteNote">{{ t(booking.quoteNote) }}</p>
+        <span class="section-label">{{ t('司機的報價') }}</span>
+        <strong class="booking__price">{{ money(booking.quote) }}</strong>
+        <p v-if="booking.quoteNote" class="booking__load">{{ t(booking.quoteNote) }}</p>
         <p class="hint">{{ t('車費由你和司機自行約定並直接支付給司機，平台不收款。') }}</p>
         <button v-if="booking.status === 'QUOTED'" class="button block large" type="button" :disabled="busy" @click="act('accept')">
           {{ t('同意這個報價') }}
@@ -92,13 +92,7 @@ onBeforeUnmount(() => clearInterval(poller));
 
       <a v-if="booking.confirmUrl" class="button block large booking__next" :href="booking.confirmUrl">{{ t('查看司機與車牌，確認行程') }}</a>
 
-      <button
-        v-if="bookingOpen(booking.status)"
-        class="button secondary block"
-        type="button"
-        :disabled="busy"
-        @click="act('cancel', '確定取消這個預約？')"
-      >
+      <button v-if="bookingOpen(booking.status)" class="booking__cancel" type="button" :disabled="busy" @click="act('cancel', '確定取消這個預約？')">
         {{ t('取消預約') }}
       </button>
       <RouterLink v-else-if="booking.pageCode && booking.status !== 'ORDERED'" class="button secondary block" :to="`/p/${booking.pageCode}`">
@@ -109,20 +103,87 @@ onBeforeUnmount(() => clearInterval(poller));
 </template>
 
 <style scoped>
-.booking__status {
-  margin: 0 0 var(--space-md);
-  font-weight: 600;
-  color: var(--color-primary-dark);
+.booking__sent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
 }
-.booking__price {
-  margin: 0 0 var(--space-sm);
-  font-size: 28px;
+.booking__trip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+.booking__status {
+  margin-bottom: var(--space-xs);
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-pill);
+  font-size: var(--font-caption);
   font-weight: 700;
 }
-.booking__copy {
-  margin-left: var(--space-sm);
+.booking__status--waiting {
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+}
+.booking__status--passenger {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+.booking__status--done {
+  background: var(--status-confirmed-tint);
+  color: var(--status-confirmed);
+}
+.booking__status--closed {
+  background: var(--color-divider);
+  color: var(--color-text-secondary);
+}
+.booking__time {
+  font-size: var(--font-body-large);
+  font-variant-numeric: tabular-nums;
+}
+.booking__route {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.booking__load {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+.booking__note {
+  align-self: stretch;
+  margin: var(--space-sm) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-input);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  white-space: pre-wrap;
+}
+.booking__driver {
+  margin: var(--space-xs) 0 0;
+}
+.booking__price {
+  display: block;
+  margin-bottom: var(--space-xs);
+  color: var(--color-gold-ink);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
 }
 .booking__next {
   margin-bottom: var(--space-md);
+}
+.booking__cancel {
+  display: block;
+  margin: 0 auto;
+  min-height: 44px;
+  padding: 0 var(--space-xl);
+  border: none;
+  background: none;
+  color: var(--color-error);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
 </style>

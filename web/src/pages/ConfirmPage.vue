@@ -94,13 +94,13 @@ onMounted(load);
         </section>
         <template v-for="leg in trip.legs" :key="leg.legIndex">
           <p v-if="leg.legIndex > 1" class="confirm-page__handoff">
-            {{ t(`接駁位置：${leg.origin}（在這裡換車）`) }}
+            {{ t(`在 ${leg.origin} 換車`) }}
           </p>
           <section class="card">
             <span class="leg-tag">{{ t(`第 ${leg.legIndex} 段`) }}</span>
             <div class="confirm-page__leg-time">{{ pickup(leg.pickupAt) }}</div>
             <div class="confirm-page__leg-route">{{ t(`${leg.origin} 至 ${leg.destination}`) }}</div>
-            <p v-if="leg.waypoints.length" class="muted">{{ t(`途經：${leg.waypoints.join('、')}`) }}</p>
+            <p v-if="leg.waypoints.length" class="muted">{{ t(`途經 ${leg.waypoints.join('、')}`) }}</p>
             <div v-if="leg.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(leg.price) }}</strong></div>
             <div v-if="leg.driver" class="confirm-page__driver">
               <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>

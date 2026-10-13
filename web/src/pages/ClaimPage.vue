@@ -201,20 +201,18 @@ onBeforeUnmount(() => {
           </template>
         </section>
 
-        <section class="card">
-          <dl class="claim-page__facts">
-            <template v-if="order.dispatcherPhone">
-              <dt>{{ t('出單者') }}</dt>
-              <dd>
-                {{ order.dispatcherName ? t(order.dispatcherName) : '' }}
-                <a :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`">{{ order.dispatcherPhone }}</a>
-              </dd>
-            </template>
-            <template v-if="session.profile?.hkPlate || session.profile?.macauPlate || session.profile?.mainlandPlate">
-              <dt>{{ t('你的車牌') }}</dt>
-              <dd><PlateTag :hk="session.profile?.hkPlate" :macau="session.profile?.macauPlate" :mainland="session.profile?.mainlandPlate" /></dd>
-            </template>
-          </dl>
+        <section class="card claim-page__people">
+          <div v-if="order.dispatcherPhone" class="claim-page__contact">
+            <span>
+              <strong>{{ order.dispatcherName ? t(`${order.dispatcherName} 出的單`) : t('出單者') }}</strong>
+              <small>{{ order.dispatcherPhone }}</small>
+            </span>
+            <a class="chip" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`">{{ t('致電出單者') }}</a>
+          </div>
+          <div v-if="session.profile?.hkPlate || session.profile?.macauPlate || session.profile?.mainlandPlate" class="claim-page__contact">
+            <span><small>{{ t('你開的車') }}</small></span>
+            <PlateTag :hk="session.profile?.hkPlate" :macau="session.profile?.macauPlate" :mainland="session.profile?.mainlandPlate" />
+          </div>
         </section>
       </template>
 
@@ -234,7 +232,7 @@ onBeforeUnmount(() => {
         </div>
 
         <RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" />
-        <p v-if="order.journey" class="claim-page__transfer">{{ t(`接駁位置：${order.journey.transferPlaces.join('、')}`) }}</p>
+        <p v-if="order.journey" class="claim-page__transfer">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
 
         <div class="claim-page__load-row">
           <span class="claim-page__load">{{ t(loadLine) }}</span>
@@ -244,13 +242,11 @@ onBeforeUnmount(() => {
         <p v-if="order.notes" class="claim-page__notes"><strong>{{ t('備註') }}</strong>{{ t(order.notes) }}</p>
       </section>
 
-      <section v-if="order.viewer !== 'driver'" class="card claim-page__dispatcher">
-        <div>
-          <span class="claim-page__label">{{ t('出單者') }}</span>
-          <strong>{{ order.dispatcherName ? t(order.dispatcherName) : '—' }}</strong>
-        </div>
-        <span v-if="order.dispatcherCompletedTrips" class="claim-page__trips">{{ t(`已在師傅幫完成 ${order.dispatcherCompletedTrips} 張單`) }}</span>
-      </section>
+      <!-- Who put the order out, as one line: "陳師傅出的單 · 已在師傅幫完成 128 張單". -->
+      <p v-if="order.viewer !== 'driver'" class="claim-page__dispatcher">
+        <strong>{{ order.dispatcherName ? t(`${order.dispatcherName} 出的單`) : t('出單者沒有留名') }}</strong>
+        <span v-if="order.dispatcherCompletedTrips">{{ t(`已在師傅幫完成 ${order.dispatcherCompletedTrips} 張單`) }}</span>
+      </p>
 
       <section v-if="order.journey" class="card">
         <SectionHeading
@@ -389,21 +385,37 @@ onBeforeUnmount(() => {
 }
 .claim-page__dispatcher {
   display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-sm);
+  margin: 0 var(--space-xs) var(--space-lg);
+}
+.claim-page__dispatcher span {
+  padding: 1px var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-size: var(--font-caption);
+  font-weight: 600;
+}
+.claim-page__contact {
+  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-md);
+  padding: var(--space-sm) 0;
 }
-.claim-page__dispatcher div {
+.claim-page__contact + .claim-page__contact {
+  border-top: 1px solid var(--color-divider);
+}
+.claim-page__contact > span {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
-.claim-page__dispatcher .claim-page__label {
-  margin: 0;
-}
-.claim-page__trips {
+.claim-page__contact small {
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
-  text-align: right;
 }
 .claim-page__won {
   display: flex;
@@ -424,8 +436,8 @@ onBeforeUnmount(() => {
 .claim-page__group-text {
   margin: 0 0 var(--space-md);
   padding: var(--space-md);
-  border-radius: var(--radius-input);
-  background: var(--color-background);
+  border-radius: 4px 18px 18px 18px;
+  background: var(--color-tint);
   font: inherit;
   font-size: var(--font-label);
   white-space: pre-wrap;
@@ -449,19 +461,6 @@ onBeforeUnmount(() => {
   grid-template-columns: 1fr 1fr;
   gap: var(--space-sm);
   margin-top: var(--space-md);
-}
-.claim-page__facts {
-  display: grid;
-  grid-template-columns: 72px 1fr;
-  gap: var(--space-sm) 0;
-  margin: 0;
-}
-.claim-page__facts dt {
-  color: var(--color-text-secondary);
-}
-.claim-page__facts dd {
-  margin: 0;
-  overflow-wrap: anywhere;
 }
 .claim-page__more {
   display: block;

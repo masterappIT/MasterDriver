@@ -43,3 +43,10 @@ export function bookingTone(status: Booking['status']): 'waiting' | 'passenger' 
   if (status === 'QUOTED') return 'passenger';
   return status === 'ORDERED' ? 'done' : 'closed';
 }
+
+/** The same states for the passenger: gold when the driver's quote waits on them. */
+export function passengerTone(status: Booking['status']): 'waiting' | 'passenger' | 'done' | 'closed' {
+  if (status === 'QUOTED') return 'waiting';
+  if (status === 'PENDING' || status === 'ACCEPTED') return 'passenger';
+  return status === 'ORDERED' ? 'done' : 'closed';
+}

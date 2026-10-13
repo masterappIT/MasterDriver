@@ -350,6 +350,55 @@ input[type='checkbox'].switch:checked::after {
   outline: none;
 }
 
+/* Where a trip goes, typed on lines joined by dots: teal for 上車, gold for 目的地 (as on the claim page). */
+.route-inputs {
+  position: relative;
+  margin: 0;
+  padding: 0 0 0 22px;
+  list-style: none;
+}
+/* The dotted line joining the dots. */
+.route-inputs::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 22px;
+  bottom: 22px;
+  border-left: 2px dotted var(--color-border);
+}
+.route-inputs__stop {
+  position: relative;
+}
+.route-inputs__stop::before {
+  content: '';
+  position: absolute;
+  left: -22px;
+  top: 17px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+.route-inputs__stop--origin::before {
+  background: var(--color-route-origin);
+}
+.route-inputs__stop--destination::before {
+  background: var(--color-route-destination);
+}
+.route-inputs__stop--via::before {
+  left: -20px;
+  top: 19px;
+  width: 8px;
+  height: 8px;
+}
+.route-inputs__stop .line-input {
+  font-weight: 600;
+}
+.route-inputs__stop .hint {
+  display: block;
+  margin-top: var(--space-xs);
+}
+
 /* The small grey words above a group of lines, instead of a boxed heading. */
 .section-label {
   display: block;

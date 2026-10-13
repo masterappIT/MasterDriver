@@ -358,8 +358,8 @@ onMounted(async () => {
       </label>
 
       <!-- The route as dots on a line, the way the claim page shows it. -->
-      <ol class="new-order__route">
-        <li class="new-order__stop new-order__stop--origin">
+      <ol class="route-inputs">
+        <li class="route-inputs__stop route-inputs__stop--origin">
           <input
             v-model="form.origin"
             class="line-input"
@@ -372,7 +372,7 @@ onMounted(async () => {
             {{ placeLocked ? t('上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段。') : t('上一段的目的地會一起改成這個接駁位置。') }}
           </span>
         </li>
-        <li v-for="(_, index) in form.waypoints" :key="index" class="new-order__stop new-order__stop--via">
+        <li v-for="(_, index) in form.waypoints" :key="index" class="route-inputs__stop route-inputs__stop--via">
           <div class="new-order__via">
             <input v-model="form.waypoints[index]" class="line-input" maxlength="120" :aria-label="t(`途經點 ${index + 1}`)" :placeholder="t('途經')" />
             <button class="new-order__remove" type="button" :aria-label="t(`刪除途經點 ${index + 1}`)" @click="form.waypoints.splice(index, 1)">
@@ -380,7 +380,7 @@ onMounted(async () => {
             </button>
           </div>
         </li>
-        <li class="new-order__stop new-order__stop--destination">
+        <li class="route-inputs__stop route-inputs__stop--destination">
           <input
             v-model="form.destination"
             class="line-input"
@@ -587,53 +587,6 @@ onMounted(async () => {
 }
 .new-order__time {
   font-variant-numeric: tabular-nums;
-}
-.new-order__route {
-  position: relative;
-  margin: 0;
-  padding: 0 0 0 22px;
-  list-style: none;
-}
-/* The dotted line joining the dots. */
-.new-order__route::before {
-  content: '';
-  position: absolute;
-  left: 5px;
-  top: 22px;
-  bottom: 22px;
-  border-left: 2px dotted var(--color-border);
-}
-.new-order__stop {
-  position: relative;
-}
-.new-order__stop::before {
-  content: '';
-  position: absolute;
-  left: -22px;
-  top: 17px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--color-text-muted);
-}
-.new-order__stop--origin::before {
-  background: var(--color-route-origin);
-}
-.new-order__stop--destination::before {
-  background: var(--color-route-destination);
-}
-.new-order__stop--via::before {
-  left: -20px;
-  top: 19px;
-  width: 8px;
-  height: 8px;
-}
-.new-order__stop .line-input {
-  font-weight: 600;
-}
-.new-order__stop .hint {
-  display: block;
-  margin-top: var(--space-xs);
 }
 .new-order__via {
   display: flex;
