@@ -9,6 +9,7 @@
 | [REUSE.md](./REUSE.md) | 沿用 Master Travel 程式碼的規則、分類與來源記錄 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 本機開發、指令、API 一覽與驗證 |
 | [PRODUCTION-DEPLOYMENT.md](./PRODUCTION-DEPLOYMENT.md) | 正式環境的架構、分支、發布流程、一次性設定與正式網域 |
+| [ACCEPTANCE.md](./ACCEPTANCE.md) | 第一版的微信內驗收操作清單：照著做的步驟、預期結果與回報方式 |
 | [DESIGN.md](./DESIGN.md) | 視覺設計規範：沿用 Master Travel 風格的顏色、間距、字型與設計流程 |
 
 ## 文件責任分工
