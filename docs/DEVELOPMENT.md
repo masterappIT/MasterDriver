@@ -126,6 +126,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET/POST /api/me/group-invites`、`PATCH/DELETE /api/me/group-invites/:id` | 要 | 我的派單群（微信群二維碼、個人微信二維碼、WhatsApp 連結；最多 5 個） |
 | `GET /api/public/group-invites/:id/qr` | — | 二維碼圖片（微信群二維碼過期後不再提供） |
 | `GET /api/me/credits` | 要 | 點數餘額、最近紀錄、目前每單服務費（是否免收） |
+| `GET /api/me/upgrade` | 要 | 「我的」頁的 Master Travel 升級入口：後台填了升級連結，且近 30 天出單超過 30 張（接駁行程算一張，取消的不算）才回傳 `upgradeUrl`，否則為 null |
 | `POST /api/support/guest` | — | 訪客開始對話，回傳只顯示一次的憑證（同一 IP 每天最多 5 個） |
 | `GET /api/support/thread?after=\|before=` | 可選 | 客服對話的訊息（登入用戶，或帶 `x-md-support-guest` 的訪客）；`after` 只取新訊息 |
 | `GET /api/support/unread` | 可選 | 客服未讀回覆數 |

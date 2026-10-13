@@ -43,6 +43,7 @@
   --status-open: var(--color-gold);
   --status-assigned: var(--color-primary);
   --status-confirmed: #1a9e6e;
+  --status-confirmed-tint: rgba(26, 158, 110, 0.12);
   --status-completed: #8f9db0;
   --status-cancelled: #556579;
   --plate-gold: #e6a206;
@@ -144,13 +145,14 @@ h2 {
   align-items: center;
 }
 
+/* Buttons are capsules (docs/DESIGN.md「不要像表格」4). */
 .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-sm);
   border: none;
-  border-radius: var(--radius-input);
+  border-radius: var(--radius-pill);
   min-height: 44px;
   padding: var(--space-sm) var(--space-lg);
   font: inherit;
@@ -200,6 +202,112 @@ h2 {
 .textarea {
   min-height: 72px;
   resize: vertical;
+}
+
+/* A choice that sits at the end of a sentence-like line, e.g. "乘客電話何時給接單司機看  出發前 1 小時". */
+.select.select--inline {
+  width: auto;
+  max-width: 55%;
+  min-height: 36px;
+  padding: 0 var(--space-md);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+  font-size: var(--font-body);
+  font-weight: 600;
+}
+
+/* An input that reads like writing on a line, not a box (docs/DESIGN.md「不要像表格」3). */
+.line-input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-sm) 0;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  /* 16px stops iOS zooming into the field. */
+  font-size: 16px;
+  outline: none;
+}
+.line-input:focus {
+  border-bottom-color: var(--color-primary);
+}
+textarea.line-input {
+  min-height: 72px;
+  resize: vertical;
+}
+
+/* A short grey word above a line input, the only label it gets. */
+.line-field {
+  display: block;
+  margin-bottom: var(--space-lg);
+}
+.line-field > span:first-child {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 600;
+}
+
+/* An on/off switch drawn from a checkbox, so it stays a real, accessible checkbox. */
+input[type='checkbox'].switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex-shrink: 0;
+  position: relative;
+  width: 44px;
+  height: 26px;
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-border);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+input[type='checkbox'].switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--color-surface);
+  box-shadow: 0 1px 3px rgba(20, 32, 51, 0.25);
+  transition: transform 0.15s;
+}
+input[type='checkbox'].switch:checked {
+  background: var(--color-primary);
+}
+input[type='checkbox'].switch:checked::after {
+  transform: translateX(18px);
+}
+
+/* The small grey words above a group of lines, instead of a boxed heading. */
+.section-label {
+  display: block;
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 600;
+}
+
+/* The red count of things not opened yet (new bookings, 客服 replies). */
+.unread-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-error);
+  color: var(--color-on-primary);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  line-height: 1;
 }
 
 .field {

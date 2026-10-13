@@ -19,6 +19,8 @@ import { robotsMeta, robotsTxt } from './seo-rules';
 
 const DEFAULT_ID = 'default';
 const DAY_MS = 24 * 60 * 60 * 1000;
+/** The 升級 entry in 我的 shows only for drivers who put out more than this many trips in 30 days (2026-10-14). */
+const UPGRADE_MIN_TRIPS = 30;
 const MAX_IMPRESSION_IDS = 10;
 
 /** Calendar day in Hong Kong, e.g. "2026-10-13". */
@@ -84,6 +86,24 @@ export class SiteService {
 
   logoImage() {
     return this.prisma.siteLogo.findUnique({ where: { id: DEFAULT_ID }, select: { mime: true, image: true } });
+  }
+
+  /**
+   * The Master Travel 升級 entry in 我的: the admin's link, only for a driver who put out more than
+   * 30 trips in the last 30 days. A 接駁 trip counts once (its first leg), and cancelled orders do not count.
+   */
+  async upgradeOffer(userId: string, now = new Date()) {
+    const setting = await this.appSetting();
+    if (!setting.upgradeUrl) return { upgradeUrl: null };
+    const trips = await this.prisma.order.count({
+      where: {
+        dispatcherId: userId,
+        createdAt: { gte: new Date(now.getTime() - 30 * DAY_MS) },
+        status: { not: 'CANCELLED' },
+        OR: [{ journeyId: null }, { legIndex: 1 }],
+      },
+    });
+    return { upgradeUrl: trips > UPGRADE_MIN_TRIPS ? setting.upgradeUrl : null };
   }
 
   async publicSettings() {

@@ -36,3 +36,10 @@ export const BOOKING_STATUS: Record<Booking['status'], { driver: string; passeng
 };
 
 export const bookingOpen = (status: Booking['status']) => status === 'PENDING' || status === 'QUOTED' || status === 'ACCEPTED';
+
+/** The colour of a booking's state for the driver: gold when it waits on them, blue while the passenger decides, green once it is an order. */
+export function bookingTone(status: Booking['status']): 'waiting' | 'passenger' | 'done' | 'closed' {
+  if (status === 'PENDING' || status === 'ACCEPTED') return 'waiting';
+  if (status === 'QUOTED') return 'passenger';
+  return status === 'ORDERED' ? 'done' : 'closed';
+}

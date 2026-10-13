@@ -83,7 +83,7 @@ onMounted(() => run(() => api<Invite[]>('GET', '/me/group-invites')));
 
 <template>
   <section class="card">
-    <h2>{{ t('我的派單群') }}</h2>
+    <span class="section-label">{{ t('我的派單群') }}</span>
     <p class="hint">{{ t('司機點開你的搶單連結時，可以按「加入派單群」找到你的群。最多 5 個。') }}</p>
     <div v-if="error" class="notice error">{{ error }}</div>
 

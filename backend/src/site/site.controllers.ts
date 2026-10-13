@@ -28,6 +28,8 @@ import { z } from 'zod';
 import type { AdminUser } from '../admin/admin-auth.service';
 import { AdminGuard, AdminRoles, CurrentAdmin } from '../admin/admin.guard';
 import { AuditService } from '../admin/audit.service';
+import { AuthGuard, CurrentUser } from '../auth/auth.guard';
+import type { SessionUser } from '../auth/auth.service';
 import { apiError } from '../common/errors';
 import { ZodPipe } from '../common/zod-pipe';
 import { SiteService } from './site.service';
@@ -102,6 +104,18 @@ export class PublicSiteController {
     const url = await this.site.click(id);
     if (!url) throw apiError(HttpStatus.NOT_FOUND, 'AD_NOT_FOUND', 'Ad not found');
     response.redirect(302, url);
+  }
+}
+
+/** Whether 我的 shows the Master Travel 升級 entry; the rule is decided here, not in the page. */
+@Controller('me/upgrade')
+@UseGuards(AuthGuard)
+export class UpgradeController {
+  constructor(@Inject(SiteService) private readonly site: SiteService) {}
+
+  @Get()
+  get(@CurrentUser() user: SessionUser) {
+    return this.site.upgradeOffer(user.id);
   }
 }
 

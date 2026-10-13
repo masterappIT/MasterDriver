@@ -79,6 +79,23 @@ test('only live ads are served, best first, and clicks count and return the stor
   assert.deepEqual(listed.last30Days, { impressions: 1, clicks: 1 });
 });
 
+test('the 升級 entry shows only past 30 trips in 30 days: a 接駁 trip counts once, cancelled ones not at all', async () => {
+  const dispatcher = await createDriver(ctx);
+  const orders = [];
+  for (let i = 0; i < 31; i += 1) orders.push(await ctx.orders.create(dispatcher, sampleOrder));
+  assert.equal((await ctx.site.upgradeOffer(dispatcher)).upgradeUrl, null, 'no link set in the admin');
+
+  await ctx.site.updateAppSetting({ upgradeUrl: 'https://mt.example/demo' }, 'test');
+  assert.equal((await ctx.site.upgradeOffer(dispatcher)).upgradeUrl, 'https://mt.example/demo');
+  assert.equal((await ctx.site.upgradeOffer(dispatcher, new Date(Date.now() + 31 * DAY))).upgradeUrl, null, 'older than 30 days');
+
+  await ctx.orders.cancel(dispatcher, orders[0].id);
+  assert.equal((await ctx.site.upgradeOffer(dispatcher)).upgradeUrl, null, '30 left is not more than 30');
+  await ctx.orders.create(dispatcher, { ...sampleOrder, pickupAt: '2026-10-15T16:00:00+08:00', origin: sampleOrder.destination, destination: '澳門', afterOrderId: orders[1].id });
+  assert.equal((await ctx.site.upgradeOffer(dispatcher)).upgradeUrl, null, 'a second leg is the same trip');
+  assert.equal((await ctx.site.upgradeOffer(await createDriver(ctx))).upgradeUrl, null);
+});
+
 test('busy, growing, paying dispatchers rank first; sales notes stick', async () => {
   const busy = await createDriver(ctx, '大車隊');
   const small = await createDriver(ctx, '個體戶');

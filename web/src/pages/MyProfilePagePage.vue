@@ -37,6 +37,10 @@ const form = reactive({ intro: '', routes: '', regions: '', languages: [] as str
 
 const lines = (text: string) => text.split(/\n|、|,|，/).map((item) => item.trim()).filter(Boolean);
 
+function toggleLanguage(language: string) {
+  form.languages = form.languages.includes(language) ? form.languages.filter((item) => item !== language) : [...form.languages, language];
+}
+
 function fill(loaded: MyPage) {
   page.value = loaded;
   form.intro = loaded.intro;
@@ -122,62 +126,84 @@ onMounted(async () => {
 
     <template v-if="page">
       <section class="card">
-        <p class="my-page__state">{{ page.published ? t('已公開：有連結的人都打得開') : t('未公開：只有你看得到') }}</p>
-        <p class="my-page__url">{{ page.url }}</p>
-        <div class="row">
-          <button class="button secondary" type="button" @click="copyLink">{{ t('複製連結') }}</button>
-          <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
-          <button v-if="page.published" class="button secondary" type="button" :disabled="busy" @click="save(false)">{{ t('改為不公開') }}</button>
+        <div class="my-page__head">
+          <span class="my-page__state" :class="{ 'my-page__state--on': page.published }">{{ page.published ? t('已公開') : t('未公開') }}</span>
+          <span class="hint">{{ page.published ? t('有連結的人都打得開') : t('現在只有你看得到') }}</span>
         </div>
-        <p v-if="!page.hasDriverProfile" class="notice my-page__notice">{{ t('公開之前，請先在「我的」填寫司機資料（姓名、車型）。') }}</p>
-        <p class="hint">
+        <p class="my-page__url">{{ page.url }}</p>
+        <div class="my-page__actions">
+          <button class="button" type="button" @click="copyLink">{{ t('複製連結') }}</button>
+          <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
+        </div>
+        <p v-if="!page.hasDriverProfile" class="my-page__notice">{{ t('公開之前，請先在「我的」填寫司機資料（姓名、車型）。') }}</p>
+        <p class="hint my-page__from">
           {{ t('姓名、車型、座位、車色取自你的司機資料。') }}
           {{ page.completedTrips > 0 ? t(`頁面會顯示你已在師傅幫完成 ${page.completedTrips} 張單。`) : t('完成的單數由系統計算，有完成的單之後才會顯示。') }}
         </p>
       </section>
 
       <form class="card" @submit.prevent="save()">
-        <label class="field">
-          {{ t('自我介紹') }}
-          <textarea v-model="form.intro" class="textarea" maxlength="500" :placeholder="t('例如：十年跨境接送經驗，準時、車廂整潔')" />
+        <label class="line-field">
+          <span>{{ t('介紹自己') }}</span>
+          <textarea v-model="form.intro" class="line-input" maxlength="500" :placeholder="t('例如：十年跨境接送經驗，準時、車廂整潔')" />
         </label>
-        <label class="field">
-          {{ t('常走路線（一行一條，最多 8 條）') }}
-          <textarea v-model="form.routes" class="textarea" :placeholder="t('香港機場 往返 深圳灣口岸\n香港市區 往返 澳門')" />
+        <label class="line-field">
+          <span>{{ t('常走路線，一行一條，最多 8 條') }}</span>
+          <textarea v-model="form.routes" class="line-input" :placeholder="t('香港機場 往返 深圳灣口岸\n香港市區 往返 澳門')" />
         </label>
-        <label class="field">{{ t('服務地區（用頓號分隔）') }}<input v-model="form.regions" class="input" :placeholder="t('香港、深圳、澳門、珠海')" /></label>
-        <div class="field">
-          {{ t('語言') }}
-          <div class="row">
-            <label v-for="language in COMMON_LANGUAGES" :key="language" class="row">
-              <input v-model="form.languages" type="checkbox" :value="language" /> {{ t(language) }}
-            </label>
+        <label class="line-field">
+          <span>{{ t('服務地區') }}</span>
+          <input v-model="form.regions" class="line-input" :placeholder="t('香港、深圳、澳門、珠海')" />
+        </label>
+        <div class="line-field">
+          <span>{{ t('會說的語言') }}</span>
+          <div class="chips my-page__languages">
+            <button
+              v-for="language in COMMON_LANGUAGES"
+              :key="language"
+              class="chip"
+              :class="{ 'chip--on': form.languages.includes(language) }"
+              type="button"
+              :aria-pressed="form.languages.includes(language)"
+              @click="toggleLanguage(language)"
+            >
+              {{ t(language) }}
+            </button>
           </div>
-          <input v-model="form.otherLanguages" class="input" :placeholder="t('其他語言（選填）')" />
+          <input v-model="form.otherLanguages" class="line-input" :aria-label="t('其他語言')" :placeholder="t('其他語言（選填）')" />
         </div>
-        <label class="field">{{ t('微信號（選填，會公開顯示）') }}<input v-model="form.wechatId" class="input" maxlength="60" /></label>
-        <label class="field">{{ t('WhatsApp 號碼（選填，會公開顯示）') }}<input v-model="form.whatsapp" class="input" maxlength="30" placeholder="+852 …" /></label>
+        <label class="line-field">
+          <span>{{ t('微信號（選填，會公開顯示）') }}</span>
+          <input v-model="form.wechatId" class="line-input" maxlength="60" />
+        </label>
+        <label class="line-field">
+          <span>{{ t('WhatsApp 號碼（選填，會公開顯示）') }}</span>
+          <input v-model="form.whatsapp" class="line-input" maxlength="30" placeholder="+852 …" />
+        </label>
         <button class="button block" type="submit" :disabled="busy">{{ t('儲存') }}</button>
       </form>
 
       <section class="card">
-        <h2>{{ t(`車輛照片（最多 ${page.photoLimit} 張）`) }}</h2>
+        <span class="section-label">{{ t(`車輛照片，最多 ${page.photoLimit} 張`) }}</span>
         <p v-if="!page.photosAvailable" class="muted">{{ t('暫時無法上傳照片。') }}</p>
         <div class="my-page__photos">
           <div v-for="photo in page.photos" :key="photo.id" class="my-page__photo">
             <img :src="photo.url" :alt="t('車輛照片')" />
-            <button class="chip" type="button" @click="removePhoto(photo.id)">{{ t('刪除') }}</button>
+            <button class="my-page__remove" type="button" :aria-label="t('刪除這張照片')" @click="removePhoto(photo.id)">
+              <AppIcon name="close" :size="16" />
+            </button>
           </div>
+          <button
+            v-if="page.photosAvailable && page.photos.length < page.photoLimit"
+            class="my-page__add"
+            type="button"
+            :disabled="busy"
+            @click="picker?.click()"
+          >
+            <AppIcon name="add" :size="24" />
+            <span>{{ t('加照片') }}</span>
+          </button>
         </div>
-        <button
-          v-if="page.photosAvailable && page.photos.length < page.photoLimit"
-          class="button secondary block"
-          type="button"
-          :disabled="busy"
-          @click="picker?.click()"
-        >
-          <AppIcon name="add" :size="18" />{{ t('加照片') }}
-        </button>
         <input ref="picker" class="my-page__picker" type="file" accept="image/*" @change="picked" />
         <p class="hint">{{ t('請只放自己車輛的照片，不要拍到乘客或他人的車牌。') }}</p>
       </section>
@@ -185,43 +211,113 @@ onMounted(async () => {
       <button v-if="!page.published" class="button block large" type="button" :disabled="busy || !page.hasDriverProfile" @click="save(true)">
         {{ t('儲存並公開') }}
       </button>
+      <button v-else class="my-page__unpublish" type="button" :disabled="busy" @click="save(false)">{{ t('改為不公開') }}</button>
     </template>
   </div>
 </template>
 
 <style scoped>
+.my-page__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
 .my-page__state {
-  margin: 0 0 var(--space-xs);
-  font-weight: 600;
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-divider);
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 700;
+}
+.my-page__state--on {
+  background: var(--status-confirmed-tint);
+  color: var(--status-confirmed);
 }
 .my-page__url {
   margin: 0 0 var(--space-md);
+  font-weight: 600;
   overflow-wrap: anywhere;
-  color: var(--color-text-secondary);
+}
+.my-page__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
 }
 .my-page__notice {
   margin: var(--space-md) 0 0;
+  color: var(--color-gold-ink);
+  font-size: var(--font-label);
+}
+.my-page__from {
+  margin: var(--space-md) 0 0;
+}
+.my-page__languages {
+  margin: var(--space-sm) 0 var(--space-xs);
 }
 .my-page__photos {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-sm);
   margin-bottom: var(--space-md);
 }
 .my-page__photo {
+  position: relative;
+}
+.my-page__photo img,
+.my-page__add {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-input);
+}
+.my-page__photo img {
+  object-fit: cover;
+  background: var(--color-divider);
+}
+.my-page__remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(20, 32, 51, 0.6);
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+.my-page__add {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-xs);
-}
-.my-page__photo img {
-  width: 104px;
-  height: 78px;
-  object-fit: cover;
-  border-radius: var(--radius-input);
-  background: var(--color-divider);
+  justify-content: center;
+  gap: 2px;
+  border: 1.5px dashed var(--color-border);
+  background: transparent;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: var(--font-caption);
+  font-weight: 600;
+  cursor: pointer;
 }
 .my-page__picker {
   display: none;
+}
+.my-page__unpublish {
+  display: block;
+  margin: 0 auto;
+  min-height: 44px;
+  padding: 0 var(--space-xl);
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+  cursor: pointer;
 }
 </style>
