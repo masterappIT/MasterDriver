@@ -4,9 +4,11 @@ import { api, can } from '../api';
 import { dateTime } from '../format';
 
 type Route = 'DOMESTIC' | 'INTERNATIONAL';
+type Provider = 'SMS253' | 'SPUG';
 
 interface Channel {
   route: Route;
+  provider: Provider;
   enabled: boolean;
   endpoint: string;
   account: string;
@@ -23,6 +25,7 @@ interface Channel {
 interface Message {
   id: string;
   route: Route;
+  provider: Provider;
   countryCode: string;
   phone: string;
   purpose: string;
@@ -35,6 +38,16 @@ interface Message {
 const ROUTE: Record<Route, { title: string; numbers: string }> = {
   DOMESTIC: { title: '國內帳號', numbers: '+86 內地號碼' },
   INTERNATIONAL: { title: '國際帳號', numbers: '+852 香港、+853 澳門號碼' },
+};
+/** What each provider calls its fields: Spug has an application name and a template code where 253 has an account. */
+const PROVIDER: Record<Provider, { name: string; account: string; secret: string; about: string }> = {
+  SMS253: { name: '253 雲通訊', account: '帳號', secret: '密碼', about: '用我們自己報備的簽名和範本發送。' },
+  SPUG: {
+    name: 'Spug 推送助手',
+    account: '應用名稱（顯示在簡訊裡）',
+    secret: '範本網址或編碼',
+    about: '用 Spug 自己的簽名和固定範本發送，不用報備我們的公司；簡訊文字不能自訂。在 push.spug.cc 建立「短信 → 驗證碼」範本並選「動態推送對象」，把範本的調用網址貼到這裡。',
+  },
 };
 const STATUS: Record<string, string> = { sent: '已送出', rejected: '被拒', failed: '失敗' };
 
@@ -72,6 +85,11 @@ async function run<T>(action: () => Promise<T>, done: (result: T) => string) {
 
 const save = (route: Route) => run(() => api<Channel[]>('PUT', `/sms-channels/${route}`, { ...forms[route] }), () => `${ROUTE[route].title}已儲存`);
 
+function setProvider(route: Route, provider: Provider) {
+  if (!confirm(`改用 ${PROVIDER[provider].name}？這個帳號目前的設定會清空並停用，要重新填寫後再啟用。`)) return;
+  return run(() => api<Channel[]>('PUT', `/sms-channels/${route}`, { provider }), () => `${ROUTE[route].title}已改用 ${PROVIDER[provider].name}，請填寫設定`);
+}
+
 const setEnabled = (route: Route, enabled: boolean) =>
   run(() => api<Channel[]>('PUT', `/sms-channels/${route}`, { enabled }), () => (enabled ? `${ROUTE[route].title}已啟用` : `${ROUTE[route].title}已停用`));
 
@@ -92,7 +110,7 @@ onMounted(() => run(() => api<Channel[]>('GET', '/sms-channels'), () => ''));
 <template>
   <h1>簡訊通道</h1>
   <div class="notice">
-    沿用 Master Travel 的 253 雲通訊。驗證碼依號碼自動分流：+86 走國內帳號，+852、+853 走國際帳號。開發模式登入開啟時不會發簡訊。
+    驗證碼依號碼自動分流：+86 走國內帳號，+852、+853 走國際帳號。每個帳號可以選 253 雲通訊（沿用 Master Travel）或 Spug 推送助手。開發模式登入開啟時不會發簡訊。
     <span v-if="!can.superAdmin()">只有超級管理員可以修改。</span>
   </div>
   <div v-if="error" class="notice error">{{ error }}</div>
@@ -104,19 +122,36 @@ onMounted(() => run(() => api<Channel[]>('GET', '/sms-channels'), () => ''));
       <span :class="c.enabled ? 'sms-form__on' : 'muted'">{{ c.enabled ? '已啟用' : '未啟用' }}</span>
     </h2>
     <fieldset :disabled="!can.superAdmin() || busy" class="sms-form__fields">
+      <div class="field">
+        服務商
+        <div class="row">
+          <button
+            v-for="(item, key) in PROVIDER"
+            :key="key"
+            class="button"
+            :class="{ secondary: c.provider !== key }"
+            type="button"
+            :aria-pressed="c.provider === key"
+            @click="c.provider !== key && setProvider(c.route, key)"
+          >
+            {{ item.name }}
+          </button>
+        </div>
+        <span class="hint">{{ PROVIDER[c.provider].about }}</span>
+      </div>
       <label class="field">接口網址<input v-model="forms[c.route].endpoint" class="input" placeholder="https://" /></label>
       <div class="row">
-        <label class="field">帳號<input v-model="forms[c.route].account" class="input" autocomplete="off" /></label>
+        <label class="field">{{ PROVIDER[c.provider].account }}<input v-model="forms[c.route].account" class="input" autocomplete="off" /></label>
         <label class="field">
-          密碼（{{ c.passwordConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
+          {{ PROVIDER[c.provider].secret }}（{{ c.passwordConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
           <input v-model="forms[c.route].password" class="input" type="password" autocomplete="off" />
         </label>
         <label class="field">測試號碼（含國碼，只填數字）<input v-model="forms[c.route].testPhone" class="input" inputmode="numeric" /></label>
       </div>
-      <label class="field">簡訊範本（必須包含 {code}）<input v-model="forms[c.route].template" class="input" maxlength="300" /></label>
+      <label v-if="c.provider === 'SMS253'" class="field">簡訊範本（必須包含 {code}）<input v-model="forms[c.route].template" class="input" maxlength="300" /></label>
       <div class="row">
         <button class="button" type="submit">儲存</button>
-        <button class="button secondary" type="button" @click="testConnection(c.route)">連線檢查（查餘額）</button>
+        <button v-if="c.provider === 'SMS253'" class="button secondary" type="button" @click="testConnection(c.route)">連線檢查（查餘額）</button>
         <button class="button secondary" type="button" @click="testSend(c.route)">發送測試簡訊</button>
         <button class="button" :class="{ danger: c.enabled }" type="button" @click="setEnabled(c.route, !c.enabled)">{{ c.enabled ? '停用' : '啟用' }}</button>
       </div>
@@ -138,13 +173,13 @@ onMounted(() => run(() => api<Channel[]>('GET', '/sms-channels'), () => ''));
           <th>號碼</th>
           <th>用途</th>
           <th>結果</th>
-          <th>253 回應</th>
+          <th>服務商回應</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="m in messages" :key="m.id">
           <td class="nowrap">{{ dateTime(m.createdAt) }}</td>
-          <td>{{ ROUTE[m.route].title }}</td>
+          <td>{{ ROUTE[m.route].title }}・{{ PROVIDER[m.provider]?.name ?? m.provider }}</td>
           <td class="nowrap">{{ m.countryCode }} {{ m.phone }}</td>
           <td>{{ m.purpose === 'OTP' ? '登入驗證碼' : '測試' }}</td>
           <td>{{ STATUS[m.status] ?? m.status }}</td>

@@ -8,12 +8,14 @@ import { apiError } from '../common/errors';
 import { SECRET_BOX, SecretBox } from '../common/secret-box';
 import { PrismaService } from '../prisma.service';
 import { call253, destinationFor, routeFor, SMS253_DEFAULT_ENDPOINT, SMS253_DEFAULT_TEMPLATE, type Fetch } from './sms253';
+import { callSpug, isSpugTemplateCode, SPUG_DEFAULT_ENDPOINT, spugTemplateCode } from './spug';
 
 const ROUTES: SmsRoute[] = ['DOMESTIC', 'INTERNATIONAL'];
 
 function view(row: SmsChannel) {
   return {
     route: row.route,
+    provider: row.provider,
     enabled: row.enabled,
     endpoint: row.endpoint,
     account: row.account,
@@ -34,9 +36,9 @@ export function routeOf(value: string): SmsRoute {
 }
 
 /**
- * 253 雲通訊 channels, as used by Master Travel: a domestic account for +86 and
- * an international account for +852 and +853. Also the SMS provider behind
- * sign-in codes; development-mode sign-in never reaches it.
+ * The SMS channels: one for +86 and one for +852 and +853, each sent through 253
+ * 雲通訊 (as Master Travel does) or through Spug 推送助手. Also the SMS provider
+ * behind sign-in codes; development-mode sign-in never reaches it.
  */
 @Injectable()
 export class SmsChannelsService implements SmsProvider {
@@ -65,17 +67,32 @@ export class SmsChannelsService implements SmsProvider {
 
   async save(route: SmsRoute, input: SmsChannelUpdate, actor: string) {
     const current = await this.channel(route);
-    const { password, ...rest } = input;
-    const willHaveAccount =
-      (input.account ?? current.account) !== '' && (input.endpoint ?? current.endpoint) !== '' && Boolean(password || current.passwordEnc);
-    if (input.enabled && !willHaveAccount) {
+    const { password: typed, ...rest } = input;
+    const provider = input.provider ?? current.provider;
+    // Another provider's account is of no use to this one: switching starts clean and switched off.
+    const switched = provider !== current.provider;
+    const password = typed && provider === 'SPUG' ? spugTemplateCode(typed) : typed;
+    if (password && provider === 'SPUG' && !isSpugTemplateCode(password)) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'SPUG_TEMPLATE_CODE_INVALID', 'Paste the template URL or code from the Spug console');
+    }
+    const defaultEndpoint = provider === 'SPUG' ? SPUG_DEFAULT_ENDPOINT : route === 'DOMESTIC' ? SMS253_DEFAULT_ENDPOINT : '';
+    const endpoint = input.endpoint ?? (switched ? defaultEndpoint : current.endpoint);
+    const account = input.account ?? (switched ? '' : current.account);
+    const hasSecret = Boolean(password || (!switched && current.passwordEnc));
+    const enabled = input.enabled ?? (switched ? false : current.enabled);
+    if (enabled && !(account !== '' && endpoint !== '' && hasSecret)) {
       throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the account and password before enabling');
     }
     await this.prisma.smsChannel.update({
       where: { route },
       data: {
         ...rest,
+        provider,
+        endpoint,
+        account,
+        enabled,
         updatedBy: actor,
+        ...(switched ? { passwordEnc: null, lastTestedAt: null, lastTestStatus: null, lastTestMessage: null } : {}),
         ...(password ? { passwordEnc: this.box.seal(password), lastTestedAt: null, lastTestStatus: null, lastTestMessage: null } : {}),
       },
     });
@@ -92,6 +109,12 @@ export class SmsChannelsService implements SmsProvider {
     const row = await this.channel(route);
     const credentials = this.credentials(row);
     if (!credentials) throw apiError(HttpStatus.CONFLICT, 'SMS_ACCOUNT_REQUIRED', 'Enter the account and password first');
+    if (row.provider === 'SPUG') {
+      // Spug has no call that proves the template without sending; say so instead of pretending.
+      const message = 'Spug 沒有不發簡訊的連線檢查，請用「發送測試簡訊」確認';
+      await this.prisma.smsChannel.update({ where: { route }, data: { lastTestedAt: new Date(), lastTestStatus: 'skipped', lastTestMessage: message } });
+      return { status: 'skipped', message, channels: await this.list() };
+    }
     let status = 'error';
     let message: string;
     try {
@@ -148,20 +171,32 @@ export class SmsChannelsService implements SmsProvider {
     let providerCode: string | null = null;
     let providerError: string | null = null;
     try {
-      const result = await call253(this.fetchImpl, row.endpoint, '/msg/send/json', credentials, {
-        phone: destinationFor(row.route, countryCode, phone),
-        msg: message,
-        report: 'false',
-      });
-      providerCode = result.code;
-      providerError = result.errorMsg;
-      status = result.code === '0' ? 'sent' : 'rejected';
+      if (row.provider === 'SPUG') {
+        // Spug's own template carries the text; we give the application name, the code and the number.
+        const result = await callSpug(this.fetchImpl, row.endpoint, credentials.password, {
+          name: credentials.account,
+          code,
+          targets: destinationFor(row.route, countryCode, phone),
+        });
+        providerCode = result.code;
+        providerError = result.errorMsg;
+        status = result.code === '200' ? 'sent' : 'rejected';
+      } else {
+        const result = await call253(this.fetchImpl, row.endpoint, '/msg/send/json', credentials, {
+          phone: destinationFor(row.route, countryCode, phone),
+          msg: message,
+          report: 'false',
+        });
+        providerCode = result.code;
+        providerError = result.errorMsg;
+        status = result.code === '0' ? 'sent' : 'rejected';
+      }
     } catch (error) {
       providerError = error instanceof Error ? error.message : String(error);
     }
     // The message text contains the code, so only the outcome is stored.
     await this.prisma.smsMessage.create({
-      data: { route: row.route, countryCode, phone, purpose, status, providerCode, providerError },
+      data: { route: row.route, provider: row.provider, countryCode, phone, purpose, status, providerCode, providerError },
     });
     return { status, providerCode, providerError };
   }

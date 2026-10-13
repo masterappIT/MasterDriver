@@ -679,13 +679,24 @@ enum SmsRoute {
   INTERNATIONAL
 }
 
+/// Who sends for a route. SMS253: 253 雲通訊, under our own registered signature.
+/// SPUG: Spug 推送助手, under Spug's signature and fixed template, for numbers we
+/// have no registration for.
+enum SmsProviderKind {
+  SMS253
+  SPUG
+}
+
 model SmsChannel {
   route           SmsRoute  @id
+  provider        SmsProviderKind @default(SMS253)
   enabled         Boolean   @default(false)
   endpoint        String    @default("")
   account         String    @default("")
   passwordEnc     String?
-  /// Must contain {code}.
+  /// 253: the account and its password. Spug: `account` is the application name
+  /// shown in the message and the encrypted secret is the template code.
+  /// Must contain {code}. Not used by Spug, whose text is fixed.
   template        String    @default("")
   testPhone       String    @default("")
   lastTestedAt    DateTime?
@@ -699,6 +710,7 @@ model SmsChannel {
 model SmsMessage {
   id            String   @id @default(cuid())
   route         SmsRoute
+  provider      SmsProviderKind @default(SMS253)
   countryCode   String
   phone         String
   purpose       String

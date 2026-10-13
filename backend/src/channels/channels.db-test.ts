@@ -103,6 +103,38 @@ test('a rejected SMS fails the request; an unconfigured route refuses outside de
   await rejectsWith(ctx.smsChannels.sendVerificationCode('+853', '61234567', '123456'), 'SMS_NOT_CONFIGURED');
 });
 
+test('Spug sends for a route under its own template: the code and number go in, the template code stays secret', async () => {
+  await ctx.smsChannels.save('DOMESTIC', { enabled: true, account: 'cn-acct', password: 'cn-pass' }, 'test');
+  // Switching provider starts clean: the 253 account is gone and the route is off until Spug is filled in.
+  const switched = (await ctx.smsChannels.save('DOMESTIC', { provider: 'SPUG' }, 'test')).find((c) => c.route === 'DOMESTIC');
+  assert.equal(switched?.provider, 'SPUG');
+  assert.equal(switched?.enabled, false);
+  assert.equal(switched?.passwordConfigured, false);
+  assert.equal(switched?.endpoint, 'https://push.spug.cc');
+  await rejectsWith(ctx.smsChannels.save('DOMESTIC', { enabled: true }, 'test'), 'SMS_ACCOUNT_REQUIRED');
+  await rejectsWith(ctx.smsChannels.save('DOMESTIC', { password: 'not a code!' }, 'test'), 'SPUG_TEMPLATE_CODE_INVALID');
+
+  // The whole URL copied from the Spug console is accepted; only its code is kept.
+  await ctx.smsChannels.save('DOMESTIC', { enabled: true, account: '跨境師傅幫', password: 'https://push.spug.cc/send/A27LsecretbgEY' }, 'test');
+  const stub = stubFetch({ code: 200, msg: '请求成功' });
+  ctx.smsChannels.fetchImpl = stub.impl;
+  await ctx.smsChannels.sendVerificationCode('+86', '13800138000', '480917');
+  assert.equal(stub.calls[0].url, 'https://push.spug.cc/send/A27LsecretbgEY');
+  assert.deepEqual(stub.calls[0].body, { name: '跨境師傅幫', code: '480917', targets: '13800138000' });
+
+  const logged = await ctx.prisma.smsMessage.findFirstOrThrow();
+  assert.equal(logged.provider, 'SPUG');
+  assert.equal(logged.status, 'sent');
+  assert.ok(!JSON.stringify(logged).includes('480917'), 'the code is never stored');
+  assert.ok(!JSON.stringify(await ctx.smsChannels.list()).includes('A27LsecretbgEY'), 'the template code is never returned');
+
+  ctx.smsChannels.fetchImpl = stubFetch({ code: 204, msg: '余额不足' }).impl;
+  await rejectsWith(ctx.smsChannels.sendVerificationCode('+86', '13800138000', '123456'), 'SMS_SEND_FAILED');
+  assert.equal((await ctx.smsChannels.testConnection('DOMESTIC')).status, 'skipped');
+  // The other route is untouched.
+  assert.equal((await ctx.smsChannels.list()).find((c) => c.route === 'INTERNATIONAL')?.provider, 'SMS253');
+});
+
 test('a channel cannot be enabled without credentials, and templates need {code}', async () => {
   await rejectsWith(ctx.smsChannels.save('INTERNATIONAL', { enabled: true }, 'test'), 'SMS_ACCOUNT_REQUIRED');
   ctx.smsChannels.fetchImpl = stubFetch({ code: '0', balance: '1234' }).impl;

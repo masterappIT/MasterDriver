@@ -123,9 +123,17 @@ export type LeadsQuery = z.infer<typeof leadsQuerySchema>;
 
 export const adPositionQuerySchema = z.object({ position: z.enum(AD_POSITIONS) });
 
-/** Admin update of a 253 SMS channel. A blank password keeps the stored one. */
+export const SMS_PROVIDERS = ['SMS253', 'SPUG'] as const;
+export type SmsProviderKind = (typeof SMS_PROVIDERS)[number];
+
+/**
+ * Admin update of an SMS channel. A blank password keeps the stored one. For 253 the account
+ * and password are the account's; for Spug the account is the application name shown in the
+ * message and the password is the template code (or the whole URL copied from its console).
+ */
 export const smsChannelUpdateSchema = z
   .object({
+    provider: z.enum(SMS_PROVIDERS),
     enabled: z.boolean(),
     endpoint: httpsUrl,
     account: z.string().trim().max(60),

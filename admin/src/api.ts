@@ -39,6 +39,7 @@ const ERROR_TEXT: Record<string, string> = {
   CHANNEL_NOT_SAVED: '請先儲存設定',
   CHANNEL_NOT_TESTED: '請先通過檢查再啟用',
   SMS_ACCOUNT_REQUIRED: '請先填寫接口網址、帳號和密碼',
+  SPUG_TEMPLATE_CODE_INVALID: '請貼上 Spug 後台的範本調用網址，或網址最後那段編碼',
   SMS_TEST_PHONE_REQUIRED: '請先填寫測試號碼',
   LOGO_IMAGE_INVALID: 'Logo 必須是 400 KB 以內的 PNG、JPG 或 WebP 圖片',
   SUPPORT_CONVERSATION_NOT_FOUND: '找不到這個對話',
