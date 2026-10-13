@@ -37,6 +37,8 @@ export const pageQuerySchema = z.object({
 
 export const adminOrderQuerySchema = pageQuerySchema.extend({
   status: z.enum(['OPEN', 'ASSIGNED', 'COMPLETED', 'CANCELLED']).optional(),
+  /** Orders that still wait on money: the fare not marked received, or the driver not marked settled. */
+  money: z.enum(['UNPAID', 'UNSETTLED']).optional(),
 });
 export type AdminOrderQuery = z.infer<typeof adminOrderQuerySchema>;
 export type PageQuery = z.infer<typeof pageQuerySchema>;

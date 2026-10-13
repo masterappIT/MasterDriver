@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, can } from '../api';
-import { CREDIT_ENTRY, dateTime, fromLocalInput, hkd, money, PLAN_NAME } from '../format';
+import { CREDIT_ENTRY, dateTime, fromLocalInput, hkd, money, PLAN_NAME, PLATE_TYPE } from '../format';
 
 interface Grant {
   enabled: boolean;
@@ -23,7 +23,13 @@ interface UserDetail {
     vehicleType: string | null;
     seats: number | null;
     color: string | null;
+    plateType: string | null;
+    hkMacauPhone: string | null;
+    mainlandPhone: string | null;
+    hidePlates: boolean;
   } | null;
+  profilePage: { code: string; published: boolean; wechatId: string | null; whatsapp: string | null; photos: number; bookings: number } | null;
+  paymentMethods: number;
   counts: { dispatched: number; claimed: number };
   credits: {
     balance: { amount: number; currency: string };
@@ -169,8 +175,26 @@ onMounted(load);
         <span>車型：{{ user.profile.vehicleType ?? '—' }}</span>
         <span>座位：{{ user.profile.seats ?? '—' }}</span>
         <span>車色：{{ user.profile.color ?? '—' }}</span>
+        <span>車牌類型：{{ user.profile.plateType ? PLATE_TYPE[user.profile.plateType] : '—' }}</span>
+        <span>港澳號碼：{{ user.profile.hkMacauPhone ?? '—' }}</span>
+        <span>內地號碼：{{ user.profile.mainlandPhone ?? '—' }}</span>
+        <span>對乘客隱藏車牌：{{ user.profile.hidePlates ? '是' : '否' }}</span>
       </div>
+      <p class="hint">港澳號碼與內地號碼由司機自己填寫，沒有經過簡訊驗證；登入用的是上方的號碼。</p>
       <p class="hint">註冊：{{ dateTime(user.createdAt) }}　介面語言：{{ user.locale === 'zh-Hans' ? '簡體' : '繁體' }}</p>
+    </div>
+
+    <div class="card">
+      <h2>客源與收款</h2>
+      <p v-if="!user.profilePage" class="muted">還沒有打開過名片頁設定</p>
+      <div v-else class="row">
+        <span>名片頁：{{ user.profilePage.published ? '已公開' : '未公開' }}</span>
+        <span>車輛照片：{{ user.profilePage.photos }} 張</span>
+        <span>收到預約：{{ user.profilePage.bookings }} 個</span>
+        <span>微信號：{{ user.profilePage.wechatId ?? '—' }}</span>
+        <span>WhatsApp：{{ user.profilePage.whatsapp ?? '—' }}</span>
+      </div>
+      <p>收款方式：{{ user.paymentMethods }} 個<span class="hint">　帳號與收款碼只給用戶自己和他選擇顯示的乘客，後台不顯示</span></p>
     </div>
 
     <div class="card">

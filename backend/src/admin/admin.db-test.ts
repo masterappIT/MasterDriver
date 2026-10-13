@@ -79,6 +79,39 @@ test('ending the free period from the admin takes effect immediately', async () 
   assert.equal((await ctx.entitlements.check(user, 'order.create')).quota, 10);
 });
 
+test('the admin sees the money marks, filters by them, and counts what is still open', async () => {
+  const boss = await superAdmin();
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const done = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(done.code, driver);
+  await ctx.orders.complete(driver, done.id);
+  const own = await ctx.orders.create(dispatcher, { ...sampleOrder, selfDrive: true });
+  await ctx.orders.complete(dispatcher, own.id);
+  await ctx.orders.create(dispatcher, sampleOrder);
+
+  const page = { page: 1 };
+  let dashboard = await ctx.adminData.dashboard();
+  assert.deepEqual(dashboard.money, { unpaidCompleted: 2, unsettledCompleted: 1 }, '這單我自己做 has nobody to settle with');
+  assert.equal((await ctx.adminData.listOrders({ ...page, money: 'UNPAID' }, 'SUPER_ADMIN')).total, 2);
+  const unsettled = await ctx.adminData.listOrders({ ...page, money: 'UNSETTLED' }, 'SUPER_ADMIN');
+  assert.deepEqual(unsettled.items.map((item) => item.id), [done.id]);
+  assert.equal(unsettled.items[0].selfDrive, false);
+
+  await ctx.orders.setPayment(dispatcher, done.id, { paid: true });
+  await ctx.orders.setSettlement(dispatcher, done.id, { settled: true });
+  dashboard = await ctx.adminData.dashboard();
+  assert.deepEqual(dashboard.money, { unpaidCompleted: 1, unsettledCompleted: 0 });
+  const detail = await ctx.adminData.getOrder(done.id, boss);
+  assert.ok(detail.payment.paidAt && detail.payment.settledAt);
+  assert.deepEqual([detail.selfDrive, detail.fromBooking, detail.tripGroup], [false, false, null]);
+  assert.equal((await ctx.adminData.getOrder(own.id, boss)).selfDrive, true);
+
+  const user = await ctx.adminData.getUser(dispatcher);
+  assert.equal(user.paymentMethods, 0);
+  assert.equal(user.profilePage, null);
+});
+
 test('sales staff see orders but not passengers', async () => {
   const boss = await superAdmin();
   const dispatcher = await createDriver(ctx);

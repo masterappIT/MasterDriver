@@ -12,6 +12,8 @@ interface Dashboard {
   serviceFee: { enabled: boolean; fee: { amount: number; currency: string } };
   developmentLoginEnabled: boolean;
   supportWaiting: number;
+  money: { unpaidCompleted: number; unsettledCompleted: number };
+  bookings: { thisWeek: number; pending: number };
   freePeriods: { name: string; endsAt: string | null }[];
 }
 
@@ -96,6 +98,21 @@ onMounted(load);
         <strong>{{ hkd(data.creditsOutstanding) }}</strong>
         <small>平台服務費：{{ data.serviceFee.enabled ? `開啟，每單 ${money(data.serviceFee.fee)}` : '關閉' }}</small>
       </article>
+      <article class="dashboard__card">
+        <span>近 7 天名片頁預約</span>
+        <strong>{{ data.bookings.thisWeek }}</strong>
+        <small>等司機回覆 {{ data.bookings.pending }} 個</small>
+      </article>
+      <RouterLink to="/orders?money=UNPAID" class="dashboard__card dashboard__card--link">
+        <span>已完成未收款</span>
+        <strong>{{ data.money.unpaidCompleted }}</strong>
+        <small>出單者自己的記號・查看訂單</small>
+      </RouterLink>
+      <RouterLink to="/orders?money=UNSETTLED" class="dashboard__card dashboard__card--link">
+        <span>已完成未結清</span>
+        <strong>{{ data.money.unsettledCompleted }}</strong>
+        <small>出單者與接單司機之間・查看訂單</small>
+      </RouterLink>
     </div>
 
     <section class="card dashboard__status">

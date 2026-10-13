@@ -3,7 +3,7 @@ import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api } from '../api';
 import StatusBadge from '../components/StatusBadge.vue';
-import { dateTime, hkd, money } from '../format';
+import { dateTime, hkd, money, PLATE_TYPE } from '../format';
 
 type Money = { amount: number; currency: string } | null;
 
@@ -25,10 +25,27 @@ interface OrderDetail {
   serviceFee: number | null;
   passenger: { name: string | null; contact: string } | null;
   dispatcher: { id: string; name: string | null; phone: string };
+  selfDrive: boolean;
+  inPool: boolean;
+  journey: { legIndex: number; legCount: number } | null;
+  contactRevealMinutes: number | null;
+  fromBooking: boolean;
+  payment: { showPaymentMethods: boolean; paidAt: string | null; settledAt: string | null };
+  tripGroup: { platform: 'WHATSAPP' | 'WECHAT'; expiresAt: string | null } | null;
   driver: {
     name: string | null;
     phone: string;
-    profile: { hkPlate: string | null; macauPlate: string | null; mainlandPlate: string | null } | null;
+    profile: {
+      hkPlate: string | null;
+      macauPlate: string | null;
+      mainlandPlate: string | null;
+      plateType: string | null;
+      vehicleType: string | null;
+      color: string | null;
+      hkMacauPhone: string | null;
+      mainlandPhone: string | null;
+      hidePlates: boolean;
+    } | null;
   } | null;
   timeline: Record<string, string | null>;
   claims: { result: string; createdAt: string; driver: { id: string; name: string | null; phone: string } }[];
@@ -41,6 +58,17 @@ const TIMELINE: Record<string, string> = {
   completedAt: '完成',
   cancelledAt: '取消',
 };
+
+/** When the driver may see the passenger's phone, as the dispatcher set it. */
+function revealText(minutes: number | null): string {
+  if (minutes === null) return '搶到即顯示';
+  return minutes % 60 === 0 ? `出發前 ${minutes / 60} 小時` : `出發前 ${minutes} 分鐘`;
+}
+
+/** The driver's other numbers, beyond the one they sign in with. */
+function otherPhones(driver: NonNullable<OrderDetail['driver']>): string {
+  return [driver.profile?.hkMacauPhone, driver.profile?.mainlandPhone].filter((phone) => phone && phone !== driver.phone).join('、');
+}
 
 const route = useRoute();
 const order = ref<OrderDetail | null>(null);
@@ -65,6 +93,15 @@ onMounted(async () => {
         <span>出發：{{ dateTime(order.pickupAt) }}</span>
         <span>單號：{{ order.code }}</span>
         <span>{{ order.passengers }} 人・{{ order.luggage }} 件行李{{ order.vehicleType ? `・${order.vehicleType}` : '' }}</span>
+      </div>
+      <div class="row order-detail__tags">
+        <span v-if="order.journey" class="order-detail__tag">接駁第 {{ order.journey.legIndex }}／{{ order.journey.legCount }} 段</span>
+        <span v-if="order.selfDrive" class="order-detail__tag">出單者自己做</span>
+        <span v-if="order.inPool" class="order-detail__tag">在接單池</span>
+        <span v-if="order.fromBooking" class="order-detail__tag">來自名片頁預約</span>
+        <span v-if="order.tripGroup" class="order-detail__tag">
+          有行程群（{{ order.tripGroup.platform === 'WHATSAPP' ? 'WhatsApp' : `微信，${dateTime(order.tripGroup.expiresAt)} 前有效` }}）
+        </span>
       </div>
       <p v-if="order.waypoints.length">途經：{{ order.waypoints.join('、') }}</p>
       <p v-if="order.notes">備註：{{ order.notes }}</p>
@@ -91,6 +128,18 @@ onMounted(async () => {
     </div>
 
     <div class="card">
+      <h2>收款與結清</h2>
+      <p class="hint">以下都是出單者自己的選擇和記號。乘客直接付給出單者，司機之間自己結，平台不經手、不核對。</p>
+      <div class="row">
+        <span>乘客確認頁顯示收款方式：{{ order.payment.showPaymentMethods ? '是' : '否' }}</span>
+        <span :class="{ muted: !order.payment.paidAt }">車費：{{ order.payment.paidAt ? `${dateTime(order.payment.paidAt)} 標記已收款` : '未標記收款' }}</span>
+        <span v-if="!order.selfDrive" :class="{ muted: !order.payment.settledAt }">
+          和接單司機的帳：{{ order.payment.settledAt ? `${dateTime(order.payment.settledAt)} 標記已結清` : order.status === 'COMPLETED' ? '未標記結清' : '完成後才能標記' }}
+        </span>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>相關人員</h2>
       <p>
         出單者：<RouterLink :to="`/users/${order.dispatcher.id}`">{{ order.dispatcher.name ?? '未填姓名' }}（{{ order.dispatcher.phone }}）</RouterLink>
@@ -100,9 +149,23 @@ onMounted(async () => {
         <span class="muted">
           {{ [order.driver.profile?.hkPlate, order.driver.profile?.macauPlate, order.driver.profile?.mainlandPlate].filter(Boolean).join(' / ') }}
         </span>
+        <span class="hint">
+          {{
+            [
+              order.driver.profile?.vehicleType,
+              order.driver.profile?.color,
+              order.driver.profile?.plateType ? PLATE_TYPE[order.driver.profile.plateType] : null,
+              otherPhones(order.driver) ? `其他號碼 ${otherPhones(order.driver)}` : null,
+              order.driver.profile?.hidePlates ? '對乘客隱藏車牌' : null,
+            ]
+              .filter(Boolean)
+              .join('・')
+          }}
+        </span>
       </p>
       <p v-if="order.passenger">乘客：{{ order.passenger.name ?? '—' }}（{{ order.passenger.contact }}）<span class="hint">查看乘客資料已記錄在操作紀錄</span></p>
       <p v-else class="muted">你的角色看不到乘客資料</p>
+      <p class="hint">接單司機看到乘客電話的時間：{{ revealText(order.contactRevealMinutes) }}；行程完成或取消後不再顯示。</p>
     </div>
 
     <div class="card">
@@ -138,3 +201,15 @@ onMounted(async () => {
     </div>
   </template>
 </template>
+
+<style scoped>
+.order-detail__tags:empty {
+  display: none;
+}
+.order-detail__tag {
+  padding: 2px var(--space-sm);
+  border-radius: 100px;
+  background: var(--color-tint, #e5edfb);
+  font-size: var(--font-label, 13px);
+}
+</style>

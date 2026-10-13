@@ -2,13 +2,15 @@
 import { onMounted, ref } from 'vue';
 import { api } from '../api';
 import PagerBar from '../components/PagerBar.vue';
-import { dateTime, hkd } from '../format';
+import { dateTime, hkd, PLATE_TYPE } from '../format';
 
 interface UserRow {
   id: string;
   phone: string;
   name: string | null;
   plates: string[];
+  plateType: string | null;
+  pagePublished: boolean;
   dispatched: number;
   claimed: number;
   credits: number;
@@ -63,8 +65,8 @@ onMounted(load);
       <tbody>
         <tr v-for="user in result.items" :key="user.id">
           <td class="nowrap"><RouterLink :to="`/users/${user.id}`">{{ user.phone }}</RouterLink></td>
-          <td>{{ user.name ?? '—' }}</td>
-          <td>{{ user.plates.join(' / ') || '—' }}</td>
+          <td>{{ user.name ?? '—' }}<span v-if="user.pagePublished" class="hint">　名片頁已公開</span></td>
+          <td>{{ user.plates.join(' / ') || '—' }}<span v-if="user.plateType" class="hint">　{{ PLATE_TYPE[user.plateType] }}</span></td>
           <td>{{ user.dispatched }}</td>
           <td>{{ user.claimed }}</td>
           <td>{{ hkd(user.credits) }}</td>

@@ -37,6 +37,8 @@ export function fromLocalInput(value: string): string | undefined {
 
 export const PLAN_NAME: Record<string, string> = { free: '個人（免費）', team: '團隊', company: '公司' };
 
+export const PLATE_TYPE: Record<string, string> = { SINGLE: '單牌', DUAL: '兩地牌', TRIPLE: '三地牌' };
+
 export const ORDER_STATUS: Record<string, string> = {
   OPEN: '待搶',
   ASSIGNED: '已派',

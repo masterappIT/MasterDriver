@@ -14,7 +14,7 @@ import { CommissionService, COMMISSION_EXEMPT_FEATURE } from '../billing/commiss
 import { CreditsService } from '../billing/credits.service';
 import { apiError } from '../common/errors';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
-import { driverPriceOf, passengerPriceOf, marginOf, orderInclude } from '../orders/order-view';
+import { driverPriceOf, isSelfDriven, passengerPriceOf, marginOf, orderInclude } from '../orders/order-view';
 import { PrismaService } from '../prisma.service';
 import type { AdminUser } from './admin-auth.service';
 import { AuditService, PAGE_SIZE } from './audit.service';
@@ -22,6 +22,9 @@ import { AuditService, PAGE_SIZE } from './audit.service';
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Sales can see who is active but not passengers' contact details. */
 const canSeePassengers = (role: AdminRole) => role !== 'SALES';
+
+/** A trip with a driver (or done) whose fare the dispatcher has not marked as received. */
+const UNPAID: Prisma.OrderWhereInput = { status: { in: ['ASSIGNED', 'COMPLETED'] }, paidAt: null };
 
 /** Start of today in Hong Kong (UTC+8), as a UTC instant. */
 function startOfHongKongDay(now: Date) {
@@ -44,7 +47,7 @@ export class AdminDataService {
   async dashboard(now = new Date()) {
     const today = startOfHongKongDay(now);
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-    const [users, newUsers, ordersToday, ordersWeek, byStatus, claimsWeek, dispatchers, credits, fee, devLogin, freePeriods, supportWaiting] =
+    const [users, newUsers, ordersToday, ordersWeek, byStatus, claimsWeek, dispatchers, credits, fee, devLogin, freePeriods, supportWaiting, unpaid, unsettled, bookingsWeek, bookingsPending] =
       await Promise.all([
         this.prisma.user.count(),
         this.prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
@@ -61,6 +64,10 @@ export class AdminDataService {
           select: { name: true, endsAt: true },
         }),
         this.prisma.supportConversation.count({ where: { waiting: true } }),
+        this.prisma.order.count({ where: { ...UNPAID, status: 'COMPLETED' } }),
+        this.prisma.order.count({ where: this.unsettled() }),
+        this.prisma.bookingRequest.count({ where: { createdAt: { gte: weekAgo } } }),
+        this.prisma.bookingRequest.count({ where: { status: 'PENDING' } }),
       ]);
     return {
       users: { total: users, newThisWeek: newUsers },
@@ -76,8 +83,17 @@ export class AdminDataService {
       developmentLoginEnabled: devLogin?.enabled ?? false,
       /** 客服 conversations whose last message has no reply yet. */
       supportWaiting,
+      /** Finished trips still waiting on the dispatcher's own marks; the platform handles no money. */
+      money: { unpaidCompleted: unpaid, unsettledCompleted: unsettled },
+      /** 名片頁 bookings: sent in the last 7 days, and still waiting for the driver's answer. */
+      bookings: { thisWeek: bookingsWeek, pending: bookingsPending },
       freePeriods: freePeriods.map((policy) => ({ name: policy.name, endsAt: policy.endsAt?.toISOString() ?? null })),
     };
+  }
+
+  /** A finished trip driven by someone else whose account the dispatcher has not marked as settled. */
+  private unsettled(): Prisma.OrderWhereInput {
+    return { status: 'COMPLETED', settledAt: null, NOT: { claimedById: { equals: this.prisma.order.fields.dispatcherId } } };
   }
 
   // ------------------------------------------------------------------ users
@@ -94,7 +110,8 @@ export class AdminDataService {
         skip: (query.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
         include: {
-          profile: { select: { name: true, hkPlate: true, mainlandPlate: true } },
+          profile: { select: { name: true, plateType: true, hkPlate: true, macauPlate: true, mainlandPlate: true } },
+          profilePage: { select: { published: true } },
           creditAccount: { select: { balanceMinor: true } },
           _count: { select: { dispatchedOrders: true, claimedOrders: true } },
         },
@@ -108,7 +125,9 @@ export class AdminDataService {
         id: user.id,
         phone: `${user.countryCode} ${user.phone}`,
         name: user.profile?.name ?? null,
-        plates: [user.profile?.hkPlate, user.profile?.mainlandPlate].filter(Boolean),
+        plates: [user.profile?.hkPlate, user.profile?.macauPlate, user.profile?.mainlandPlate].filter(Boolean),
+        plateType: user.profile?.plateType ?? null,
+        pagePublished: user.profilePage?.published ?? false,
         dispatched: user._count.dispatchedOrders,
         claimed: user._count.claimedOrders,
         credits: (user.creditAccount?.balanceMinor ?? 0) / 100,
@@ -125,7 +144,8 @@ export class AdminDataService {
         subscriptions: { orderBy: { createdAt: 'desc' } },
         entitlementOverrides: { orderBy: { createdAt: 'desc' } },
         usages: { orderBy: { period: 'desc' }, take: 12 },
-        _count: { select: { dispatchedOrders: true, claimedOrders: true } },
+        profilePage: { select: { code: true, published: true, wechatId: true, whatsapp: true, _count: { select: { photos: true, bookings: true } } } },
+        _count: { select: { dispatchedOrders: true, claimedOrders: true, paymentMethods: true } },
       },
     });
     if (!user) throw apiError(HttpStatus.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
@@ -143,6 +163,17 @@ export class AdminDataService {
       createdAt: user.createdAt.toISOString(),
       profile: user.profile,
       counts: { dispatched: user._count.dispatchedOrders, claimed: user._count.claimedOrders },
+      /** 名片頁, as the driver set it up; null when they never opened the editor. */
+      profilePage: user.profilePage && {
+        code: user.profilePage.code,
+        published: user.profilePage.published,
+        wechatId: user.profilePage.wechatId || null,
+        whatsapp: user.profilePage.whatsapp || null,
+        photos: user.profilePage._count.photos,
+        bookings: user.profilePage._count.bookings,
+      },
+      /** 收款方式: how many the user has set up; the accounts and QR codes themselves stay with the user. */
+      paymentMethods: user._count.paymentMethods,
       credits,
       serviceFee,
       entitlements: { orderCreate, commissionExempt },
@@ -240,6 +271,7 @@ export class AdminDataService {
     const q = query.q;
     const where: Prisma.OrderWhereInput = {
       ...(query.status ? { status: query.status } : {}),
+      ...(query.money === 'UNPAID' ? UNPAID : query.money === 'UNSETTLED' ? this.unsettled() : {}),
       ...(q
         ? {
             OR: [
@@ -286,6 +318,11 @@ export class AdminDataService {
         claimedBy: person(order.claimedBy),
         claimAttempts: order._count.claims,
         passengerConfirmed: Boolean(order.passengerConfirmedAt),
+        selfDrive: isSelfDriven(order),
+        legIndex: order.legIndex,
+        /** The dispatcher's own marks; null while not marked. */
+        paidAt: order.paidAt?.toISOString() ?? null,
+        settledAt: order.settledAt?.toISOString() ?? null,
         createdAt: order.createdAt.toISOString(),
       })),
     };
@@ -328,6 +365,17 @@ export class AdminDataService {
       margin: marginOf(order),
       serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
       passenger: showPassenger ? { name: order.passengerName, contact: order.passengerContact } : null,
+      selfDrive: isSelfDriven(order),
+      inPool: order.inPool,
+      /** 接駁: this order's place in its trip. */
+      journey: order.legIndex === null ? null : { legIndex: order.legIndex, legCount: order.journeyHead?.journeyLegs.length ?? order.legIndex },
+      /** Minutes before pickup at which the driver sees the passenger's phone; null means as soon as claimed. */
+      contactRevealMinutes: order.contactRevealMinutes,
+      fromBooking: Boolean(order.booking),
+      /** The dispatcher's own marks and choices about money; the platform handles none of it. */
+      payment: { showPaymentMethods: order.showPaymentMethods, paidAt: iso(order.paidAt), settledAt: iso(order.settledAt) },
+      /** 行程群: only that there is one and of which kind; the way in stays with the people on the trip. */
+      tripGroup: ((group) => group && { platform: group.platform, expiresAt: iso(group.expiresAt) })(order.journeyHead?.tripGroup ?? order.tripGroup),
       dispatcher: {
         id: order.dispatcher.id,
         name: order.dispatcher.profile?.name ?? null,
