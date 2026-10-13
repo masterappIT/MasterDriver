@@ -19,7 +19,8 @@
     "test:api": "npm run build:shared && npm --workspace backend run test",
     "test:api:db": "npm run build:shared && npm --workspace backend run test:db",
     "verify:api": "npm run test:shared && npm run build:api && npm run test:api && npx prisma validate --schema prisma/schema.prisma",
-    "dev-login": "npm run build:shared && npm --workspace backend run dev-login --"
+    "dev-login": "npm run build:shared && npm --workspace backend run dev-login --",
+    "billing": "npm run build:shared && npm --workspace backend run billing --"
   },
   "allowScripts": {
     "prisma@6.19.3": true,

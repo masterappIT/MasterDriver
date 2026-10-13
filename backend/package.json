@@ -13,7 +13,8 @@
     "pretest:db": "npm run prisma:generate",
     "test:db": "tsx --test --test-concurrency=1 \"src/**/*.db-test.ts\"",
     "start": "node dist/main.js",
-    "dev-login": "tsx src/cli/development-login.ts"
+    "dev-login": "tsx src/cli/development-login.ts",
+    "billing": "tsx src/cli/billing.ts"
   },
   "dependencies": {
     "@masterdriver/shared": "0.1.0",

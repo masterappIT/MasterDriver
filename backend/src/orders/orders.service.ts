@@ -4,6 +4,8 @@ import { Prisma, type OrderStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
+import { CommissionService } from '../billing/commission.service';
+import { CreditsService } from '../billing/credits.service';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
 import { PrismaService } from '../prisma.service';
 import { orderInclude, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
@@ -23,15 +25,20 @@ export class OrdersService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(EntitlementsService) private readonly entitlements: EntitlementsService,
+    @Inject(CommissionService) private readonly commission: CommissionService,
+    @Inject(CreditsService) private readonly credits: CreditsService,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   async create(userId: string, input: CreateOrderInput, now = new Date()) {
     for (let attempt = 0; ; attempt += 1) {
       try {
+        // Quota, order and service fee succeed or fail together: with too few
+        // credits nothing is created and no quota is used.
         const order = await this.prisma.$transaction(async (tx) => {
           await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
-          return tx.order.create({
+          const fee = await this.commission.feeFor(tx, userId, now);
+          const created = await tx.order.create({
             data: {
               code: randomCode(ORDER_CODE_LENGTH),
               confirmCode: randomCode(CONFIRM_CODE_LENGTH),
@@ -48,12 +55,15 @@ export class OrdersService {
               passengerPriceMinor: toMinor(input.passengerPrice),
               passengerCurrency: input.passengerPrice?.currency ?? input.driverPrice?.currency ?? 'HKD',
               showPassengerPrice: input.showPassengerPrice,
+              commissionMinor: fee > 0 ? fee : null,
               notes: input.notes,
               passengerName: input.passengerName,
               passengerContact: input.passengerContact,
             },
             include: orderInclude,
           });
+          if (fee > 0) await this.credits.charge(tx, userId, created.id, fee);
+          return created;
         });
         return this.withShareTexts(order);
       } catch (error) {
@@ -117,8 +127,11 @@ export class OrdersService {
     return this.claimResult(result, code, userId);
   }
 
+  /** Cancelling returns the service fee, in the same transaction. */
   async cancel(userId: string, id: string, now = new Date()) {
-    return this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher');
+    return this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', (tx) =>
+      this.credits.refundOrder(tx, id),
+    );
   }
 
   /** "改派": take the order back from the driver and open it for claiming again. */
@@ -190,10 +203,15 @@ export class OrdersService {
     from: OrderStatus[],
     data: Prisma.OrderUncheckedUpdateManyInput,
     who: 'dispatcher' | 'participant',
+    afterChange?: (tx: Prisma.TransactionClient) => Promise<void>,
   ) {
     const owner: Prisma.OrderWhereInput =
       who === 'dispatcher' ? { dispatcherId: userId } : { OR: [{ dispatcherId: userId }, { claimedById: userId }] };
-    const updated = await this.prisma.order.updateMany({ where: { id, status: { in: from }, ...owner }, data });
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.order.updateMany({ where: { id, status: { in: from }, ...owner }, data });
+      if (result.count === 1 && afterChange) await afterChange(tx);
+      return result;
+    });
     if (updated.count === 0) {
       const exists = await this.prisma.order.count({ where: { id, ...owner } });
       throw exists ? this.invalidStatus() : this.notFound();

@@ -34,6 +34,17 @@ API 在 `http://localhost:3020/api`，健康檢查為 `GET /api/health`。
 1. **開發模式登入**（建議）：`npm run dev-login -- --on` 開啟後，所有號碼都用指定碼登入（預設 `000000`，可用 `--code=123456` 更換）。狀態只顯示開關，不顯示驗證碼。規則見 `.github/instructions/phone-login-development-mode.instructions.md`。
 2. **簡訊碼印在日誌**：`.env` 的 `DEV_LOG_OTP=true` 時，未開啟開發模式的簡訊碼會印在 API 日誌。正式環境（`NODE_ENV=production`）一律無效。
 
+## 平台服務費與點數（後台完成前用指令）
+
+```bash
+npm run billing -- --status
+npm run billing -- --fee-on --fee=5
+npm run billing -- --fee-off
+npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快 #123"
+```
+
+服務費預設關閉。開啟後只向派單者收，發單時扣、取消退回；團隊、公司方案與上線全站免費期免收（本機 seed 已建立上線免費期，所以本機開啟後仍會顯示免收）。
+
 ## API 一覽
 
 | 方法與路徑 | 登入 | 用途 |
@@ -52,6 +63,7 @@ API 在 `http://localhost:3020/api`，健康檢查為 `GET /api/health`。
 | `POST /api/orders/:id/complete` | 要 | 完成（發單者或接單司機） |
 | `GET /api/o/:code` | 可選 | 搶單頁；只有發單者和接單司機看得到乘客資料 |
 | `POST /api/o/:code/claim` | 要 | 搶單，先到先得；回傳 `WON` 或 `LOST` |
+| `GET /api/me/credits` | 要 | 點數餘額、最近紀錄、目前每單服務費（是否免收） |
 | `GET /api/c/:confirmCode` | — | 乘客確認頁（不含司機價；乘客價只在發單者選擇顯示時出現） |
 | `POST /api/c/:confirmCode/confirm` | — | 乘客按確認 |
 

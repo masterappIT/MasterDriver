@@ -3,6 +3,8 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PrismaClient } from '../../generated/prisma';
 import { AuthService } from '../auth/auth.service';
+import { CommissionService } from '../billing/commission.service';
+import { CreditsService } from '../billing/credits.service';
 import { DevelopmentLoginService } from '../auth/development-login.service';
 import type { SmsProvider } from '../auth/sms';
 import { loadConfig } from '../config';
@@ -15,6 +17,9 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'CreditEntry',
+  'CreditAccount',
+  'CommissionSetting',
   'OrderClaim',
   'Order',
   'Usage',
@@ -64,13 +69,17 @@ export async function setupDatabase() {
   const sms = new CapturingSms();
   const developmentLogin = new DevelopmentLoginService(prisma, config);
   const entitlements = new EntitlementsService(prisma);
+  const commission = new CommissionService(prisma, entitlements);
+  const credits = new CreditsService(prisma);
   return {
     prisma,
     sms,
     developmentLogin,
     auth: new AuthService(prisma, config, sms, developmentLogin),
     entitlements,
-    orders: new OrdersService(prisma, entitlements, config),
+    commission,
+    credits,
+    orders: new OrdersService(prisma, entitlements, commission, credits, config),
     async reset() {
       sms.sent = [];
       await prisma.$executeRawUnsafe(`TRUNCATE ${TABLES.map((table) => `"${table}"`).join(', ')} CASCADE`);

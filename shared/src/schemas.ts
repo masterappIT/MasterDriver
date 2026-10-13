@@ -97,6 +97,15 @@ export const developmentLoginUpdateSchema = z
   .refine((value) => value.enabled !== undefined || value.code !== undefined, { message: 'NOTHING_TO_UPDATE' });
 export type DevelopmentLoginUpdate = z.infer<typeof developmentLoginUpdateSchema>;
 
+/** Admin update of the platform service fee. The fee is a decimal amount per order. */
+export const commissionUpdateSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    fee: z.number().min(0).max(10_000).optional(),
+  })
+  .refine((value) => value.enabled !== undefined || value.fee !== undefined, { message: 'NOTHING_TO_UPDATE' });
+export type CommissionUpdate = z.infer<typeof commissionUpdateSchema>;
+
 export const orderListQuerySchema = z.object({
   role: z.enum(['dispatched', 'claimed']),
 });

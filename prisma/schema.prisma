@@ -29,6 +29,8 @@ model User {
   subscriptions         Subscription[]
   entitlementOverrides  EntitlementOverride[]
   usages                Usage[]
+  creditAccount         CreditAccount?
+  creditEntries         CreditEntry[]
 
   @@unique([countryCode, phone])
 }
@@ -147,6 +149,9 @@ model Order {
   passengerCurrency    Currency    @default(HKD)
   /// Whether the passenger-confirmation page shows the passenger price.
   showPassengerPrice   Boolean     @default(false)
+  /// Platform service fee charged to the dispatcher's credits when the order
+  /// was created; refunded if the order is cancelled. Null when no fee applied.
+  commissionMinor      Int?
   notes                String?
   passengerName        String?
   /// Visible only to the dispatcher and the driver who claimed the order.
@@ -312,4 +317,58 @@ model BillingAudit {
   action    String
   payload   Json
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Platform service fee (抽水) and prepaid credits. The fee is a fixed amount per
+// order charged to the dispatcher, never to the driver who claims it. It is a
+// fee for using the tool, not a share of the fare: the platform never handles
+// fares.
+// ---------------------------------------------------------------------------
+
+/// Site-wide switch and amount, set in the platform admin. Off by default.
+model CommissionSetting {
+  id        String   @id @default("default")
+  enabled   Boolean  @default(false)
+  feeMinor  Int      @default(0)
+  currency  Currency @default(HKD)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model CreditAccount {
+  userId       String   @id
+  balanceMinor Int      @default(0)
+  currency     Currency @default(HKD)
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum CreditEntryType {
+  TOPUP
+  CHARGE
+  REFUND
+  ADJUST
+}
+
+/// Every change to a balance. amountMinor is signed: top-ups and refunds are
+/// positive, charges negative. An order is charged and refunded at most once.
+model CreditEntry {
+  id                String          @id @default(cuid())
+  userId            String
+  type              CreditEntryType
+  amountMinor       Int
+  balanceAfterMinor Int
+  orderId           String?
+  /// For top-ups: STRIPE, ALIPAY_HK or MANUAL.
+  source            String?
+  note              String?
+  createdBy         String?
+  createdAt         DateTime        @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, type])
+  @@index([userId, createdAt])
 }

@@ -18,6 +18,7 @@ const features = [
   { key: 'order.directAssign', name: '直接指派、報名後挑選', kind: 'SWITCH' as const },
   { key: 'stats.export', name: '統計匯出', kind: 'SWITCH' as const },
   { key: 'brand.removeMark', name: '去除工具標記', kind: 'SWITCH' as const },
+  { key: 'commission.exempt', name: '免平台服務費', kind: 'SWITCH' as const },
 ];
 
 // Quotas are placeholders until pricing is decided (DECISIONS item 3 and 5); edit them in the admin.
@@ -28,7 +29,13 @@ const plans: { key: string; name: string; rank: number; isDefault: boolean; gran
     name: '團隊',
     rank: 1,
     isDefault: false,
-    grants: { 'order.create': 500, 'team.manage': null, 'order.directAssign': null, 'brand.removeMark': null },
+    grants: {
+      'order.create': 500,
+      'team.manage': null,
+      'order.directAssign': null,
+      'brand.removeMark': null,
+      'commission.exempt': null,
+    },
   },
   {
     key: 'company',
@@ -41,6 +48,7 @@ const plans: { key: string; name: string; rank: number; isDefault: boolean; gran
       'order.directAssign': null,
       'stats.export': null,
       'brand.removeMark': null,
+      'commission.exempt': null,
     },
   },
 ];

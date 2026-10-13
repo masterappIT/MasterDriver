@@ -88,6 +88,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     ...(viewer === 'dispatcher'
       ? {
           passengerPrice: passengerPriceOf(order),
+          serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
           showPassengerPrice: order.showPassengerPrice,
           margin: marginOf(order),
           links: linksOf(order, baseUrl),
