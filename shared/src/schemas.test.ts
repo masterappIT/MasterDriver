@@ -82,6 +82,23 @@ test('plates are stored in upper case and in one format', () => {
   assert.equal(parsed.mainlandPlate, '粵Z·1234港');
 });
 
+test('a driver may give a 港澳 number and a 內地 number; each must be a mobile of that side', () => {
+  const single = { ...driver, plateType: 'SINGLE', hkPlate: 'AB1234' };
+  const parsed = driverProfileSchema.parse({ ...single, hkMacauPhone: '+853 6123 4567', mainlandPhone: '+8613812345678' });
+  assert.equal(parsed.hkMacauPhone, '+853 61234567');
+  assert.equal(parsed.mainlandPhone, '+86 13812345678');
+  const blank = driverProfileSchema.parse({ ...single, hkMacauPhone: '', mainlandPhone: undefined });
+  assert.equal(blank.hkMacauPhone, undefined);
+  assert.equal(blank.hidePlates, false);
+  const codes = (input: object) => {
+    const result = driverProfileSchema.safeParse(input);
+    return result.success ? [] : result.error.issues.map((issue) => issue.message);
+  };
+  assert.deepEqual(codes({ ...single, hkMacauPhone: '+86 13812345678' }), ['HK_MACAU_PHONE_INVALID']);
+  assert.deepEqual(codes({ ...single, mainlandPhone: '+852 91234567' }), ['MAINLAND_PHONE_INVALID']);
+  assert.deepEqual(codes({ ...single, hkMacauPhone: '+852 2123 4567' }), ['HK_MACAU_PHONE_INVALID']);
+});
+
 test('a driver profile needs the plates its plate type carries, and a 車型', () => {
   const codes = (input: object) => {
     const result = driverProfileSchema.safeParse(input);

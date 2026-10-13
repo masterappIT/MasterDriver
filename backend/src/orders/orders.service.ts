@@ -28,6 +28,8 @@ import { claimedShareText, dispatchShareText, passengerShareText } from './share
 const ORDER_CODE_LENGTH = 10;
 const CONFIRM_CODE_LENGTH = 12;
 const LIST_LIMIT = 50;
+/** 客人通訊錄 reads this many of the dispatcher's latest orders. */
+const PASSENGER_BOOK_ORDERS = 2000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type ClaimResult = 'WON' | 'LOST';
@@ -115,6 +117,32 @@ export class OrdersService {
         if (!collided || attempt >= 2) throw error;
       }
     }
+  }
+
+  /**
+   * 客人通訊錄: the passengers of the orders this user put out, one line per phone, most recent
+   * first. Read from their own orders; nothing is kept apart, and it is theirs alone: a driver
+   * who took an order never gets its passenger here.
+   */
+  async passengers(userId: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { dispatcherId: userId },
+      orderBy: { pickupAt: 'desc' },
+      take: PASSENGER_BOOK_ORDERS,
+      select: { id: true, journeyId: true, status: true, pickupAt: true, origin: true, destination: true, passengerName: true, passengerContact: true },
+    });
+    const book = new Map<string, { contact: string; name: string | null; trips: Set<string>; lastPickupAt: string; lastRoute: string }>();
+    for (const order of orders) {
+      const entry =
+        book.get(order.passengerContact) ??
+        { contact: order.passengerContact, name: null, trips: new Set<string>(), lastPickupAt: order.pickupAt.toISOString(), lastRoute: `${order.origin} → ${order.destination}` };
+      // Newest first: the first name seen is the latest one given for this phone.
+      entry.name ??= order.passengerName;
+      // A 接駁 trip is one trip; a cancelled order is not a trip taken.
+      if (order.status !== 'CANCELLED') entry.trips.add(order.journeyId ?? order.id);
+      book.set(order.passengerContact, entry);
+    }
+    return [...book.values()].map(({ trips, ...entry }) => ({ ...entry, trips: trips.size }));
   }
 
   async list(userId: string, query: OrderListQuery) {

@@ -10,6 +10,8 @@ import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { PLATE_NAMES, type PlateRegion } from '../journey';
 import AppIcon from '../components/AppIcon.vue';
+import BottomSheet from '../components/BottomSheet.vue';
+import { pickedPassenger, type BookPassenger } from '../passenger-pick';
 
 interface PastOrder {
   id: string;
@@ -313,6 +315,21 @@ const moreSummary = computed(() =>
   ].join(' · '),
 );
 
+/** 客人通訊錄: pick a passenger of an earlier order instead of typing the name and phone again. */
+const book = ref<BookPassenger[] | null>(null);
+const pickingPassenger = ref(false);
+
+async function openBook() {
+  pickingPassenger.value = true;
+  if (!book.value) book.value = await api<BookPassenger[]>('GET', '/orders/passengers').catch(() => []);
+}
+
+function usePassenger(passenger: BookPassenger) {
+  form.passengerName = passenger.name ?? '';
+  carryContact(passenger.contact);
+  pickingPassenger.value = false;
+}
+
 /** From 首頁「貼群文字」: start with the cursor in the one-line box, ready to paste. */
 const lineInput = ref<HTMLTextAreaElement | null>(null);
 
@@ -332,6 +349,8 @@ onMounted(async () => {
   }
   if (afterId) await loadPrevious();
   else if (bookingId) await loadBooking();
+  else if (pickedPassenger.value) usePassenger(pickedPassenger.value);
+  pickedPassenger.value = null;
 });
 </script>
 
@@ -498,7 +517,10 @@ onMounted(async () => {
     </section>
 
     <section class="card">
-      <span class="section-label">{{ t('乘客') }}</span>
+      <div class="new-order__passenger-head">
+        <span class="section-label">{{ t('乘客') }}</span>
+        <button v-if="past.length" class="new-order__book" type="button" @click="openBook">{{ t('從通訊錄選') }}</button>
+      </div>
       <input v-model="form.passengerName" class="line-input new-order__name" maxlength="40" :aria-label="t('乘客稱呼')" :placeholder="t('稱呼（選填），例如：王小姐')" />
       <div class="line-field new-order__last">
         <label for="passenger-phone">{{ t('電話') }}</label>
@@ -566,6 +588,18 @@ onMounted(async () => {
     <div class="action-bar">
       <button class="button block large" type="submit" :disabled="busy || (afterId !== '' && !previous)">{{ afterId ? t('出單（接駁段）') : t('出單') }}</button>
     </div>
+
+    <BottomSheet v-if="pickingPassenger" :title="t('從通訊錄選乘客')" @close="pickingPassenger = false">
+      <p v-if="!book" class="muted">{{ t('載入中…') }}</p>
+      <p v-else-if="book.length === 0" class="muted">{{ t('還沒有客人。') }}</p>
+      <div v-else class="new-order__book-list">
+        <button v-for="passenger in book" :key="passenger.contact" class="new-order__book-item" type="button" @click="usePassenger(passenger)">
+          <strong>{{ passenger.name ? t(passenger.name) : t('沒有稱呼') }}</strong>
+          <span>{{ passenger.contact }}</span>
+          <small>{{ t(passenger.lastRoute) }}</small>
+        </button>
+      </div>
+    </BottomSheet>
   </form>
 </template>
 
@@ -748,6 +782,48 @@ onMounted(async () => {
 }
 .new-order__more[open] .new-order__more-arrow {
   transform: rotate(90deg);
+}
+.new-order__passenger-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.new-order__book {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: var(--font-label);
+  font-weight: 600;
+  cursor: pointer;
+}
+.new-order__book-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.new-order__book-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--space-md) 0;
+  border: none;
+  border-top: 1px solid var(--color-divider);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.new-order__book-item:first-child {
+  border-top: none;
+}
+.new-order__book-item small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
 }
 .new-order__more[open] summary {
   margin-bottom: var(--space-sm);

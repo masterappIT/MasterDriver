@@ -395,7 +395,9 @@ test('a driver sees the dispatcher\'s 名片頁 before claiming, and each side g
   assert.equal('dispatcherPhone' in before, false);
 
   const won = (await ctx.orders.claim(created.code, driver)).order;
-  assert.deepEqual(won.dispatcherContact, { wechatId: 'wx-dispatcherpage', whatsapp: '+852 6000 0000' });
+  assert.equal(won.dispatcherContact?.wechatId, 'wx-dispatcherpage');
+  assert.equal(won.dispatcherContact?.whatsapp, '+852 6000 0000');
+  assert.deepEqual(won.dispatcherContact?.phones, [won.dispatcherPhone]);
   const mine = await ctx.orders.getForParticipant(dispatcher, created.id);
   assert.equal(mine.driver?.wechatId, 'wx-driverpage');
   assert.equal(mine.driver?.whatsapp, '+852 6000 0000');
@@ -414,8 +416,48 @@ test('a driver sees the dispatcher\'s 名片頁 before claiming, and each side g
   assert.equal(open.dispatcherPageCode, null);
   assert.equal('dispatcherContact' in open, false);
   const taken = (await ctx.orders.claim(quiet.code, driver)).order;
-  assert.deepEqual(taken.dispatcherContact, { wechatId: 'wx-hiddenpage', whatsapp: '+852 6000 0000' });
+  assert.equal(taken.dispatcherContact?.wechatId, 'wx-hiddenpage');
   assert.equal(taken.dispatcherPageCode, null);
+});
+
+test('客人通訊錄 lists the passengers of the orders someone put out, never those of orders they took', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const first = await ctx.orders.create(dispatcher, { ...sampleOrder, passengerName: '王小姐' });
+  await ctx.orders.create(dispatcher, { ...macauLeg, afterOrderId: first.id });
+  const cancelled = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.cancel(dispatcher, cancelled.id);
+  await ctx.orders.create(dispatcher, { ...sampleOrder, passengerName: '陳先生', passengerContact: '+86 13800002222' });
+  await ctx.orders.claim(first.code, driver);
+
+  const book = await ctx.orders.passengers(dispatcher);
+  assert.equal(book.length, 2);
+  const regular = book.find((entry) => entry.contact === '+852 9876 5432');
+  assert.equal(regular?.trips, 1, 'a 接駁 trip counts once and a cancelled order not at all');
+  assert.ok(regular?.lastRoute.includes('→'));
+  assert.equal(book.find((entry) => entry.contact === '+86 13800002222')?.name, '陳先生');
+  assert.deepEqual(await ctx.orders.passengers(driver), [], 'the driver who took the order gets nothing');
+});
+
+test('both of a driver\'s numbers reach the dispatcher and the passenger; hidden plates stay from the passenger only', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const signIn = await ctx.prisma.user.findUniqueOrThrow({ where: { id: driver } });
+  await ctx.prisma.driverProfile.update({
+    where: { userId: driver },
+    data: { hkMacauPhone: `+852 ${signIn.phone}`, mainlandPhone: '+86 13800001111', hidePlates: true },
+  });
+  const created = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(created.code, driver);
+
+  const mine = await ctx.orders.getForParticipant(dispatcher, created.id);
+  assert.deepEqual(mine.driver?.phones, [`+852 ${signIn.phone}`, '+86 13800001111'], 'the sign-in number is not listed twice');
+  assert.ok(mine.driver?.hkPlate, 'the dispatcher still sees the plates');
+
+  const passenger = await ctx.orders.getForPassenger(created.links.passengerConfirm.split('/c/')[1]);
+  assert.deepEqual(passenger.driver?.phones, [`+852 ${signIn.phone}`, '+86 13800001111']);
+  assert.equal(passenger.driver?.platesHidden, true);
+  assert.equal(passenger.driver?.hkPlate, null);
 });
 
 test('once the trip is over the driver no longer gets the passenger phone; the dispatcher always does', async () => {

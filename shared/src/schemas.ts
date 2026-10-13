@@ -40,6 +40,28 @@ const plate = optionalText(16);
  * (shared/src/vehicle-plate.ts). Plates are stored normalized; a plate the
  * chosen type does not carry is dropped.
  */
+/**
+ * One of a driver's two contact numbers, typed with its code: "+852 91234567". `codes` are the
+ * codes that side of the border uses. Blank means not given. Stored as "+852 91234567".
+ */
+const contactPhone = (codes: readonly (typeof COUNTRY_CODES)[number][], message: string) =>
+  z
+    .string()
+    .trim()
+    .max(24)
+    .optional()
+    .transform((value, context) => {
+      if (!value) return undefined;
+      const typed = normalizePhone(value);
+      const code = codes.find((item) => typed.startsWith(item));
+      const number = code ? typed.slice(code.length) : '';
+      if (!code || !isValidMobile(code, number)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message });
+        return z.NEVER;
+      }
+      return `${code} ${number}`;
+    });
+
 export const driverProfileSchema = z
   .object({
     name: text(30),
@@ -52,6 +74,11 @@ export const driverProfileSchema = z
     vehicleType: text(30),
     seats: z.number().int().min(1).max(60).optional(),
     color: optionalText(20),
+    /** 港澳號碼 and 內地號碼: how to reach the driver on each side; neither is required. */
+    hkMacauPhone: contactPhone(['+852', '+853'], 'HK_MACAU_PHONE_INVALID'),
+    mainlandPhone: contactPhone(['+86'], 'MAINLAND_PHONE_INVALID'),
+    /** The driver's plates are not shown to passengers. */
+    hidePlates: z.boolean().default(false),
   })
   .transform((value) => ({ ...value, ...normalizeVehiclePlates(value) }))
   .superRefine((value, context) => {

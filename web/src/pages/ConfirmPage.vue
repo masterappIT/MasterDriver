@@ -23,6 +23,10 @@ interface TripDriver {
   vehicleType: string | null;
   color: string | null;
   phone: string;
+  /** Every number of the driver: the first is `phone`, then their other side of the border. */
+  phones: string[];
+  /** The driver chose not to show their plates to passengers. */
+  platesHidden?: boolean;
   /** The driver's vehicle photos, when they uploaded any. */
   photos: string[];
 }
@@ -53,7 +57,7 @@ interface PassengerView {
   price: { amount: number; currency: string } | null;
   dispatcherName: string | null;
   /** Who arranged the trip and how to reach them; null when they are the driver. */
-  dispatcher: { name: string | null; phone: string; wechatId: string | null; whatsapp: string | null } | null;
+  dispatcher: { name: string | null; phone: string; phones: string[]; wechatId: string | null; whatsapp: string | null } | null;
   passengerConfirmedAt: string | null;
   /** 行程群: the group made for this trip, when the person who arranged it gave one. */
   tripGroup: TripGroup | null;
@@ -125,13 +129,15 @@ onMounted(load);
             <div v-if="leg.driver" class="confirm-page__driver">
               <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>
               <span class="muted">{{ [leg.driver.vehicleType, leg.driver.color, plateKind(leg.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
-              <div class="confirm-page__plates">
+              <p v-if="leg.driver.platesHidden" class="confirm-page__no-plate">{{ t('司機沒有公開車牌。上車前請先打給司機，或向為你安排的人確認是哪一輛車。') }}</p>
+              <div v-else class="confirm-page__plates">
                 <PlateTag :hk="leg.driver.hkPlate" :macau="leg.driver.macauPlate" :mainland="leg.driver.mainlandPlate" />
               </div>
               <div v-if="leg.driver.photos.length" class="confirm-page__photos">
                 <img v-for="photo in leg.driver.photos" :key="photo" :src="photo" :alt="t('司機的車')" loading="lazy" />
               </div>
               <a class="button secondary block" :href="`tel:${leg.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
+              <ContactLines :phones="leg.driver.phones.slice(1)" />
             </div>
             <p v-else class="muted">{{ t('司機安排中，安排好後這裡會顯示司機和車牌。') }}</p>
           </section>
@@ -151,13 +157,15 @@ onMounted(load);
           <div class="confirm-page__driver">
             <strong>{{ trip.driver.name ? t(trip.driver.name) : t('司機') }}</strong>
             <span class="muted">{{ [trip.driver.vehicleType, trip.driver.color, plateKind(trip.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
-            <div class="confirm-page__plates">
+            <p v-if="trip.driver.platesHidden" class="confirm-page__no-plate">{{ t('司機沒有公開車牌。上車前請先打給司機，或向為你安排的人確認是哪一輛車。') }}</p>
+            <div v-else class="confirm-page__plates">
               <PlateTag :hk="trip.driver.hkPlate" :macau="trip.driver.macauPlate" :mainland="trip.driver.mainlandPlate" />
             </div>
             <div v-if="trip.driver.photos.length" class="confirm-page__photos">
               <img v-for="photo in trip.driver.photos" :key="photo" :src="photo" :alt="t('司機的車')" loading="lazy" />
             </div>
             <a class="button secondary block" :href="`tel:${trip.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
+            <ContactLines :phones="trip.driver.phones.slice(1)" />
           </div>
         </section>
         <section v-else-if="trip.status === 'OPEN'" class="card muted">{{ t('司機安排中，安排好後這裡會顯示司機和車牌。') }}</section>
@@ -171,7 +179,7 @@ onMounted(load);
           <span class="muted">{{ trip.dispatcher.phone }}</span>
         </div>
         <a class="button secondary block" :href="`tel:${trip.dispatcher.phone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電') }}</a>
-        <ContactLines class="confirm-page__arranger-more" :wechat-id="trip.dispatcher.wechatId" :whatsapp="trip.dispatcher.whatsapp" />
+        <ContactLines class="confirm-page__arranger-more" :phones="trip.dispatcher.phones.slice(1)" :wechat-id="trip.dispatcher.wechatId" :whatsapp="trip.dispatcher.whatsapp" />
       </section>
 
       <section v-if="trip.tripGroup && trip.status !== 'CANCELLED'" class="card">
@@ -243,6 +251,14 @@ onMounted(load);
   object-fit: cover;
   border-radius: var(--radius-input);
   background: var(--color-tint);
+}
+.confirm-page__no-plate {
+  margin: var(--space-xs) 0 var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-input);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-size: var(--font-label);
 }
 .confirm-page__arranger {
   display: flex;

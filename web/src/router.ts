@@ -29,6 +29,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { app: true } },
   { path: '/app/me', component: () => import('./pages/MePage.vue'), meta: { app: true } },
   { path: '/app/profile-page', component: () => import('./pages/MyProfilePagePage.vue'), meta: { app: true } },
+  { path: '/app/passengers', component: () => import('./pages/PassengersPage.vue'), meta: { app: true } },
   { path: '/app/payment-methods', component: () => import('./pages/PaymentMethodsPage.vue'), meta: { app: true } },
   { path: '/app/bookings', component: () => import('./pages/BookingsPage.vue'), meta: { app: true } },
   { path: '/app/bookings/:id', component: () => import('./pages/BookingDetailPage.vue'), meta: { app: true } },

@@ -13,7 +13,9 @@ const claimerSelect = { select: { countryCode: true, phone: true, profile: true,
 const tripGroupSelect = { select: { platform: true, inviteUrl: true, qrMime: true, expiresAt: true, updatedAt: true } } as const;
 
 export const orderInclude = {
-  dispatcher: { select: { countryCode: true, phone: true, profile: { select: { name: true } }, profilePage: contactPageSelect } },
+  dispatcher: {
+    select: { countryCode: true, phone: true, profile: { select: { name: true, hkMacauPhone: true, mainlandPhone: true } }, profilePage: contactPageSelect },
+  },
   claimedBy: claimerSelect,
   // 接駁: every leg of the trip, in order, through the trip's first leg.
   journeyHead: { include: { journeyLegs: { orderBy: { legIndex: 'asc' }, include: { claimedBy: claimerSelect } }, tripGroup: tripGroupSelect } },
@@ -69,6 +71,15 @@ function pageContactOf(page: ContactPage) {
   return { wechatId: page?.wechatId || null, whatsapp: page?.whatsapp || null };
 }
 
+/**
+ * Every number someone can be reached on: the one they sign in with first, then the 港澳 and
+ * 內地 numbers from their details, each once.
+ */
+function phonesOf(person: { countryCode: string; phone: string; profile: { hkMacauPhone: string | null; mainlandPhone: string | null } | null }) {
+  const signIn = `${person.countryCode} ${person.phone}`;
+  return [...new Set([signIn, person.profile?.hkMacauPhone, person.profile?.mainlandPhone].filter((phone): phone is string => Boolean(phone)))];
+}
+
 function driverOf(order: Pick<OrderWithPeople, 'claimedBy'>) {
   const claimer = order.claimedBy;
   if (!claimer) return null;
@@ -83,6 +94,8 @@ function driverOf(order: Pick<OrderWithPeople, 'claimedBy'>) {
     seats: profile?.seats ?? null,
     color: profile?.color ?? null,
     phone: `${claimer.countryCode} ${claimer.phone}`,
+    phones: phonesOf(claimer),
+    hidePlates: profile?.hidePlates ?? false,
     ...pageContactOf(claimer.profilePage),
     photoIds: claimer.profilePage?.photos.map((photo) => photo.id) ?? [],
   };
@@ -141,7 +154,7 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         destination: leg.destination,
         ...(viewer === 'dispatcher' ? { id: leg.id } : {}),
         ...(viewer !== 'other'
-          ? { driver: driver && (contactVisible ? driver : { ...driver, phone: null, wechatId: null, whatsapp: null }) }
+          ? { driver: driver && (contactVisible ? driver : { ...driver, phone: null, phones: [], wechatId: null, whatsapp: null }) }
           : {}),
       };
     }),
@@ -194,7 +207,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
           driver: driverOf(order),
           // Dispatchers publish their number in their group nickname; the winning driver gets it here.
           dispatcherPhone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
-          dispatcherContact: pageContactOf(order.dispatcher.profilePage),
+          dispatcherContact: { ...pageContactOf(order.dispatcher.profilePage), phones: phonesOf(order.dispatcher) },
           // 已結清: the dispatcher's mark, shown to the driver too. Nothing to settle on 這單我自己做.
           settledAt: isSelfDriven(order) ? null : (order.settledAt?.toISOString() ?? null),
           // 行程群: the passenger is in it, so the driver gets it when they may see the passenger's contact.
@@ -236,13 +249,16 @@ function passengerLeg(leg: JourneyLeg, confirmCode: string) {
     passengerConfirmedAt: leg.passengerConfirmedAt?.toISOString() ?? null,
     driver: driver && {
       name: driver.name,
-      hkPlate: driver.hkPlate,
-      macauPlate: driver.macauPlate,
-      mainlandPlate: driver.mainlandPlate,
+      // The driver may keep their plates from passengers; the page then says to ask before boarding.
+      platesHidden: driver.hidePlates,
+      hkPlate: driver.hidePlates ? null : driver.hkPlate,
+      macauPlate: driver.hidePlates ? null : driver.macauPlate,
+      mainlandPlate: driver.hidePlates ? null : driver.mainlandPlate,
       plateType: driver.plateType,
       vehicleType: driver.vehicleType,
       color: driver.color,
       phone: driver.phone,
+      phones: driver.phones,
       // The driver's vehicle photos, so the passenger knows the car; served only through this link.
       photos: driver.photoIds.map((id) => `/api/c/${confirmCode}/driver-photos/${id}`),
     },
@@ -297,6 +313,7 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
         : {
             name: order.dispatcher.profile?.name ?? null,
             phone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
+            phones: phonesOf(order.dispatcher),
             ...pageContactOf(order.dispatcher.profilePage),
           },
     passengerConfirmedAt: confirmed,

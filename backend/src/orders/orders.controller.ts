@@ -54,6 +54,12 @@ export class OrdersController {
     return this.orders.list(user.id, query);
   }
 
+  /** 客人通訊錄: the passengers of the orders this user put out. Declared before `:id`. */
+  @Get('passengers')
+  passengers(@CurrentUser() user: SessionUser) {
+    return this.orders.passengers(user.id);
+  }
+
   /** 接單池. Declared before `:id` so "pool" is not read as an order id. */
   @Get('pool')
   pool(@CurrentUser() user: SessionUser, @Query(new ZodPipe(poolQuerySchema)) query: PoolQuery) {

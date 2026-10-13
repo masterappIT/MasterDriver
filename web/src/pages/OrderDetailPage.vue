@@ -30,7 +30,11 @@ interface Driver {
   vehicleType: string | null;
   color: string | null;
   phone: string;
-  /** From the driver's 名片頁, when it is public. */
+  /** Every number of the driver; the first is `phone`. */
+  phones?: string[];
+  /** The driver keeps their plates from passengers. */
+  hidePlates?: boolean;
+  /** From the driver's 名片頁. */
   wechatId?: string | null;
   whatsapp?: string | null;
 }
@@ -53,7 +57,7 @@ interface Detail {
   dispatcherPhone?: string;
   /** The dispatcher's 名片頁, when it is public. */
   dispatcherPageCode?: string | null;
-  dispatcherContact?: { wechatId: string | null; whatsapp: string | null };
+  dispatcherContact?: { wechatId: string | null; whatsapp: string | null; phones?: string[] };
   claimedAt: string | null;
   passengerConfirmedAt: string | null;
   viewer: 'dispatcher' | 'driver';
@@ -611,7 +615,8 @@ watch(id, () => {
           <a class="button secondary" :href="`tel:${order.driver.phone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電司機') }}</a>
           <button class="button secondary" type="button" @click="copy(order.driver.phone, '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
-        <ContactLines v-if="isDispatcher && !selfDriven" class="detail__gap" :wechat-id="order.driver.wechatId" :whatsapp="order.driver.whatsapp" />
+        <ContactLines v-if="isDispatcher && !selfDriven" class="detail__gap" :phones="order.driver.phones?.slice(1)" :wechat-id="order.driver.wechatId" :whatsapp="order.driver.whatsapp" />
+        <p v-if="isDispatcher && !selfDriven && order.driver.hidePlates" class="hint detail__gap">{{ t('這位司機對乘客隱藏車牌：乘客確認頁不顯示車牌，會提醒乘客上車前先確認。') }}</p>
       </section>
 
       <!-- The driver who took the order: how to reach whoever put it out. -->
@@ -625,7 +630,7 @@ watch(id, () => {
           <a class="button secondary" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電出單者') }}</a>
           <button class="button secondary" type="button" @click="copy(order.dispatcherPhone, '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
-        <ContactLines class="detail__gap" :wechat-id="order.dispatcherContact?.wechatId" :whatsapp="order.dispatcherContact?.whatsapp" />
+        <ContactLines class="detail__gap" :phones="order.dispatcherContact?.phones?.slice(1)" :wechat-id="order.dispatcherContact?.wechatId" :whatsapp="order.dispatcherContact?.whatsapp" />
         <RouterLink v-if="order.dispatcherPageCode" class="button secondary block detail__gap" :to="`/p/${order.dispatcherPageCode}`">{{ t('看出單者的名片') }}</RouterLink>
       </section>
 

@@ -28,6 +28,9 @@ export class ProfileController {
       vehicleType: body.vehicleType,
       seats: body.seats ?? null,
       color: body.color ?? null,
+      hkMacauPhone: body.hkMacauPhone ?? null,
+      mainlandPhone: body.mainlandPhone ?? null,
+      hidePlates: body.hidePlates,
     };
     return this.prisma.driverProfile.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
   }

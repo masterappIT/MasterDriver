@@ -59,6 +59,14 @@ model DriverProfile {
   vehicleType      String?
   seats            Int?
   color            String?
+  /// The numbers to reach the driver on each side of the border, as typed in
+  /// the profile ("+852 91234567", "+86 13800001111"). Neither is verified by
+  /// SMS; the sign-in number is. Optional: not every driver has both.
+  hkMacauPhone     String?
+  mainlandPhone    String?
+  /// The driver chose not to show their plates to passengers. The dispatcher
+  /// still sees them; the passenger's page says to ask before boarding.
+  hidePlates       Boolean      @default(false)
   updatedAt        DateTime     @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

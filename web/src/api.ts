@@ -21,6 +21,11 @@ export interface Profile {
   vehicleType: string | null;
   seats: number | null;
   color: string | null;
+  /** 港澳號碼 and 內地號碼 as stored: "+852 91234567", "+86 13800001111". */
+  hkMacauPhone: string | null;
+  mainlandPhone: string | null;
+  /** The plates are not shown to passengers. */
+  hidePlates: boolean;
 }
 
 export const session = reactive<{ user: User | null; profile: Profile | null; checked: boolean }>({
@@ -109,6 +114,10 @@ export class ApiError extends Error {
       ? '手機號碼格式不正確'
       : messages.includes('INVALID_PASSENGER_PHONE')
         ? '乘客電話格式不正確：請選區號，香港和澳門填 8 位數字，內地填 11 位手機號碼'
+      : messages.includes('HK_MACAU_PHONE_INVALID')
+        ? '港澳號碼格式不正確：香港 8 位手機號碼，澳門 6 字頭 8 位'
+      : messages.includes('MAINLAND_PHONE_INVALID')
+        ? '內地號碼格式不正確：請填 11 位手機號碼'
       : messages.includes('WHATSAPP_INVITE_INVALID')
         ? 'WhatsApp 群連結應該是 https://chat.whatsapp.com/ 開頭'
         : messages.includes('QR_IMAGE_REQUIRED')

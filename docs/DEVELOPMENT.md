@@ -115,6 +115,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET /api/orders/pool?date=YYYY-MM-DD&q=地點` | 要 | 接單池：發單者勾選放進來、待搶且未到出發時間的單，不含自己發的；與搶單頁相同的資訊，不含乘客資料；最多 50 張。沒有司機資料時回 `PROFILE_REQUIRED` |
 | `GET /api/orders/:id` | 要 | 單的詳情（發單者或接單司機） |
 | `PATCH /api/orders/:id/pool` | 要 | 把單放進或取出接單池（發單者；只限待搶的單） |
+| `GET /api/orders/passengers` | 要 | 客人通訊錄：自己出過的單的乘客，一個電話一列（稱呼、搭過幾次、最近一次的時間與路線）；只讀自己出的單 |
 | `PATCH /api/orders/:id/trip-group`、`GET /api/orders/:id/trip-group/qr` | 要 | 行程群（出單者設定）：`platform` 為 `WHATSAPP`（加 `inviteUrl`）、`WECHAT`（加 `qrImage`）或 `null`（移除）；二維碼圖片給出單者與可看乘客電話的接單司機 |
 | `PATCH /api/orders/:id/settlement` | 要 | 已結清（出單者）：`settled` 把和接單司機的帳標記為已結清或改回未結清；只限已完成、由別的司機接的單；接駁各段各自標記；接單司機在單的資料看到 `settledAt` |
 | `PATCH /api/orders/:id/payment` | 要 | 收款（出單者）：`showPaymentMethods` 乘客確認頁是否顯示收款方式，`paid` 標記已收款或改回未收款；接駁行程整個一起改；已取消的單不行 |

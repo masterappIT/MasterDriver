@@ -103,6 +103,7 @@ onMounted(async () => {
         :detail="unread.bookings ? t(`${unread.bookings} 個預約有新消息`) : t('乘客從名片頁送來的預約，由你報價')"
         :count="unread.bookings"
       />
+      <MenuRow to="/app/passengers" :title="t('客人通訊錄')" :detail="t('你出過的單的乘客，只有你看得到；熟客可以直接出單')" />
     </section>
 
     <section class="card me__group">

@@ -51,7 +51,7 @@ interface ClaimView {
   /** The winning driver's own details as the passenger will see them; photoIds are their vehicle photos. */
   driver?: { photoIds?: string[] } | null;
   /** The dispatcher's WeChat ID and WhatsApp from their 名片頁, for the driver who won. */
-  dispatcherContact?: { wechatId: string | null; whatsapp: string | null };
+  dispatcherContact?: { wechatId: string | null; whatsapp: string | null; phones?: string[] };
   /** The dispatcher's 名片頁, when it is public: who you would be driving for. */
   dispatcherPageCode?: string | null;
   groupInvites: OfferedGroup[];
@@ -229,7 +229,7 @@ onBeforeUnmount(() => {
             </span>
             <a class="chip" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`">{{ t('致電出單者') }}</a>
           </div>
-          <ContactLines :wechat-id="order.dispatcherContact?.wechatId" :whatsapp="order.dispatcherContact?.whatsapp" />
+          <ContactLines :phones="order.dispatcherContact?.phones?.slice(1)" :wechat-id="order.dispatcherContact?.wechatId" :whatsapp="order.dispatcherContact?.whatsapp" />
           <RouterLink v-if="order.dispatcherPageCode" class="claim-page__contact claim-page__card-link" :to="`/p/${order.dispatcherPageCode}`">{{ t('看出單者的名片') }}</RouterLink>
           <div v-if="session.profile?.hkPlate || session.profile?.macauPlate || session.profile?.mainlandPlate" class="claim-page__contact">
             <span><small>{{ [t('你開的車'), t(plateKind(session.profile))].filter(Boolean).join(' · ') }}</small></span>

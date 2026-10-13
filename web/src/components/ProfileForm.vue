@@ -47,6 +47,24 @@ const form = reactive({
   vehicleType: current?.vehicleType ?? '',
   seats: current?.seats ? String(current.seats) : '',
   color: current?.color ?? '',
+  hidePlates: current?.hidePlates ?? false,
+});
+
+/**
+ * 港澳號碼 and 內地號碼, each typed without its code. A side not filled in yet starts with the
+ * number the driver signs in with, when that number is of that side; the other is theirs to add.
+ */
+const signIn = session.user;
+const stored = (value: string | null | undefined) => {
+  const [code, number] = (value ?? '').split(' ');
+  return { code: code ?? '', number: number ?? '' };
+};
+const hkMacau = stored(current?.hkMacauPhone ?? (signIn && signIn.countryCode !== '+86' ? `${signIn.countryCode} ${signIn.phone}` : null));
+const mainland = stored(current?.mainlandPhone ?? (signIn?.countryCode === '+86' ? `+86 ${signIn.phone}` : null));
+const phones = reactive({
+  hkMacauCode: hkMacau.code === '+853' ? '+853' : '+852',
+  hkMacau: hkMacau.number,
+  mainland: mainland.number,
 });
 const busy = ref(false);
 const error = ref('');
@@ -87,6 +105,8 @@ async function save() {
       ...plates,
       mainlandPlate: composeMainlandPlate(form.mainlandPlate, form.vehicleOwnership),
       seats: form.seats ? Number(form.seats) : undefined,
+      hkMacauPhone: phones.hkMacau.trim() ? `${phones.hkMacauCode}${phones.hkMacau.trim()}` : '',
+      mainlandPhone: phones.mainland.trim() ? `+86${phones.mainland.trim()}` : '',
     });
     emit('saved');
   } catch (e) {
@@ -157,6 +177,32 @@ async function save() {
       <label class="field profile-form__half">{{ t('座位') }}<input v-model="form.seats" class="input" type="number" min="1" max="60" inputmode="numeric" :placeholder="t('例如：7')" /></label>
       <label class="field profile-form__half">{{ t('車色') }}<input v-model="form.color" class="input" maxlength="20" :placeholder="t('例如：白色')" /></label>
     </div>
+    <label class="field">
+      {{ t('港澳號碼（選填）') }}
+      <span class="profile-form__plate">
+        <select v-model="phones.hkMacauCode" class="input profile-form__code" :aria-label="t('港澳號碼區號')">
+          <option value="+852">+852</option>
+          <option value="+853">+853</option>
+        </select>
+        <input v-model="phones.hkMacau" class="input" type="tel" inputmode="numeric" maxlength="11" :placeholder="t('8 位手機號碼')" />
+      </span>
+    </label>
+    <label class="field">
+      {{ t('內地號碼（選填）') }}
+      <span class="profile-form__plate">
+        <span class="profile-form__fixed">+86</span>
+        <input v-model="phones.mainland" class="input" type="tel" inputmode="numeric" maxlength="13" :placeholder="t('11 位手機號碼')" />
+      </span>
+    </label>
+    <p class="hint">{{ t('過關後換號碼也找得到你。接了單後，出單者和乘客看得到這兩個號碼；號碼不會發驗證碼。') }}</p>
+
+    <label class="profile-form__switch">
+      <span>
+        {{ t('對乘客隱藏車牌') }}
+        <small>{{ t('乘客確認頁不顯示你的車牌，並提醒乘客上車前先向你確認。出單者仍然看得到。隨時可以改回。') }}</small>
+      </span>
+      <input v-model="form.hidePlates" class="switch" type="checkbox" />
+    </label>
     <div v-if="error" class="notice error">{{ error }}</div>
     <button class="button block large" type="submit" :disabled="busy">{{ t('儲存') }}</button>
   </form>
@@ -190,6 +236,28 @@ async function save() {
 .profile-form__plate .input {
   flex: 1;
   min-width: 0;
+}
+.profile-form__plate .profile-form__code {
+  flex: 0 0 auto;
+  width: auto;
+}
+.profile-form__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin: var(--space-lg) 0;
+  font-weight: 600;
+}
+.profile-form__switch > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.profile-form__switch small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 400;
 }
 .profile-form__fixed {
   flex-shrink: 0;
