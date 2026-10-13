@@ -4,7 +4,8 @@
   "private": true,
   "workspaces": [
     "shared",
-    "backend"
+    "backend",
+    "admin"
   ],
   "scripts": {
     "db:up": "docker compose up -d postgres",
@@ -21,12 +22,16 @@
     "verify:api": "npm run test:shared && npm run build:api && npm run test:api && npx prisma validate --schema prisma/schema.prisma",
     "dev-login": "npm run build:shared && npm --workspace backend run dev-login --",
     "billing": "npm run build:shared && npm --workspace backend run billing --",
-    "admin": "npm run build:shared && npm --workspace backend run admin --"
+    "admin": "npm run build:shared && npm --workspace backend run admin --",
+    "dev:admin": "npm --workspace admin run dev",
+    "build:admin": "npm run build:shared && npm --workspace admin run build",
+    "verify:admin": "npm run build:admin"
   },
   "allowScripts": {
     "prisma@6.19.3": true,
     "@prisma/client@6.19.3": true,
     "@prisma/engines@6.19.3": true,
-    "esbuild@0.28.2": true
+    "esbuild@0.28.2": true,
+    "esbuild@0.25.12": true
   }
 }

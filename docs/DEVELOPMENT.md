@@ -34,6 +34,19 @@ API 在 `http://localhost:3020/api`，健康檢查為 `GET /api/health`。
 1. **開發模式登入**（建議）：`npm run dev-login -- --on` 開啟後，所有號碼都用指定碼登入（預設 `000000`，可用 `--code=123456` 更換）。狀態只顯示開關，不顯示驗證碼。規則見 `.github/instructions/phone-login-development-mode.instructions.md`。
 2. **簡訊碼印在日誌**：`.env` 的 `DEV_LOG_OTP=true` 時，未開啟開發模式的簡訊碼會印在 API 日誌。正式環境（`NODE_ENV=production`）一律無效。
 
+## 平台後台
+
+```bash
+npm run admin -- --create --username=vincent --name="Vincent" --role=SUPER_ADMIN
+npm run dev:api
+npm run dev:admin
+```
+
+- 第一個超級管理員用指令建立，畫面只顯示一次一次性密碼，登入後請到「修改密碼」更換。之後的帳號在「後台帳號」頁建立。
+- 後台在 `http://localhost:5181`，開發時把 `/api` 轉到本機 API。
+- 角色：超級管理員（全部）、營運（收費控制、充值、贈送，可看開發模式登入但不能改）、銷售（只能查看，看不到乘客資料）。
+- 安全：後台帳號與司機帳號分開；登入 cookie 只在 `/api/admin` 下有效（httpOnly、SameSite=Strict）；每個後台請求必須帶 `x-md-admin: 1`；同一帳號 15 分鐘內失敗 5 次即暫停登入；所有修改與查看乘客資料都寫入操作紀錄。
+
 ## 平台服務費與點數（後台完成前用指令）
 
 ```bash
@@ -76,6 +89,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | 指令 | 內容 |
 |---|---|
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
+| `npm run verify:admin` | 後台型別檢查與建置 |
 | `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。

@@ -49,6 +49,16 @@ Master Travel 沒有對應的頁面（發單成功分享頁、空車廣播、名
 | `--color-nav-inactive` | `#8793a8` | 底部導航未選中 |
 | `--color-nav-active` | `#245bd6` | 底部導航選中 |
 
+### 平台後台專用
+
+後台另加三個 Master Travel 沒有的顏色，只用於後台的危險操作與提示，不用於司機與乘客頁面：
+
+| Token | 值 | 用途 |
+|---|---|---|
+| `--color-danger` | `#d64545` | 停用、關閉等危險按鈕與錯誤文字 |
+| `--color-danger-tint` | `#fdecec` | 錯誤提示底色 |
+| `--color-warning-tint` | `#fff6e0` | 警告提示底色（例如開發模式登入開啟中） |
+
 ## 單的狀態顏色
 
 以 Master Travel 既有色系組成。顏色不能是唯一的狀態資訊，必須同時顯示文字。

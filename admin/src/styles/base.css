@@ -1,0 +1,202 @@
+/* Values from docs/DESIGN.md (Master Travel driver tokens). Use the variables; never hard-code. */
+:root {
+  --color-background: #f4f7fb;
+  --color-surface: #ffffff;
+  --color-text: #17233d;
+  --color-text-secondary: #65738b;
+  --color-text-muted: #98a3b5;
+  --color-label: #41506a;
+  --color-border: #dbe3ef;
+  --color-divider: #e8edf4;
+  --color-primary: #3568e8;
+  --color-primary-dark: #1e4fc7;
+  --color-on-primary: #ffffff;
+  --color-tint: #e8f0ff;
+  --color-nav-inactive: #8793a8;
+  --color-nav-active: #245bd6;
+  --color-danger: #d64545;
+  --color-danger-tint: #fdecec;
+  --color-warning-tint: #fff6e0;
+
+  --status-open: #e6a206;
+  --status-assigned: #3568e8;
+  --status-confirmed: #25c987;
+  --status-completed: #98a3b5;
+  --status-cancelled: #65738b;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+
+  --radius-card: 16px;
+  --radius-input: 12px;
+  --radius-pill: 100px;
+  --shadow-card: 0 8px 18px rgba(0, 0, 0, 0.08);
+
+  --font-caption: 12px;
+  --font-label: 13px;
+  --font-body: 14px;
+  --font-body-large: 16px;
+  --font-title: 20px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: 'PingFang TC', 'PingFang SC', 'Microsoft JhengHei', 'Noto Sans TC', system-ui, sans-serif;
+  font-size: var(--font-body);
+  line-height: 1.5;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+h1 {
+  margin: 0 0 var(--space-lg);
+  font-size: var(--font-title);
+}
+
+h2 {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-body-large);
+}
+
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-xl);
+  margin-bottom: var(--space-xl);
+}
+
+.muted {
+  color: var(--color-text-secondary);
+}
+
+.hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-caption);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  align-items: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-lg);
+}
+
+.button {
+  border: none;
+  border-radius: var(--radius-input);
+  padding: var(--space-sm) var(--space-lg);
+  min-height: 40px;
+  font: inherit;
+  cursor: pointer;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.button:hover {
+  background: var(--color-primary-dark);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button.secondary {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+
+.button.danger {
+  background: var(--color-danger);
+}
+
+.input,
+.select {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  padding: var(--space-sm) var(--space-md);
+  min-height: 40px;
+  font: inherit;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  color: var(--color-label);
+  font-size: var(--font-label);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  font-size: var(--font-label);
+  white-space: nowrap;
+}
+
+.table .nowrap {
+  white-space: nowrap;
+}
+
+.table .wide {
+  min-width: 180px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.notice {
+  border-radius: var(--radius-input);
+  padding: var(--space-md) var(--space-lg);
+  margin-bottom: var(--space-lg);
+  background: var(--color-tint);
+}
+
+.notice.warning {
+  background: var(--color-warning-tint);
+}
+
+.notice.error {
+  background: var(--color-danger-tint);
+  color: var(--color-danger);
+}
+
+.stat {
+  font-size: 28px;
+  font-weight: 600;
+}

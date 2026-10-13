@@ -18,6 +18,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   // Cloud Run sits behind Google's front end; trust it for the client IP used in rate limits.
   app.set('trust proxy', true);
+  app.disable('x-powered-by');
   app.setGlobalPrefix('api');
   app.enableShutdownHooks();
   await app.listen(config.port);
