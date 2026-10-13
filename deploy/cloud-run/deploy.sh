@@ -81,6 +81,13 @@ migration_execution="$(latest_migration_execution)"
 printf 'Migration completed: job=%s execution=%s image=%s\n' \
   "$MIGRATION_JOB" "${migration_execution:-unknown}" "$IMAGE"
 
+# Other jobs that run from the API image (for example the daily 客服 file
+# purge) follow each release, so they never run old code against a new schema.
+for job in ${FOLLOWING_JOBS:-}; do
+  gcloud run jobs update "$job" --project "$PROJECT_ID" --region "$REGION" --image "$IMAGE" --quiet
+  printf 'Job image updated: job=%s image=%s\n' "$job" "$IMAGE"
+done
+
 deploy_args=(
   run deploy "$SERVICE_NAME"
   --project "$PROJECT_ID"

@@ -16,8 +16,8 @@
 
 - 還沒有正式網域，`*.run.app` 在內地很可能打不開；派單連結目前也是用這個暫時的網址產生。
 - 簡訊通道還沒設定，所以沒有人能登入（取得驗證碼會回 `SMS_NOT_CONFIGURED`）。
-- 還沒有後台帳號（見下方「第一次部署之後」）。
-- 客服檔案的每日清理排程還沒建立。
+
+已完成的還有：資料種子、第一個超級管理員（帳號 `vincent`）、客服檔案的每日清理（Cloud Run Job `masterdriver-support-purge`，Cloud Scheduler 每天 04:30 香港時間觸發）。
 
 **安全備註：**GitHub 到 Google Cloud 的登入限定為本倉庫、`production` 環境、`main` 分支；部署帳戶讀不到 Secret 的內容。能推送到本倉庫 `main` 的人就能部署正式環境，所以 masterappIT 帳號的密碼、兩步驗證與權杖要妥善保管。2026-10-13 曾因 Master Travel 倉庫的 `security-audit.yml` 懷疑帳號被盜用而暫緩接上 GitHub；使用者已確認帳號沒有被盜用。
 
@@ -246,6 +246,7 @@ gcloud iam service-accounts add-iam-policy-binding "$(sa deploy)" --role=roles/i
 | `GCP_MIGRATION_JOB` | `masterdriver-migrate` |
 | `GCP_WEB_SERVICE` | `masterdriver-web` |
 | `GCP_ADMIN_SERVICE` | `masterdriver-admin` |
+| `GCP_FOLLOWING_JOBS` | `masterdriver-support-purge`（以空白分隔；發布時跟著換成新映像檔的 Job） |
 | `PRODUCTION_WEB_URL` | 司機與乘客網頁的正式網址，例如 `https://<正式網域>`，結尾不加 `/`。派單連結與乘客確認連結用這個網址產生 |
 
 **倉庫**層級的變數（不是環境變數，因為要在進入環境之前判斷）：
@@ -265,8 +266,17 @@ gcloud run jobs deploy masterdriver-seed --region="$REGION" --image="<本次發�
 gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 ```
 
-- **第一個超級管理員**：`npm run admin -- --create …` 會把一次性密碼印在畫面上。不要用 Cloud Run Job 執行（密碼會進入日誌）；請在自己的電腦用 Cloud SQL Auth Proxy 連到正式資料庫後執行，登入後立即修改密碼。
-- **客服檔案清理**：建立一個每天執行的 Job（同一個映像檔，指令 `npx tsx src/cli/support-media.ts --purge`，使用 `masterdriver-api` 帳戶並帶 `SUPPORT_MEDIA_BUCKET`），用 Cloud Scheduler 觸發。
+- **第一個超級管理員**（已完成）：`npm run admin -- --create …` 會把一次性密碼印出來，所以不要用 Cloud Run Job 執行（密碼會進入日誌）。做法是在自己的電腦用 Cloud SQL Auth Proxy 連到正式資料庫，把輸出導到一個只有自己讀得到、不進 Git 的檔案：
+
+  ```bash
+  gcloud components install cloud-sql-proxy
+  cloud-sql-proxy --gcloud-auth --port 5440 master-driver-511510:asia-east2:masterdriver-db &
+  # DATABASE_URL 用 Secret 裡的帳號密碼，主機改成 127.0.0.1:5440；不要把它印出來或寫進檔案
+  npm run admin -- --create --username=<帳號> --name="<顯示名稱>" --role=SUPER_ADMIN > .data/production-admin-password.txt 2>&1
+  ```
+
+  登入後立即到「修改密碼」更換，然後刪除那個檔案。之後的帳號在後台「後台帳號」頁建立。
+- **客服檔案清理**（已完成）：Job `masterdriver-support-purge` 使用 API 的映像檔，指令是 `node dist/cli/support-media.js --purge`（映像檔裡只有編譯後的程式，沒有 `src/`），由服務帳戶 `masterdriver-scheduler` 透過 Cloud Scheduler 每天觸發。環境變數 `GCP_FOLLOWING_JOBS` 列出這類 Job，每次發布會把它們的映像檔換成新版本。
 - **簡訊與付款通道**：在後台設定；上線前確認「登入配置 → 開發模式登入」是關閉的。
 
 ## 正式網域
@@ -296,7 +306,7 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 - **第二次之後的部署路徑**（新版本先不接流量、檢查後才切換）還沒有實際跑過；第一次部署走的是「服務不存在，直接建立」的路徑。下一次推送到 `main` 就會驗證到。
 - 回滾腳本沒有實際執行過。
 - 正式網域、內地連線、微信與 WhatsApp 內的操作。
-- 影片上傳（只驗證了圖片）與客服檔案清理 Job。
+- 影片上傳（只驗證了圖片）。客服檔案清理 Job 與排程已實際觸發成功，但當時沒有過期檔案可刪。
 - 從本機推送 API 映像檔會因上傳逾時失敗（映像檔約 780 MB），部署一律由 GitHub Actions 執行。
 
 ## 相關檔案

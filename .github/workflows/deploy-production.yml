@@ -150,6 +150,8 @@ jobs:
           DATA_ENCRYPTION_KEY_SECRET: ${{ vars.GCP_DATA_ENCRYPTION_KEY_SECRET }}
           PUBLIC_BASE_URL: ${{ vars.PRODUCTION_WEB_URL }}
           SUPPORT_MEDIA_BUCKET: ${{ vars.GCP_SUPPORT_MEDIA_BUCKET }}
+          # Space-separated Cloud Run jobs that run from the API image.
+          FOLLOWING_JOBS: ${{ vars.GCP_FOLLOWING_JOBS }}
         run: |
           set -euo pipefail
           ./deploy/cloud-run/deploy.sh
