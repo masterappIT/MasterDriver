@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
+import BrandMark from '../components/BrandMark.vue';
 import JoinGroups, { type OfferedGroup } from '../components/JoinGroups.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
 import BottomSheet from '../components/BottomSheet.vue';
@@ -129,7 +130,7 @@ onBeforeUnmount(() => clearInterval(poller));
 <template>
   <div class="page claim-page">
     <header class="claim-page__brand">
-      <strong>MasterDriver</strong>
+      <RouterLink to="/" class="claim-page__home"><BrandMark /></RouterLink>
       <span>{{ t('跨境師傅幫｜有單就派，有空就接') }}</span>
     </header>
 
@@ -224,6 +225,9 @@ onBeforeUnmount(() => clearInterval(poller));
 </template>
 
 <style scoped>
+.claim-page__home {
+  color: var(--color-text);
+}
 .claim-page__support {
   text-align: center;
 }

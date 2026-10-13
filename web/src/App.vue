@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { api } from './api';
 import TabBar from './components/TabBar.vue';
 import { t } from './i18n';
+import { loadSite, site } from './site';
 import { toastState } from './toast';
 
 const route = useRoute();
 const announcement = ref<string | null>(null);
 
 onMounted(async () => {
-  const settings = await api<{ announcement: string | null }>('GET', '/public/settings').catch(() => null);
-  announcement.value = settings?.announcement ?? null;
+  await loadSite();
+  announcement.value = site.settings?.announcement ?? null;
 });
 </script>
 

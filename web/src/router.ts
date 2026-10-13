@@ -9,7 +9,9 @@ declare module 'vue-router' {
 }
 
 const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/app' },
+  // The platform's public home page; signed-in users go straight to the driver app (see the guard below).
+  { path: '/', component: () => import('./pages/LandingPage.vue') },
+  { path: '/legal/:kind(terms|privacy)', component: () => import('./pages/LegalPage.vue') },
   // Opened from group links: kept as their own small chunks so they load first.
   { path: '/o/:code', component: () => import('./pages/ClaimPage.vue') },
   { path: '/c/:confirmCode', component: () => import('./pages/ConfirmPage.vue') },
@@ -21,7 +23,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/orders', component: () => import('./pages/OrdersPage.vue'), meta: { app: true } },
   { path: '/app/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { app: true } },
   { path: '/app/me', component: () => import('./pages/MePage.vue'), meta: { app: true } },
-  { path: '/:pathMatch(.*)*', redirect: '/app' },
+  { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
 export const router = createRouter({
@@ -35,6 +37,6 @@ router.beforeEach(async (to) => {
   if (to.path.startsWith('/c/')) return true;
   if (!session.checked) await loadSession();
   if (to.meta.app && !session.user) return { path: '/login', query: { next: to.fullPath } };
-  if (to.path === '/login' && session.user) return '/app';
+  if ((to.path === '/login' || to.path === '/') && session.user) return '/app';
   return true;
 });

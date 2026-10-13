@@ -40,6 +40,7 @@ const ERROR_TEXT: Record<string, string> = {
   CHANNEL_NOT_TESTED: '請先通過檢查再啟用',
   SMS_ACCOUNT_REQUIRED: '請先填寫接口網址、帳號和密碼',
   SMS_TEST_PHONE_REQUIRED: '請先填寫測試號碼',
+  LOGO_IMAGE_INVALID: 'Logo 必須是 400 KB 以內的 PNG、JPG 或 WebP 圖片',
   SUPPORT_CONVERSATION_NOT_FOUND: '找不到這個對話',
   SUPPORT_MEDIA_TYPE: '只能傳送圖片（PNG、JPG、WebP）或影片（MP4、MOV、WebM）',
   SUPPORT_MEDIA_TOO_LARGE: '檔案太大：圖片上限 5 MB，影片上限 25 MB',

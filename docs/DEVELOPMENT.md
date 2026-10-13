@@ -42,8 +42,10 @@ npm run dev:web
 ```
 
 - 網頁在 `http://localhost:5180`（與 `.env` 的 `PUBLIC_BASE_URL` 一致，派單連結和乘客確認連結會打開這裡）。
-- 頁面：`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
+- 頁面：`/` 平台首頁（未登入時顯示；登入後轉到 `/app`）、`/legal/terms` 與 `/legal/privacy`（後台「一般設定」的條款內容）、`/o/:code` 搶單頁、`/c/:confirmCode` 乘客確認頁（不用登入、不放廣告、不顯示司機價）、`/login`、`/app` 首頁、`/app/new` 發單、`/app/orders` 我的單、`/app/orders/:id` 單詳情與分享文字、`/app/me` 我的。
 - 發單頁最上方的「一句話發單」用 `shared/src/quick-order.ts` 解析（時間、起終點、座位、人數、行李、價格、備註；繁簡皆可），只負責填入下方表格，不會直接發出。測試案例取自實際的微信群訊息。
+- 平台首頁的標題、描述與分享圖在瀏覽器裡套用後台「SEO → 首頁」的設定。`index.html` 固定帶 `noindex`，所以**首頁目前不會被搜尋引擎收錄**，不執行腳本的分享預覽（例如微信、WhatsApp 的連結預覽）也讀不到這些設定；要收錄和預覽，需要由伺服器輸出每一頁的標題與摘要，這還沒做。
+- Logo 在後台「一般設定」上傳，存在資料庫（`SiteLogo`），由 `BrandMark` 元件顯示在首頁、登入頁、搶單頁；網址帶版本，換了 Logo 會立即更新。
 - 介面文字只寫繁體；簡體由沿用 Master Travel 的 OpenCC 對照表轉出，只有選用簡體時才下載。+86 帳號預設簡體，可在「我的」切換。
 - 只用系統字型、不依賴 Google 服務；在微信內不顯示「分享到 WhatsApp」（微信會攔截跳轉），改用複製。
 - 搶單頁在單仍是「待搶」時每 5 秒更新一次狀態，讓各群打開同一條連結都能看到「已被接走」。
@@ -124,7 +126,8 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 
 | 方法與路徑 | 用途 |
 |---|---|
-| `GET /api/public/settings` | 升級連結、客服聯絡、公告（只在開啟時） |
+| `GET /api/public/settings` | Logo 網址（有上傳時）、升級連結、客服聯絡、公告（只在開啟時） |
+| `GET /api/public/logo` | 後台上傳的 Logo 圖片 |
 | `GET /api/public/terms`、`/api/public/privacy` | 服務條款、私隱政策 |
 | `GET /api/public/seo/HOME`、`/PROFILE` | 頁面標題、描述、分享圖、robots、網站驗證碼、百度統計 ID |
 | `GET /api/public/robots.txt` | 未開放收錄時封鎖全站；開放後仍封鎖搶單頁、乘客頁、司機端、後台與 API |

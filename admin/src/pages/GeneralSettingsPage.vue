@@ -27,6 +27,48 @@ const form = reactive({
 const meta = ref<{ updatedAt: string; updatedBy: string | null } | null>(null);
 const error = ref('');
 const message = ref('');
+const logoUrl = ref<string | null>(null);
+const LOGO_MAX_BYTES = 400 * 1024;
+
+function readAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadLogo(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  error.value = '';
+  message.value = '';
+  if (file.size > LOGO_MAX_BYTES) {
+    error.value = `Logo 檔案太大（${Math.round(file.size / 1024)} KB），上限 400 KB`;
+    return;
+  }
+  try {
+    logoUrl.value = (await api<{ logoUrl: string | null }>('PUT', '/settings/logo', { image: await readAsDataUrl(file) })).logoUrl;
+    message.value = 'Logo 已更新';
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
+async function removeLogo() {
+  if (!confirm('確定移除 Logo？移除後公開頁面改為顯示文字標題。')) return;
+  error.value = '';
+  message.value = '';
+  try {
+    logoUrl.value = (await api<{ logoUrl: string | null }>('DELETE', '/settings/logo')).logoUrl;
+    message.value = 'Logo 已移除';
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
 
 function fill(setting: Setting) {
   const { updatedAt, updatedBy, ...fields } = setting;
@@ -48,6 +90,7 @@ async function save() {
 onMounted(async () => {
   try {
     fill(await api<Setting>('GET', '/settings/general'));
+    logoUrl.value = (await api<{ logoUrl: string | null }>('GET', '/settings/logo')).logoUrl;
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -58,6 +101,21 @@ onMounted(async () => {
   <h1>一般設定</h1>
   <div v-if="error" class="notice error">{{ error }}</div>
   <div v-if="message" class="notice">{{ message }}</div>
+  <div class="card general-settings__card">
+    <h2>Logo</h2>
+    <p class="muted">顯示在平台首頁、登入頁和搶單頁的頁首。沒有上傳時顯示文字「MasterDriver」。</p>
+    <div class="row">
+      <img v-if="logoUrl" class="general-settings__logo" :src="logoUrl" alt="目前的 Logo" />
+      <span v-else class="hint">尚未上傳</span>
+      <label class="button secondary general-settings__upload">
+        {{ logoUrl ? '更換 Logo' : '上傳 Logo' }}
+        <input type="file" accept="image/png,image/jpeg,image/webp" @change="uploadLogo" />
+      </label>
+      <button v-if="logoUrl" class="button secondary" type="button" @click="removeLogo">移除</button>
+    </div>
+    <p class="hint">PNG、JPG 或 WebP，400 KB 以內；建議使用透明背景的 PNG，高度至少 96 px。上傳後立即生效，不用按「儲存全部」。</p>
+  </div>
+
   <form class="general-settings" @submit.prevent="save">
     <div class="card general-settings__card">
       <h2>升級入口</h2>
@@ -100,6 +158,19 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+}
+
+.general-settings__logo {
+  max-height: 64px;
+  max-width: 240px;
+}
+
+.general-settings__upload {
+  cursor: pointer;
+}
+
+.general-settings__upload input {
+  display: none;
 }
 
 .general-settings__text {

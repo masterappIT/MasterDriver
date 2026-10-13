@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
-import { createDriver, sampleOrder, seedPlans, setupDatabase, type TestContext } from '../test/database';
+import { createDriver, rejectsWith, sampleOrder, seedPlans, setupDatabase, type TestContext } from '../test/database';
 
 let ctx: TestContext;
 const DAY = 24 * 60 * 60 * 1000;
@@ -23,6 +23,27 @@ test('public settings show the announcement only when switched on', async () => 
   const settings = await ctx.site.publicSettings();
   assert.equal(settings.announcement, '系統維護 22:00');
   assert.equal(settings.upgradeUrl, 'https://mt.example/demo');
+});
+
+test('the logo is uploaded as a real picture, served to public pages, and can be replaced or removed', async () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 7)]);
+  const dataUrl = `data:image/png;base64,${png.toString('base64')}`;
+  assert.equal((await ctx.site.publicSettings()).logoUrl, null);
+
+  const { logoUrl } = await ctx.site.setLogo(dataUrl, 'test');
+  assert.match(logoUrl ?? '', /^\/api\/public\/logo\?v=\d+$/);
+  assert.equal((await ctx.site.publicSettings()).logoUrl, logoUrl);
+  const stored = await ctx.site.logoImage();
+  assert.equal(stored?.mime, 'image/png');
+  assert.ok(Buffer.from(stored!.image).equals(png));
+  assert.equal('image' in (await ctx.site.appSetting()), false, 'reading the settings never carries the picture');
+
+  const html = `data:image/png;base64,${Buffer.from('<svg onload=alert(1)>').toString('base64')}`;
+  await rejectsWith(ctx.site.setLogo(html, 'test'), 'LOGO_IMAGE_INVALID');
+  await rejectsWith(ctx.site.setLogo('data:image/svg+xml;base64,PHN2Zz4=', 'test'), 'LOGO_IMAGE_INVALID');
+
+  assert.equal((await ctx.site.removeLogo()).logoUrl, null);
+  assert.equal(await ctx.site.logoImage(), null);
 });
 
 test('SEO is closed to crawlers until indexing is switched on', async () => {

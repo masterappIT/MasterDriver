@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router';
+import BrandMark from '../components/BrandMark.vue';
 import SignInForm from '../components/SignInForm.vue';
 import { t } from '../i18n';
 
@@ -14,7 +15,8 @@ function done() {
 
 <template>
   <div class="page login-page">
-    <h1>MasterDriver 跨境師傅幫</h1>
+    <RouterLink to="/" class="login-page__brand"><BrandMark /></RouterLink>
+    <h1>{{ t('跨境師傅幫') }}</h1>
     <p class="muted">{{ t('有單就派，有空就接') }}</p>
     <div class="card">
       <SignInForm @signed-in="done" />
@@ -26,6 +28,11 @@ function done() {
 <style scoped>
 .login-page {
   padding-top: 15vh;
+}
+.login-page__brand {
+  display: inline-block;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
 }
 .login-page__support {
   text-align: center;

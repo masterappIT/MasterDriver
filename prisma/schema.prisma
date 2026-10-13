@@ -474,6 +474,17 @@ model AppSetting {
   updatedBy           String?
 }
 
+/// The platform's logo, uploaded in the admin (一般設定) and shown on the public
+/// home page, the sign-in page and claim pages. Kept apart from AppSetting so
+/// reading the settings never carries the image.
+model SiteLogo {
+  id        String   @id @default("default")
+  mime      String
+  image     Bytes
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
 /// Site-wide SEO. The claim page (/o/), passenger page (/c/), driver app and admin
 /// are always noindex in code; nothing here can change that.
 model SeoSiteSetting {

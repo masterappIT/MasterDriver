@@ -11,6 +11,7 @@ import type {
   SeoSiteUpdate,
 } from '@masterdriver/shared';
 import { apiError } from '../common/errors';
+import { decodeQrImage } from '../groups/qr-image';
 import { PrismaService } from '../prisma.service';
 import { robotsMeta, robotsTxt } from './seo-rules';
 
@@ -44,9 +45,38 @@ export class SiteService {
     return this.prisma.appSetting.update({ where: { id: DEFAULT_ID }, data: { ...input, updatedBy: actor } });
   }
 
+  /** Where the public pages load the logo from; the version changes when the logo does, so browsers refetch it. */
+  private async logoUrl() {
+    const logo = await this.prisma.siteLogo.findUnique({ where: { id: DEFAULT_ID }, select: { updatedAt: true } });
+    return logo ? `/api/public/logo?v=${logo.updatedAt.getTime()}` : null;
+  }
+
+  async logoStatus() {
+    return { logoUrl: await this.logoUrl() };
+  }
+
+  /** The same rules as other uploaded pictures: a real PNG, JPEG or WebP, at most 400 KB. */
+  async setLogo(dataUrl: string, actor: string) {
+    const image = decodeQrImage(dataUrl);
+    if (!image) throw apiError(HttpStatus.BAD_REQUEST, 'LOGO_IMAGE_INVALID', 'Upload a PNG, JPEG or WebP image up to 400 KB');
+    const data = { mime: image.mime, image: image.bytes, updatedBy: actor };
+    await this.prisma.siteLogo.upsert({ where: { id: DEFAULT_ID }, update: data, create: { id: DEFAULT_ID, ...data } });
+    return this.logoStatus();
+  }
+
+  async removeLogo() {
+    await this.prisma.siteLogo.deleteMany({ where: { id: DEFAULT_ID } });
+    return this.logoStatus();
+  }
+
+  logoImage() {
+    return this.prisma.siteLogo.findUnique({ where: { id: DEFAULT_ID }, select: { mime: true, image: true } });
+  }
+
   async publicSettings() {
     const setting = await this.appSetting();
     return {
+      logoUrl: await this.logoUrl(),
       upgradeUrl: setting.upgradeUrl || null,
       support: { wechatId: setting.supportWechatId || null, whatsapp: setting.supportWhatsapp || null },
       announcement: setting.announcementEnabled && setting.announcementText ? setting.announcementText : null,

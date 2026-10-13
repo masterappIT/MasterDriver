@@ -29,6 +29,10 @@ export const appSettingUpdateSchema = z
   .partial();
 export type AppSettingUpdate = z.infer<typeof appSettingUpdateSchema>;
 
+/** The platform logo as a data URL (PNG, JPEG or WebP, at most 400 KB). */
+export const siteLogoUpdateSchema = z.object({ image: z.string().max(600_000) });
+export type SiteLogoUpdate = z.infer<typeof siteLogoUpdateSchema>;
+
 export const seoSiteUpdateSchema = z
   .object({
     canonicalOrigin: httpsUrl.refine((value) => value === '' || !/\/$/.test(value), { message: 'NO_TRAILING_SLASH' }),

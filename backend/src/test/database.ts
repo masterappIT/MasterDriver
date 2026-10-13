@@ -28,6 +28,7 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'SiteLogo',
   'SupportMessage',
   'SupportMedia',
   'SupportConversation',

@@ -9,6 +9,7 @@ import {
   SEO_PAGES,
   seoPageUpdateSchema,
   seoSiteUpdateSchema,
+  siteLogoUpdateSchema,
   type AdCreate,
   type AdUpdate,
   type AppSettingUpdate,
@@ -17,6 +18,7 @@ import {
   type SeoPageKey,
   type SeoPageUpdate,
   type SeoSiteUpdate,
+  type SiteLogoUpdate,
 } from '@masterdriver/shared';
 import type { Request, Response } from 'express';
 import type { Prisma } from '../../generated/prisma';
@@ -54,6 +56,21 @@ export class PublicSiteController {
   @Get('privacy')
   privacy() {
     return this.site.legalText('privacy');
+  }
+
+  @Get('logo')
+  async logo(@Res() response: Response) {
+    const logo = await this.site.logoImage();
+    if (!logo) throw apiError(HttpStatus.NOT_FOUND, 'LOGO_NOT_FOUND', 'No logo has been uploaded');
+    response
+      .set({
+        'content-type': logo.mime,
+        // The URL carries a version, so a replaced logo is fetched again at once.
+        'cache-control': 'public, max-age=86400',
+        'x-content-type-options': 'nosniff',
+      })
+      // A Buffer is sent as the picture's bytes; the Uint8Array Prisma returns would be sent as JSON.
+      .send(Buffer.from(logo.image));
   }
 
   @Get('seo/:page')
@@ -116,6 +133,30 @@ export class AdminSiteController {
     const result = await this.site.updateAppSetting(body, `admin:${admin.username}`);
     // Record which fields changed; long texts are not copied into the log.
     await this.log(admin, 'settings.general', request, { fields: Object.keys(body) });
+    return result;
+  }
+
+  // ---- Logo
+
+  @Get('settings/logo')
+  @AdminRoles(...WRITE_ROLES)
+  logo() {
+    return this.site.logoStatus();
+  }
+
+  @Put('settings/logo')
+  @AdminRoles(...WRITE_ROLES)
+  async setLogo(@Body(new ZodPipe(siteLogoUpdateSchema)) body: SiteLogoUpdate, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    const result = await this.site.setLogo(body.image, `admin:${admin.username}`);
+    await this.log(admin, 'settings.logo', request, { action: 'upload' });
+    return result;
+  }
+
+  @Delete('settings/logo')
+  @AdminRoles(...WRITE_ROLES)
+  async removeLogo(@CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    const result = await this.site.removeLogo();
+    await this.log(admin, 'settings.logo', request, { action: 'remove' });
     return result;
   }
 
