@@ -24,6 +24,8 @@ interface PastOrder {
 
 interface PreviousLeg {
   id: string;
+  status: string;
+  selfDrive?: boolean;
   pickupAt: string;
   origin: string;
   destination: string;
@@ -42,6 +44,8 @@ const router = useRouter();
 const afterId = typeof route.query.after === 'string' ? route.query.after : '';
 const previous = ref<PreviousLeg | null>(null);
 const legNumber = computed(() => (previous.value?.journey?.legIndex ?? 1) + 1);
+/** The 接駁位置 can still move while no other driver holds the previous leg. */
+const placeLocked = computed(() => Boolean(previous.value && previous.value.status !== 'OPEN' && !previous.value.selfDrive));
 const past = ref<PastOrder[]>([]);
 const busy = ref(false);
 const error = ref('');
@@ -255,7 +259,9 @@ onMounted(async () => {
       <label class="field">
         {{ afterId ? t('接駁位置（這一段的出發地）') : t('出發地') }}
         <input v-model="form.origin" class="input" maxlength="120" :placeholder="afterId ? '' : t('例如：深圳灣口岸')" required />
-        <span v-if="previous && form.origin.trim() !== previous.destination" class="hint">{{ t('上一段的目的地會一起改成這個接駁位置。') }}</span>
+        <span v-if="previous && form.origin.trim() !== previous.destination" class="hint">
+          {{ placeLocked ? t('上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段。') : t('上一段的目的地會一起改成這個接駁位置。') }}
+        </span>
       </label>
       <div v-for="(_, index) in form.waypoints" :key="index" class="field">
         {{ t(`途經點 ${index + 1}`) }}
