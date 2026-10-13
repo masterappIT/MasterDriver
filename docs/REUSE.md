@@ -32,6 +32,7 @@
 |---|---|---|
 | 乘客端 uni-app 元件，例如 `src/components/common/PageNavBar.vue`、`src/components/home/BookingTimePicker.vue`、`AddressPicker.vue` | 使用 uni-app 標籤（`view`、`text`）與 `uni.*` API | 版式與樣式沿用，標籤與 API 改成標準 Vue 3 與瀏覽器 API |
 | 司機端 Flutter 頁面與規則，例如 `driver/lib/core/vehicle_plate_rules.dart`、`order_invite/order_invite_page.dart` | Dart / Flutter，無法在 Vue 使用 | 依其邏輯與版式用 TypeScript、Vue 3 重寫 |
+| Stripe 設定，例如 `backend/src/stripe-channel-config.ts` | 綁定 Master Travel 的收款通道與財務中心 | 參考設定驗證的做法；MasterDriver 只用 Stripe 收訂閱，不做乘客收款 |
 | 手機驗證碼登入流程 | 綁定 Master Travel 的帳號、session 與資料表 | 參考流程，依本專案資料結構重寫 |
 
 ### C. 不沿用
