@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createOrderSchema, driverProfileSchema, otpRequestSchema } from './schemas';
+import { createOrderSchema, driverProfileSchema, groupInviteCreateSchema, otpRequestSchema } from './schemas';
 import { defaultLocaleFor, isValidMobile } from './phone';
 
 test('accepts Hong Kong, mainland and Macau mobile numbers', () => {
@@ -113,4 +113,10 @@ test('a driver profile needs the plates its plate type carries, and a 車型', (
   // A plate the chosen type does not carry is dropped, not stored.
   const single = driverProfileSchema.parse({ ...driver, plateType: 'SINGLE', hkPlate: 'AB1234', macauPlate: 'MA1234', mainlandPlate: 'AB123' });
   assert.deepEqual([single.hkPlate, single.macauPlate, single.mainlandPlate], ['AB1234', '', '']);
+});
+
+test('a group is added without a name: the type and the QR code or link say which it is', () => {
+  const whatsapp = groupInviteCreateSchema.parse({ platform: 'WHATSAPP', inviteUrl: 'https://chat.whatsapp.com/AbCdEf1234567' });
+  assert.equal(whatsapp.name, '');
+  assert.equal(groupInviteCreateSchema.safeParse({ platform: 'WECHAT' }).success, false, 'WeChat still needs its QR image');
 });

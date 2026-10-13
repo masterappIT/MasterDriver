@@ -17,6 +17,10 @@ export interface OfferedGroup {
  * does not read as a QR-code flyer (WeChat is strict about pages spreading QR codes).
  */
 defineProps<{ groups: OfferedGroup[]; dispatcherName: string | null }>();
+
+/** Groups added since the name stopped being asked are titled by their type. */
+const TITLE: Record<OfferedGroup['platform'], string> = { WECHAT: '微信群', WECHAT_CONTACT: '加微信，拉你入群', WHATSAPP: 'WhatsApp 群' };
+const title = (group: OfferedGroup) => group.name || TITLE[group.platform];
 const open = ref(false);
 
 async function copyLink(url: string) {
@@ -31,13 +35,13 @@ async function copyLink(url: string) {
     </button>
     <div v-if="open" class="join-groups">
       <div v-for="group in groups" :key="group.id" class="join-groups__item">
-        <strong>{{ t(group.name) }}</strong>
+        <strong>{{ t(title(group)) }}</strong>
         <template v-if="group.platform === 'WHATSAPP' && group.inviteUrl">
           <button v-if="inWeChat" class="button block" type="button" @click="copyLink(group.inviteUrl)">{{ t('複製 WhatsApp 群連結') }}</button>
           <a v-else class="button block" :href="group.inviteUrl" target="_blank" rel="noopener">{{ t('用 WhatsApp 加入') }}</a>
         </template>
         <template v-else-if="group.qrUrl">
-          <img :src="group.qrUrl" :alt="t(group.name)" class="join-groups__qr" />
+          <img :src="group.qrUrl" :alt="t(title(group))" class="join-groups__qr" />
           <span class="hint">
             {{ group.platform === 'WECHAT_CONTACT' ? t('長按識別二維碼加好友，對方會拉你入群') : t('長按識別二維碼加入群聊') }}
           </span>

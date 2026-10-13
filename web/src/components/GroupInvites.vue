@@ -25,12 +25,14 @@ const KIND: Record<Platform, { label: string; hint: string }> = {
   WECHAT: { label: '微信群二維碼', hint: '微信群二維碼 7 天後失效，200 人以上的群不能掃碼加入。' },
   WHATSAPP: { label: 'WhatsApp 群邀請連結', hint: '在 WhatsApp 群資料 →「透過連結邀請」複製。' },
 };
+/** Groups added before the name stopped being asked keep theirs. */
+const titleOf = (invite: Invite) => invite.name || KIND[invite.platform].label;
 
 const invites = ref<Invite[]>([]);
 const adding = ref(false);
 const busy = ref(false);
 const error = ref('');
-const form = reactive({ platform: 'WECHAT_CONTACT' as Platform, name: '', inviteUrl: '', qrImage: '' });
+const form = reactive({ platform: 'WECHAT_CONTACT' as Platform, inviteUrl: '', qrImage: '' });
 
 async function run(action: () => Promise<Invite[]>, done?: string) {
   error.value = '';
@@ -59,10 +61,9 @@ function add() {
   return run(async () => {
     const result = await api<Invite[]>('POST', '/me/group-invites', {
       platform: form.platform,
-      name: form.name,
       ...(form.platform === 'WHATSAPP' ? { inviteUrl: form.inviteUrl } : { qrImage: form.qrImage }),
     });
-    Object.assign(form, { name: '', inviteUrl: '', qrImage: '' });
+    Object.assign(form, { inviteUrl: '', qrImage: '' });
     adding.value = false;
     return result;
   }, '已加入');
@@ -74,7 +75,7 @@ const replaceQr = (invite: Invite, event: Event) =>
   pick(event, (qrImage) => void run(() => api('PATCH', `/me/group-invites/${invite.id}`, { qrImage }), '已更新二維碼'));
 
 function remove(invite: Invite) {
-  if (!confirm(t(`刪除「${invite.name}」？`))) return;
+  if (!confirm(t(`刪除「${titleOf(invite)}」？`))) return;
   return run(() => api('DELETE', `/me/group-invites/${invite.id}`), '已刪除');
 }
 
@@ -90,8 +91,8 @@ onMounted(() => run(() => api<Invite[]>('GET', '/me/group-invites')));
     <div v-for="invite in invites" :key="invite.id" class="group-invite">
       <img v-if="invite.qrUrl && !invite.expired" :src="invite.qrUrl" alt="" class="group-invite__qr" />
       <div class="group-invite__body">
-        <strong>{{ t(invite.name) }}</strong>
-        <span class="hint">{{ t(KIND[invite.platform].label) }}</span>
+        <strong>{{ t(titleOf(invite)) }}</strong>
+        <span v-if="invite.name" class="hint">{{ t(KIND[invite.platform].label) }}</span>
         <span v-if="invite.expired" class="group-invite__warn">{{ t('二維碼已過期，請重新上傳') }}</span>
         <span v-else-if="invite.expiresAt" class="hint">{{ t(`${shortTime(invite.expiresAt)} 過期`) }}</span>
         <label class="row hint"><input type="checkbox" :checked="invite.showOnClaimPage" @change="toggle(invite)" /> {{ t('在我的搶單頁顯示') }}</label>
@@ -112,7 +113,6 @@ onMounted(() => run(() => api<Invite[]>('GET', '/me/group-invites')));
         </select>
         <span class="hint">{{ t(KIND[form.platform].hint) }}</span>
       </label>
-      <label class="field">{{ t('名稱') }}<input v-model="form.name" class="input" maxlength="40" :placeholder="t('例如：中港車效益拼單群')" required /></label>
       <label v-if="form.platform === 'WHATSAPP'" class="field">
         {{ t('邀請連結') }}<input v-model="form.inviteUrl" class="input" placeholder="https://chat.whatsapp.com/…" required />
       </label>

@@ -20,7 +20,7 @@ after(async () => {
 test('a dispatcher adds a WhatsApp link, a WeChat group QR and a personal WeChat QR', async () => {
   const owner = await createDriver(ctx, '小馮');
   await ctx.groupInvites.create(owner, { platform: 'WHATSAPP', name: '中港車 WhatsApp', inviteUrl: 'https://chat.whatsapp.com/AbCdEf1234567', showOnClaimPage: true });
-  await ctx.groupInvites.create(owner, { platform: 'WECHAT', name: '中港車效益拼單群', qrImage: png, showOnClaimPage: true });
+  await ctx.groupInvites.create(owner, { platform: 'WECHAT', name: '', qrImage: png, showOnClaimPage: true });
   const list = await ctx.groupInvites.create(owner, { platform: 'WECHAT_CONTACT', name: '加我微信拉你入群', qrImage: png, showOnClaimPage: true });
   assert.equal(list.length, 3);
   const group = list.find((i) => i.platform === 'WECHAT')!;

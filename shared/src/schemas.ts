@@ -271,7 +271,8 @@ export type TripGroupUpdate = z.infer<typeof tripGroupUpdateSchema>;
 export const groupInviteCreateSchema = z
   .object({
     platform: z.enum(GROUP_PLATFORMS),
-    name: text(40),
+    /** No longer asked (2026-10-14): the type and the QR code or link say which group it is. */
+    name: z.string().trim().max(40).default(''),
     inviteUrl: z.string().trim().optional(),
     qrImage: z.string().optional(),
     showOnClaimPage: z.boolean().default(true),
