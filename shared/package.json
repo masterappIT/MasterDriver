@@ -21,6 +21,7 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./quick-order": "./src/quick-order.ts"
+    "./quick-order": "./src/quick-order.ts",
+    "./vehicle-plate": "./src/vehicle-plate.ts"
   }
 }

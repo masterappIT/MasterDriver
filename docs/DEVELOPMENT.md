@@ -109,7 +109,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/auth/otp/verify` | — | 驗證並登入；回傳 token，同時設定 cookie |
 | `POST /api/auth/logout` | 要 | 登出 |
 | `GET /api/me` | 要 | 目前用戶與司機資料 |
-| `GET/PUT /api/me/profile` | 要 | 司機資料（第一次搶單前要填） |
+| `GET/PUT /api/me/profile` | 要 | 司機資料（第一次搶單前要填）。`vehicleOwnership`（`HK`、`MACAU`、`MAINLAND`）與 `plateType`（`SINGLE`、`DUAL`、`TRIPLE`）決定要填哪些車牌和格式，規則在 `shared/src/vehicle-plate.ts`；車牌存成固定格式（澳門 `AA-00-00`，內地 `粵Z·…港`、`粵Z·…澳` 或 `粵A·…`），該類型沒有的車牌不保存；`vehicleType` 是自由文字，必填 |
 | `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer: true`：接駁單的第 1 段；`afterOrderId`：加接駁段（接在行程最後一段後面，出發地即接駁位置，不再扣額度和服務費）；`requiredPlates`：需要的車牌（只標明）；`selfDrive: true`：這段我自己做（直接算自己接，要先有司機資料）；`inPool`：同時放到接單池（不傳時用「我的」的預設值；`selfDrive` 的單一律不進池） |
 | `GET /api/orders?role=dispatched\|claimed` | 要 | 我的派單／我的接單 |
 | `GET /api/orders/pool?date=YYYY-MM-DD&q=地點` | 要 | 接單池：發單者勾選放進來、待搶且未到出發時間的單，不含自己發的；與搶單頁相同的資訊，不含乘客資料；最多 50 張。沒有司機資料時回 `PROFILE_REQUIRED` |

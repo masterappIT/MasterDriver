@@ -12,6 +12,9 @@ export interface User {
 
 export interface Profile {
   name: string;
+  /** Null on a profile saved before these were asked. */
+  vehicleOwnership: 'HK' | 'MACAU' | 'MAINLAND' | null;
+  plateType: 'SINGLE' | 'DUAL' | 'TRIPLE' | null;
   hkPlate: string | null;
   macauPlate: string | null;
   mainlandPlate: string | null;

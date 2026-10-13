@@ -1,5 +1,6 @@
 export * from './phone';
 export * from './schemas';
+export * from './vehicle-plate';
 export * from './admin';
 export * from './site';
 export * from './quick-order';

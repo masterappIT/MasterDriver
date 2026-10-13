@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { COUNTRY_CODES, isValidMobile, normalizePhone } from './phone';
+import { PLATE_TYPES, VEHICLE_OWNERSHIPS, normalizeVehiclePlates, vehiclePlateError } from './vehicle-plate';
 
 export const ORDER_STATUSES = ['OPEN', 'ASSIGNED', 'COMPLETED', 'CANCELLED'] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
@@ -32,17 +33,31 @@ export const otpVerifySchema = phoneObject
   .refine(validMobile, invalidPhone);
 export type OtpVerify = z.infer<typeof otpVerifySchema>;
 
-const plate = optionalText(12).transform((value) => value?.toUpperCase());
+const plate = optionalText(16);
 
-export const driverProfileSchema = z.object({
-  name: text(30),
-  hkPlate: plate,
-  macauPlate: plate,
-  mainlandPlate: plate,
-  vehicleType: optionalText(30),
-  seats: z.number().int().min(1).max(60).optional(),
-  color: optionalText(20),
-});
+/**
+ * 車輛歸屬地 and 車牌類型 decide which plates are asked for and their format
+ * (shared/src/vehicle-plate.ts). Plates are stored normalized; a plate the
+ * chosen type does not carry is dropped.
+ */
+export const driverProfileSchema = z
+  .object({
+    name: text(30),
+    vehicleOwnership: z.enum(VEHICLE_OWNERSHIPS),
+    plateType: z.enum(PLATE_TYPES),
+    hkPlate: plate,
+    macauPlate: plate,
+    mainlandPlate: plate,
+    /** 車型, typed freely, e.g. 埃爾法. */
+    vehicleType: text(30),
+    seats: z.number().int().min(1).max(60).optional(),
+    color: optionalText(20),
+  })
+  .transform((value) => ({ ...value, ...normalizeVehiclePlates(value) }))
+  .superRefine((value, context) => {
+    const error = vehiclePlateError(value);
+    if (error) context.addIssue({ code: z.ZodIssueCode.custom, message: error, path: ['plateType'] });
+  });
 export type DriverProfileInput = z.infer<typeof driverProfileSchema>;
 
 /** Money is entered as a decimal (e.g. 850 or 850.5) and stored in minor units. */

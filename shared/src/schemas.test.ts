@@ -56,8 +56,26 @@ test('order input requires a time zone on the pickup time', () => {
   assert.equal(result.success, false);
 });
 
-test('plates are stored in upper case', () => {
-  const parsed = driverProfileSchema.parse({ name: '李師傅', hkPlate: 'ab1234', mainlandPlate: '粤z1234港' });
+const driver = { name: '李師傅', vehicleOwnership: 'HK', plateType: 'DUAL', vehicleType: '埃爾法' };
+
+test('plates are stored in upper case and in one format', () => {
+  const parsed = driverProfileSchema.parse({ ...driver, hkPlate: 'ab1234', mainlandPlate: '粤z1234港' });
   assert.equal(parsed.hkPlate, 'AB1234');
-  assert.equal(parsed.mainlandPlate, '粤Z1234港');
+  assert.equal(parsed.mainlandPlate, '粵Z·1234港');
+});
+
+test('a driver profile needs the plates its plate type carries, and a 車型', () => {
+  const codes = (input: object) => {
+    const result = driverProfileSchema.safeParse(input);
+    return result.success ? [] : result.error.issues.map((issue) => issue.message);
+  };
+  assert.deepEqual(codes({ ...driver, hkPlate: 'AB1234' }), ['PLATE_REQUIRED']);
+  assert.deepEqual(codes({ ...driver, plateType: 'SINGLE', hkPlate: 'AB1234' }), []);
+  assert.deepEqual(codes({ ...driver, vehicleOwnership: 'MAINLAND', plateType: 'TRIPLE', hkPlate: 'AB1234', mainlandPlate: 'B12345' }), [
+    'PLATE_TYPE_NOT_ALLOWED',
+  ]);
+  assert.equal(driverProfileSchema.safeParse({ ...driver, plateType: 'SINGLE', hkPlate: 'AB1234', vehicleType: ' ' }).success, false);
+  // A plate the chosen type does not carry is dropped, not stored.
+  const single = driverProfileSchema.parse({ ...driver, plateType: 'SINGLE', hkPlate: 'AB1234', macauPlate: 'MA1234', mainlandPlate: 'AB123' });
+  assert.deepEqual([single.hkPlate, single.macauPlate, single.mainlandPlate], ['AB1234', '', '']);
 });

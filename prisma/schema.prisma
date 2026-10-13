@@ -48,6 +48,10 @@ model User {
 model DriverProfile {
   userId        String   @id
   name          String
+  /// 車輛歸屬地 and 車牌類型 decide which plates the car has and their format.
+  /// Null on profiles saved before these were asked.
+  vehicleOwnership PlateRegion?
+  plateType     PlateType?
   hkPlate       String?
   macauPlate    String?
   mainlandPlate String?
@@ -138,6 +142,13 @@ enum PlateRegion {
   HK
   MACAU
   MAINLAND
+}
+
+/// How many plates a car carries: one, two (兩地牌) or three (三地牌).
+enum PlateType {
+  SINGLE
+  DUAL
+  TRIPLE
 }
 
 model Order {

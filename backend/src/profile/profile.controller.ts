@@ -20,10 +20,12 @@ export class ProfileController {
   save(@CurrentUser() user: SessionUser, @Body(new ZodPipe(driverProfileSchema)) body: DriverProfileInput) {
     const data = {
       name: body.name,
-      hkPlate: body.hkPlate ?? null,
-      macauPlate: body.macauPlate ?? null,
-      mainlandPlate: body.mainlandPlate ?? null,
-      vehicleType: body.vehicleType ?? null,
+      vehicleOwnership: body.vehicleOwnership,
+      plateType: body.plateType,
+      hkPlate: body.hkPlate || null,
+      macauPlate: body.macauPlate || null,
+      mainlandPlate: body.mainlandPlate || null,
+      vehicleType: body.vehicleType,
       seats: body.seats ?? null,
       color: body.color ?? null,
     };
