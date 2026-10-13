@@ -73,7 +73,7 @@ MasterDriver 的 UI 沿用 Master Travel 的風格，讓用戶從 MasterDriver �
 
 沿用 Master Travel 的做法：
 
-1. 先有設計稿（Figma），再切版；設計稿以本文件的 token 為準。
+1. 先有設計稿（Figma），再切版；設計稿以本文件的 token 為準。設計稿由使用者（同時是 Master Travel 設計稿的設計者）製作；開發方提供頁面清單、內容與狀態需求作為設計依據。
 2. 實作目標是還原設計稿，不自行調整視覺數值；若認為規格有問題，先提出再修改。
 3. 圖片、圖示只用專案 `assets/` 內的檔案；沿用 Master Travel 的圖示或插畫前，確認可在 MasterDriver 使用。
 4. 驗收至少涵蓋手機窄寬（320 px）、基準寬度（430 px）、微信內建瀏覽器及 WhatsApp 開啟。
