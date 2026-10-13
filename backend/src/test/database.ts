@@ -13,6 +13,7 @@ import type { SmsProvider } from '../auth/sms';
 import { loadConfig } from '../config';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { OrdersService } from '../orders/orders.service';
+import { SiteService } from '../site/site.service';
 import type { PrismaService } from '../prisma.service';
 
 const root = resolve(__dirname, '../../..');
@@ -20,6 +21,12 @@ const envFile = resolve(root, '.env');
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 
 const TABLES = [
+  'AdStat',
+  'AdSlot',
+  'Lead',
+  'SeoPageSetting',
+  'SeoSiteSetting',
+  'AppSetting',
   'AdminAuditLog',
   'AdminSession',
   'Administrator',
@@ -90,6 +97,7 @@ export async function setupDatabase() {
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
     adminData: new AdminDataService(prisma, audit, credits, commission, entitlements),
+    site: new SiteService(prisma),
     async reset() {
       sms.sent = [];
       await prisma.$executeRawUnsafe(`TRUNCATE ${TABLES.map((table) => `"${table}"`).join(', ')} CASCADE`);

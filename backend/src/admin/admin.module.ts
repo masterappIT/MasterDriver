@@ -11,6 +11,6 @@ import { AuditService } from './audit.service';
   imports: [EntitlementsModule, BillingModule],
   controllers: [AdminAuthController, AdminController, AdminAccountsController],
   providers: [AdminAuthService, AdminDataService, AdminGuard, AuditService],
-  exports: [AdminAuthService],
+  exports: [AdminAuthService, AdminGuard, AuditService],
 })
 export class AdminModule {}

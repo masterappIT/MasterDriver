@@ -31,6 +31,7 @@ model User {
   usages                Usage[]
   creditAccount         CreditAccount?
   creditEntries         CreditEntry[]
+  lead                  Lead?
 
   @@unique([countryCode, phone])
 }
@@ -424,4 +425,113 @@ model AdminAuditLog {
 
   @@index([createdAt])
   @@index([action, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Site settings, SEO, ad slots and sales leads — all edited in the platform admin.
+// ---------------------------------------------------------------------------
+
+/// General settings shown in the driver app and on public pages.
+model AppSetting {
+  id                  String   @id @default("default")
+  /// Where every "upgrade to Master Travel" prompt and ad link points (預約演示).
+  upgradeUrl          String   @default("")
+  supportWechatId     String   @default("")
+  supportWhatsapp     String   @default("")
+  termsText           String   @default("")
+  privacyText         String   @default("")
+  announcementText    String   @default("")
+  announcementEnabled Boolean  @default(false)
+  updatedAt           DateTime @updatedAt
+  updatedBy           String?
+}
+
+/// Site-wide SEO. The claim page (/o/), passenger page (/c/), driver app and admin
+/// are always noindex in code; nothing here can change that.
+model SeoSiteSetting {
+  id                 String   @id @default("default")
+  /// e.g. https://example.com — used for canonical links and the sitemap.
+  canonicalOrigin    String   @default("")
+  googleVerification String   @default("")
+  bingVerification   String   @default("")
+  baiduVerification  String   @default("")
+  /// Baidu Tongji site id only (not a script), since Google Analytics is unreachable in the mainland.
+  baiduTongjiId      String   @default("")
+  allowIndexing      Boolean  @default(false)
+  sitemapEnabled     Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+  updatedBy          String?
+}
+
+enum SeoPage {
+  HOME
+  PROFILE
+}
+
+/// Per page type. PROFILE texts are templates: {司機} {路線} {車型} {地區}.
+model SeoPageSetting {
+  page          SeoPage  @id
+  title         String   @default("")
+  description   String   @default("")
+  keywords      String   @default("")
+  shareImageUrl String   @default("")
+  updatedAt     DateTime @updatedAt
+}
+
+enum AdPosition {
+  CLAIM_PAGE
+  HOME
+  MY_ORDERS
+}
+
+/// Promotion of Master Travel. Never shown on passenger pages.
+model AdSlot {
+  id        String     @id @default(cuid())
+  position  AdPosition
+  title     String
+  body      String     @default("")
+  imageUrl  String     @default("")
+  /// https only; clicks go through /api/public/ads/{id}/click to be counted.
+  linkUrl   String
+  priority  Int        @default(0)
+  active    Boolean    @default(true)
+  startsAt  DateTime   @default(now())
+  endsAt    DateTime?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  stats AdStat[]
+
+  @@index([position, active])
+}
+
+/// Daily counts per ad, so impressions do not grow a row per view.
+model AdStat {
+  adId        String
+  day         String
+  impressions Int    @default(0)
+  clicks      Int    @default(0)
+
+  ad AdSlot @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@id([adId, day])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  CONVERTED
+  NOT_INTERESTED
+}
+
+/// Sales follow-up on a dispatcher who may become a Master Travel customer.
+model Lead {
+  userId    String     @id
+  status    LeadStatus @default(NEW)
+  note      String     @default("")
+  updatedAt DateTime   @updatedAt
+  updatedBy String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
