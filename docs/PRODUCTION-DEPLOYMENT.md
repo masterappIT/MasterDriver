@@ -19,7 +19,7 @@
 - 還沒有後台帳號（見下方「第一次部署之後」）。
 - 客服檔案的每日清理排程還沒建立。
 
-**安全備註：**2026-10-13 發現 Master Travel 倉庫被植入竊取金鑰的工作流程，masterappIT 帳號可能被盜用；該事項記在 Master Travel 的 `docs/OPERATIONS.md`，使用者決定暫不處理，並明確指示 MasterDriver 仍繼續部署。能推送到本倉庫 `main` 的人就能部署正式環境，所以那件事處理完之前風險仍在。GitHub 到 Google Cloud 的登入已限定為本倉庫、`production` 環境、`main` 分支。
+**安全備註：**GitHub 到 Google Cloud 的登入限定為本倉庫、`production` 環境、`main` 分支；部署帳戶讀不到 Secret 的內容。能推送到本倉庫 `main` 的人就能部署正式環境，所以 masterappIT 帳號的密碼、兩步驗證與權杖要妥善保管。2026-10-13 曾因 Master Travel 倉庫的 `security-audit.yml` 懷疑帳號被盜用而暫緩接上 GitHub；使用者已確認帳號沒有被盜用。
 
 ## 分支
 
