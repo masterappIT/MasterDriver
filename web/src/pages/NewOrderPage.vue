@@ -101,7 +101,14 @@ const form = reactive({
 const paymentMethodCount = ref<number | null>(null);
 
 /** Places used before, most recent first: one tap fills them in. */
-const places = computed(() => [...new Set(past.value.flatMap((order) => [order.origin, order.destination]))].slice(0, 6));
+// A 接駁 order is listed by its first leg, which ends at the 接駁位置: its real end comes from the journey.
+const places = computed(() =>
+  [
+    ...new Set(
+      past.value.flatMap((order) => (order.journey ? [order.origin, order.destination, order.journey.destination] : [order.origin, order.destination])),
+    ),
+  ].slice(0, 6),
+);
 
 /**
  * 一句話出單: type the order the way it is written in the group; the form below
@@ -202,8 +209,10 @@ function copyLast() {
   passengerCurrencyChosen.value = Boolean(last.passengerPrice);
 }
 
+/** Fills the first empty place in route order: 出發地, then 接駁位置 (with 接駁), then 目的地. */
 function fillPlace(place: string) {
   if (!form.origin) form.origin = place;
+  else if (form.transfer && !form.transferPlace) form.transferPlace = place;
   else if (!form.destination) form.destination = place;
 }
 
