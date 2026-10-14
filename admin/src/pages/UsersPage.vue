@@ -43,12 +43,10 @@ onMounted(load);
 
 <template>
   <h1>用戶</h1>
-  <div class="card">
-    <form class="row" @submit.prevent="search">
-      <input v-model="q" class="input" placeholder="手機號碼、姓名或名片頁連結" />
-      <button class="button" type="submit">搜尋</button>
-    </form>
-  </div>
+  <form class="filters" @submit.prevent="search">
+    <input v-model="q" class="input" placeholder="手機號碼、姓名或名片頁連結" />
+    <button class="button" type="submit">搜尋</button>
+  </form>
   <div v-if="error" class="notice error">{{ error }}</div>
   <div v-if="result" class="card table-wrap">
     <table class="table">
@@ -57,20 +55,20 @@ onMounted(load);
           <th>手機</th>
           <th>姓名</th>
           <th>車牌</th>
-          <th>派單</th>
-          <th>接單</th>
-          <th>點數</th>
+          <th class="num">派單</th>
+          <th class="num">接單</th>
+          <th class="num">點數</th>
           <th>註冊時間</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="user in result.items" :key="user.id">
           <td class="nowrap"><RouterLink :to="`/users/${user.id}`">{{ user.phone }}</RouterLink></td>
-          <td>{{ user.name ?? '—' }}<span v-if="user.suspended" class="users__suspended">　已停用</span><span v-if="user.pagePublished" class="hint">　名片頁已公開</span></td>
-          <td>{{ user.plates.join(' / ') || '—' }}<span v-if="user.plateType" class="hint">　{{ PLATE_TYPE[user.plateType] }}</span></td>
-          <td>{{ user.dispatched }}</td>
-          <td>{{ user.claimed }}</td>
-          <td>{{ hkd(user.credits) }}</td>
+          <td>{{ user.name ?? '—' }}<span v-if="user.suspended" class="tag tag--danger">已停用</span><span v-if="user.pagePublished" class="tag tag--info">名片頁已公開</span></td>
+          <td>{{ user.plates.join(' / ') || '—' }}<span v-if="user.plateType" class="tag">{{ PLATE_TYPE[user.plateType] }}</span></td>
+          <td class="num">{{ user.dispatched }}</td>
+          <td class="num">{{ user.claimed }}</td>
+          <td class="num">{{ hkd(user.credits) }}</td>
           <td class="nowrap">{{ dateTime(user.createdAt) }}</td>
         </tr>
         <tr v-if="result.items.length === 0">
@@ -81,10 +79,3 @@ onMounted(load);
     <PagerBar :page="page" :page-size="result.pageSize" :total="result.total" @change="(p) => ((page = p), load())" />
   </div>
 </template>
-
-<style scoped>
-.users__suspended {
-  color: var(--color-error, #c03a3a);
-  font-weight: 700;
-}
-</style>

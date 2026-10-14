@@ -130,9 +130,10 @@ onMounted(load);
 <style scoped>
 .dashboard__title {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
+  margin-bottom: var(--space-lg);
 }
 
 .dashboard__heading {
@@ -140,7 +141,7 @@ onMounted(load);
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px 24px;
-  margin: 26px 0 16px;
+  margin: 18px 0 10px;
 }
 
 .dashboard__heading h2 {
@@ -158,56 +159,42 @@ onMounted(load);
 
 .dashboard__metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
 }
 
 .dashboard__metrics--priority {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  max-width: 920px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
 }
 
-/* Metric card with the corner circle, as on the Master Travel dashboard. */
+/* A number with what it counts: small, so a row of them fits above the fold. */
 .dashboard__card {
   position: relative;
   display: block;
   min-width: 0;
-  min-height: 148px;
-  padding: 25px;
+  padding: 12px 16px;
   overflow: hidden;
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
   color: var(--color-text);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--color-surface);
   box-shadow: var(--shadow-card);
   text-align: left;
-}
-
-.dashboard__card::after {
-  content: '';
-  position: absolute;
-  right: -38px;
-  bottom: -45px;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: #e9f2ff;
-  pointer-events: none;
 }
 
 .dashboard__card span {
   display: block;
   color: var(--color-text-secondary);
-  font-size: var(--font-label);
-  font-weight: 650;
+  font-size: var(--font-caption);
+  font-weight: 600;
 }
 
 .dashboard__card strong {
   display: block;
-  margin-top: 18px;
-  font-size: 36px;
-  line-height: 1.15;
-  letter-spacing: -0.04em;
+  margin-top: 4px;
+  font-size: 24px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
 
@@ -215,7 +202,7 @@ onMounted(load);
   position: relative;
   z-index: 1;
   display: block;
-  margin-top: 8px;
+  margin-top: 2px;
   color: var(--color-text-muted);
   font-size: var(--font-caption);
 }
@@ -237,19 +224,19 @@ onMounted(load);
 }
 
 .dashboard__status {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .dashboard__status-list {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
 }
 
 .dashboard__status-list div {
   display: grid;
-  gap: 4px;
-  padding: 12px 14px;
+  gap: 2px;
+  padding: 8px 12px;
   border: 1px solid #e1eaf4;
   border-radius: 10px;
   background: #f8fbff;
@@ -257,12 +244,6 @@ onMounted(load);
 
 .dashboard__status-list strong {
   font-size: 20px;
-}
-
-@media (max-width: 1100px) {
-  .dashboard__metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 700px) {
@@ -279,26 +260,6 @@ onMounted(load);
     gap: 8px;
   }
 
-  .dashboard__card {
-    min-height: 96px;
-    padding: 13px;
-    border-radius: 13px;
-  }
 
-  .dashboard__card strong {
-    margin-top: 7px;
-    font-size: 26px;
-  }
-
-  .dashboard__status-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 420px) {
-  .dashboard__metrics,
-  .dashboard__metrics--priority {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

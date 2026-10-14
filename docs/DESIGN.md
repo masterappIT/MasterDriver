@@ -77,6 +77,8 @@ Master Travel 沒有對應的頁面（發單成功分享頁、空車廣播、名
 
 ### 平台後台專用
 
+**2026-10-14 稍後改：後台的尺寸不再跟 Master Travel。** 使用者選定緊湊、資料優先的版面（見 `docs/DECISIONS.md`）：標題 22px、卡片圓角 12px 與淡陰影、按鈕與輸入框高 36px、表格行高收緊且數字靠右、側欄 208px 並分四組、內容區最寬 1440px。下表的**顏色仍然適用**；表後一段關於圓角 20px、陰影、輸入框高度與表格標題的數值已被取代，以 `admin/src/styles/base.css` 為準。
+
 2026-10-14 起，平台後台（`admin/`）參照 **Master Travel 最新的管理後台**（`admin/src/styles/`，commit `c902bb5a`），與用戶端的乘客端風格分開；數值定義在 `admin/src/styles/base.css`，沿用記錄見 `docs/REUSE.md`。
 
 | Token | 值 | 用途 |

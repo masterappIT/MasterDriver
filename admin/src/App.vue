@@ -18,24 +18,44 @@ interface NavGroup {
 
 const WRITE: AdminRole[] = ['SUPER_ADMIN', 'OPERATOR'];
 
-// Order and grouping follow the Master Travel admin: operations first, then settings, support, accounts and logs.
+// Grouped by what an operator comes to do: the day's work first, then money, settings and the system itself.
 const NAV: (NavLink | NavGroup)[] = [
   { to: '/', label: '總覽' },
-  { to: '/observability', label: '數據流監控', roles: WRITE },
-  { to: '/users', label: '用戶' },
-  { to: '/orders', label: '訂單' },
-  { to: '/leads', label: '潛在客戶' },
-  { to: '/billing', label: '收費控制', roles: WRITE },
-  { to: '/ads', label: '廣告欄位', roles: WRITE },
-  { to: '/payment-channels', label: '付款通道', roles: WRITE },
-  { to: '/service-fee', label: '平台服務費', roles: WRITE },
-  { to: '/settings/login', label: '登入配置', roles: WRITE },
-  { to: '/settings/general', label: '一般設定', roles: WRITE },
-  { to: '/seo', label: 'SEO', roles: WRITE },
-  { to: '/settings/limits', label: '防濫用設定', roles: WRITE },
-  { to: '/support', label: '客服', roles: WRITE },
-  { to: '/accounts', label: '後台帳號', roles: ['SUPER_ADMIN'] },
-  { to: '/audit', label: '操作紀錄', roles: ['SUPER_ADMIN'] },
+  {
+    label: '營運',
+    items: [
+      { to: '/users', label: '用戶' },
+      { to: '/orders', label: '訂單' },
+      { to: '/support', label: '客服', roles: WRITE },
+      { to: '/leads', label: '潛在客戶' },
+      { to: '/observability', label: '數據流監控', roles: WRITE },
+    ],
+  },
+  {
+    label: '收費',
+    items: [
+      { to: '/billing', label: '收費控制', roles: WRITE },
+      { to: '/service-fee', label: '平台服務費', roles: WRITE },
+      { to: '/payment-channels', label: '付款通道', roles: WRITE },
+      { to: '/ads', label: '廣告欄位', roles: WRITE },
+    ],
+  },
+  {
+    label: '設定',
+    items: [
+      { to: '/settings/general', label: '一般設定', roles: WRITE },
+      { to: '/settings/login', label: '登入配置', roles: WRITE },
+      { to: '/settings/limits', label: '防濫用設定', roles: WRITE },
+      { to: '/seo', label: 'SEO', roles: WRITE },
+    ],
+  },
+  {
+    label: '系統',
+    items: [
+      { to: '/accounts', label: '後台帳號', roles: ['SUPER_ADMIN'] },
+      { to: '/audit', label: '操作紀錄', roles: ['SUPER_ADMIN'] },
+    ],
+  },
 ];
 
 const allowed = (item: NavLink) => !item.roles || (session.admin && item.roles.includes(session.admin.role));
@@ -115,38 +135,23 @@ async function logout() {
 .admin-shell {
   display: flex;
   min-height: 100vh;
-  background: radial-gradient(circle at 85% 0%, #dfeaff 0, transparent 32rem), var(--color-background);
+  background: var(--color-background);
 }
 
 .admin-shell__side {
   position: sticky;
   top: 0;
   display: flex;
-  flex: 0 0 252px;
+  flex: 0 0 208px;
   flex-direction: column;
-  width: 252px;
+  width: 208px;
   height: 100vh;
-  padding: 32px 20px 24px;
+  padding: 16px 10px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   color: #fff;
   background: var(--gradient-side);
-  box-shadow: 10px 0 35px rgba(18, 36, 59, 0.12);
-}
-
-/* The decorative rings on the side panel. */
-.admin-shell__side::after {
-  content: '';
-  position: absolute;
-  top: 110px;
-  right: -100px;
-  width: 220px;
-  height: 220px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 50%;
-  box-shadow: 0 0 0 28px rgba(255, 255, 255, 0.035), 0 0 0 58px rgba(255, 255, 255, 0.025);
-  pointer-events: none;
 }
 
 .admin-shell__brand {
@@ -155,13 +160,12 @@ async function logout() {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  min-height: 56px;
+  padding: 4px 10px 8px;
 }
 
 .admin-shell__brand strong {
-  font-size: 18px;
-  font-weight: 750;
-  letter-spacing: -0.03em;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .admin-shell__brand span {
@@ -177,8 +181,8 @@ async function logout() {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 8px;
-  margin-top: 24px;
+  gap: 2px;
+  margin-top: 12px;
 }
 
 .admin-shell__nav a,
@@ -187,12 +191,12 @@ async function logout() {
 .admin-shell__account button {
   display: block;
   width: 100%;
-  padding: 14px 15px;
+  padding: 7px 10px;
   border: 1px solid transparent;
-  border-radius: 13px;
+  border-radius: 8px;
   color: var(--color-nav-inactive);
   background: transparent;
-  font-size: 14px;
+  font-size: 13px;
   text-align: left;
   text-decoration: none;
   transition: 0.2s ease;
@@ -208,32 +212,27 @@ async function logout() {
 
 .admin-shell__nav a.active,
 .admin-shell__account a.active {
-  border-color: rgba(255, 255, 255, 0.18);
   color: var(--color-nav-active);
   background: var(--color-nav-active-bg);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
 }
 
 .admin-shell__group {
-  margin: 4px 0;
+  margin-top: 10px;
 }
 
+/* A small caption over each group of pages. */
 .admin-shell__group-label {
-  padding: 14px 15px 4px;
-  color: #dce8f7;
-  font-size: 14px;
+  padding: 4px 10px;
+  color: var(--color-nav-sub);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .admin-shell__group-items {
   display: grid;
   gap: 2px;
-  margin: 3px 0 6px 14px;
-}
-
-.admin-shell__group-items a {
-  padding: 9px 12px;
-  color: var(--color-nav-sub);
-  font-size: 12px;
 }
 
 .admin-shell__mobile-only {
@@ -246,7 +245,7 @@ async function logout() {
   display: grid;
   gap: 2px;
   margin-top: auto;
-  padding: 24px 15px 12px;
+  padding: 16px 10px 6px;
   font-size: 12px;
 }
 
@@ -266,7 +265,7 @@ async function logout() {
   flex: 1 1 auto;
   width: min(100%, var(--admin-content-max-width));
   min-width: 0;
-  padding: 56px clamp(24px, 5vw, 64px);
+  padding: 24px 28px 40px;
 }
 
 .admin-shell__eyebrow {
@@ -275,13 +274,12 @@ async function logout() {
 
 @media (max-width: 1100px) {
   .admin-shell__side {
-    flex-basis: 220px;
-    width: 220px;
-    padding-inline: 16px;
+    flex-basis: 184px;
+    width: 184px;
   }
 
   .admin-shell__main {
-    padding: 36px 28px;
+    padding: 20px;
   }
 }
 
@@ -300,7 +298,6 @@ async function logout() {
     overflow: visible;
   }
 
-  .admin-shell__side::after,
   .admin-shell__account {
     display: none;
   }

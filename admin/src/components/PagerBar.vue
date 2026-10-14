@@ -16,23 +16,24 @@ const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)
 </template>
 
 <style scoped>
-/* Centred pagination with a top rule, as in the Master Travel admin lists. */
+/* Under a list: how many there are on the left, the pages on the right. */
 .pager-bar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   margin: 0 !important;
-  padding: 16px 24px 20px;
+  padding: 8px 20px;
   border-top: 1px solid var(--color-divider);
   color: var(--color-text);
-  font-size: var(--font-body);
-  font-weight: 700;
+  font-size: var(--font-label);
+  font-weight: 600;
 }
 
 .pager-bar__total {
+  margin-right: auto;
   color: var(--color-text-secondary);
   font-weight: 400;
 }

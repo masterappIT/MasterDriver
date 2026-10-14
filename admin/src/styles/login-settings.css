@@ -3,10 +3,10 @@
  * pages/login-settings/PhoneLoginDevelopmentSettings.css (see docs/REUSE.md), mapped to this
  * admin's colour tokens; only the parts this page uses.
  */
-.login-settings-admin { display: flex; flex-direction: column; gap: 18px; }
+.login-settings-admin { display: flex; flex-direction: column; gap: 14px; }
 .login-settings-admin .eyebrow { color: var(--color-primary); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
 .login-settings-admin .login-settings-header { display: flex; flex-direction: column; gap: 0; }
-.login-settings-admin .login-settings-header h2 { margin: 6px 0 5px; color: var(--color-text); font-size: 28px; line-height: 1.2; letter-spacing: -.035em; }
+.login-settings-admin .login-settings-header h2 { margin: 6px 0 5px; color: var(--color-text); font-size: 22px; line-height: 1.25; }
 .login-settings-admin .login-settings-header .section-desc { max-width: 760px; margin: 0; color: var(--color-text-secondary); font-size: 13px; line-height: 1.5; }
 
 .login-settings-admin .login-settings-scope { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border: 1px solid #dce7f5; border-radius: 12px; background: #f8fbff; color: var(--color-text-secondary); font-size: 13px; }
@@ -23,7 +23,7 @@
 .login-settings-admin .login-settings-tabs { width: fit-content; }
 .login-settings-admin .platform-tabs { align-self: flex-start; }
 .login-settings-admin .login-settings-tabs button,
-.login-settings-admin .platform-tabs button { min-height: 40px; border: 0; background: transparent; color: #52657d; border-radius: 7px; padding: 8px 20px; font: inherit; font-weight: 700; cursor: pointer; transition: .16s ease; }
+.login-settings-admin .platform-tabs button { min-height: 32px; border: 0; background: transparent; color: #52657d; border-radius: 7px; padding: 5px 16px; font: inherit; font-weight: 700; cursor: pointer; transition: .16s ease; }
 .login-settings-admin .login-settings-tabs button:hover,
 .login-settings-admin .platform-tabs button:hover { color: var(--color-primary); background: #e8f1ff; }
 .login-settings-admin .login-settings-tabs button.active,
@@ -33,10 +33,10 @@
 .login-settings-admin .platform-tab-dirty { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #fff3d6; color: #9a6412; font-size: 10px; font-weight: 800; }
 
 /* Cards. */
-.login-settings-admin .login-settings-card { border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; box-shadow: 0 4px 16px rgba(15, 23, 42, .04); overflow: hidden; }
-.login-settings-admin .login-settings-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 20px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
-.login-settings-admin .login-settings-card-header h3 { margin: 0; color: var(--color-text); font-size: 17px; letter-spacing: -.02em; }
-.login-settings-admin .sms-settings-card .login-settings-card-header h3 { font-size: 20px; letter-spacing: -.025em; }
+.login-settings-admin .login-settings-card { border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; box-shadow: 0 1px 2px rgba(18, 36, 59, .05); overflow: hidden; }
+.login-settings-admin .login-settings-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+.login-settings-admin .login-settings-card-header h3 { margin: 0; color: var(--color-text); font-size: 15px; }
+.login-settings-admin .sms-settings-card .login-settings-card-header h3 { font-size: 15px; }
 .login-settings-admin .login-settings-card-header p { max-width: 680px; margin: 6px 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
 .login-settings-admin .login-settings-card-meta { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 .login-settings-admin .sms-settings-card .login-settings-card-meta .badge-internal { font-size: 10px; letter-spacing: .04em; }
@@ -131,7 +131,7 @@
 .login-settings-admin .login-settings-save-bar button.primary:disabled { cursor: not-allowed; opacity: .52; box-shadow: none; }
 
 @media (max-width: 760px) {
-  .login-settings-admin .login-settings-header h2 { font-size: 24px; }
+  .login-settings-admin .login-settings-header h2 { font-size: 20px; }
   .login-settings-admin .login-settings-tabs,
   .login-settings-admin .platform-tabs { width: 100%; box-sizing: border-box; }
   .login-settings-admin .login-settings-tabs button,

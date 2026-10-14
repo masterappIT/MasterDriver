@@ -74,23 +74,21 @@ onMounted(load);
 
 <template>
   <h1>訂單</h1>
-  <div class="card">
-    <form class="row" @submit.prevent="search">
-      <input v-model="q" class="input" placeholder="單號、地點或手機號碼" />
-      <select v-model="status" class="select" @change="search">
-        <option value="">全部狀態</option>
-        <option v-for="(label, key) in ORDER_STATUS" :key="key" :value="key">{{ label }}</option>
-      </select>
-      <select v-model="moneyFilter" class="select" @change="search">
-        <option value="">收款與結清：全部</option>
-        <option value="UNPAID">未收款（已有司機或已完成）</option>
-        <option value="UNSETTLED">未結清（已完成、別的司機接）</option>
-      </select>
-      <button class="button" type="submit">搜尋</button>
-    </form>
-  </div>
+  <form class="filters" @submit.prevent="search">
+    <input v-model="q" class="input" placeholder="單號、地點或手機號碼" />
+    <select v-model="status" class="select" @change="search">
+      <option value="">全部狀態</option>
+      <option v-for="(label, key) in ORDER_STATUS" :key="key" :value="key">{{ label }}</option>
+    </select>
+    <select v-model="moneyFilter" class="select" @change="search">
+      <option value="">收款與結清：全部</option>
+      <option value="UNPAID">未收款（已有司機或已完成）</option>
+      <option value="UNSETTLED">未結清（已完成、別的司機接）</option>
+    </select>
+    <button class="button" type="submit">搜尋</button>
+  </form>
   <div v-if="error" class="notice error">{{ error }}</div>
-  <p class="hint">收款與結清是出單者自己的記號，平台不經手車費，也不核對。</p>
+  <p class="hint orders__note">收款與結清是出單者自己的記號，平台不經手車費，也不核對。</p>
   <div v-if="result" class="card table-wrap">
     <table class="table">
       <thead>
@@ -98,25 +96,25 @@ onMounted(load);
           <th>出發時間</th>
           <th>路線</th>
           <th>狀態</th>
-          <th>出單價</th>
+          <th class="num">出單價</th>
           <th>收款／結清</th>
-          <th>服務費</th>
+          <th class="num">服務費</th>
           <th>出單者</th>
           <th>接單司機</th>
-          <th>搶單次數</th>
+          <th class="num">搶單次數</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="order in result.items" :key="order.id">
           <td class="nowrap"><RouterLink :to="`/orders/${order.id}`">{{ dateTime(order.pickupAt) }}</RouterLink></td>
-          <td class="wide">{{ order.origin }} 至 {{ order.destination }}<span v-if="order.legIndex" class="hint">　接駁第 {{ order.legIndex }} 段</span></td>
+          <td class="wide">{{ order.origin }} 至 {{ order.destination }}<span v-if="order.legIndex" class="tag">接駁第 {{ order.legIndex }} 段</span></td>
           <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
-          <td class="nowrap">{{ money(order.driverPrice) }}</td>
+          <td class="num">{{ money(order.driverPrice) }}</td>
           <td class="nowrap">{{ moneyMarks(order) }}</td>
-          <td class="nowrap">{{ hkd(order.serviceFee) }}</td>
+          <td class="num">{{ hkd(order.serviceFee) }}</td>
           <td class="wide">{{ who(order.dispatcher) }}</td>
           <td class="wide">{{ order.selfDrive ? '出單者自己做' : who(order.claimedBy) }}</td>
-          <td>{{ order.claimAttempts }}</td>
+          <td class="num">{{ order.claimAttempts }}</td>
         </tr>
         <tr v-if="result.items.length === 0">
           <td colspan="9" class="muted">沒有符合的訂單</td>
@@ -126,3 +124,10 @@ onMounted(load);
     <PagerBar :page="page" :page-size="result.pageSize" :total="result.total" @change="(p) => ((page = p), load())" />
   </div>
 </template>
+
+<style scoped>
+.orders__note {
+  display: block;
+  margin: 0 0 var(--space-sm);
+}
+</style>

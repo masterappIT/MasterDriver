@@ -1,6 +1,8 @@
 /*
- * Platform admin styles, following the Master Travel admin (admin/src/styles/*.css at c902bb5a9,
- * see docs/REUSE.md). Token names are shared by the pages; use the variables, never hard-code.
+ * Platform admin styles. The colours come from the Master Travel admin (admin/src/styles/*.css at
+ * c902bb5a9, see docs/REUSE.md); the sizes do not: since 2026-10-14 the admin is laid out tightly,
+ * for reading data, with small titles, flat cards and dense tables (docs/DESIGN.md).
+ * Token names are shared by the pages; use the variables, never hard-code.
  */
 :root {
   --color-background: #f3f6fb;
@@ -54,19 +56,19 @@
   --space-lg: 16px;
   --space-xl: 24px;
 
-  --radius-card: 20px;
-  --radius-input: 10px;
+  --radius-card: 12px;
+  --radius-input: 8px;
   --radius-pill: 999px;
-  --shadow-card: 0 12px 32px rgba(39, 72, 111, 0.08);
-  --shadow-primary: 0 6px 14px rgba(23, 105, 224, 0.16);
+  --shadow-card: 0 1px 2px rgba(18, 36, 59, 0.05);
+  --shadow-primary: none;
   --gradient-primary: linear-gradient(135deg, #1769e0, #3f8df0);
 
   --font-caption: 12px;
   --font-label: 13px;
   --font-body: 14px;
   --font-body-large: 16px;
-  --font-title: 20px;
-  --admin-content-max-width: 1280px;
+  --font-title: 15px;
+  --admin-content-max-width: 1440px;
 }
 
 *,
@@ -114,18 +116,18 @@ a:hover {
 }
 
 h1 {
-  margin: 0 0 26px;
+  margin: 0 0 var(--space-lg);
   color: var(--color-text);
-  font-size: clamp(28px, 4vw, 38px);
-  line-height: 1.1;
-  letter-spacing: -0.045em;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 
 h2 {
   margin: 0 0 var(--space-md);
   color: var(--color-text);
   font-size: var(--font-title);
-  letter-spacing: -0.02em;
+  font-weight: 700;
 }
 
 .eyebrow {
@@ -137,11 +139,11 @@ h2 {
 }
 
 .card {
-  margin-bottom: 18px;
-  padding: 24px 28px;
+  margin-bottom: 14px;
+  padding: 16px 20px;
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--color-surface);
   box-shadow: var(--shadow-card);
 }
 
@@ -163,8 +165,8 @@ h2 {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
 }
 
 .grid > .card {
@@ -175,8 +177,8 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 40px;
-  padding: 9px 16px;
+  min-height: 36px;
+  padding: 6px 14px;
   border: 0;
   border-radius: var(--radius-input);
   color: var(--color-on-primary);
@@ -192,7 +194,6 @@ h2 {
 
 .button:hover:not(:disabled) {
   filter: brightness(1.06);
-  transform: translateY(-1px);
   text-decoration: none;
 }
 
@@ -227,8 +228,8 @@ h2 {
 
 .input,
 .select {
-  min-height: 44px;
-  padding: 10px 12px;
+  min-height: 36px;
+  padding: 6px 10px;
   border: 1px solid var(--color-field-border);
   border-radius: var(--radius-input);
   outline: 0;
@@ -258,10 +259,10 @@ textarea.input {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 5px;
   color: var(--color-label);
   font-size: var(--font-caption);
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .field .hint {
@@ -277,17 +278,24 @@ textarea.input {
 
 .table th,
 .table td {
-  padding: 14px 16px;
+  padding: 9px 12px;
   border-bottom: 1px solid var(--color-divider);
   text-align: left;
   vertical-align: top;
 }
 
 .table th {
-  color: #667a94;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  color: var(--color-text-secondary);
+  background: var(--color-field);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Counts and money read down a column when they end on the same edge. */
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -296,7 +304,7 @@ textarea.input {
 }
 
 .table tbody tr:hover td {
-  background: #fafcff;
+  background: #f5f9ff;
 }
 
 .table .nowrap {
@@ -317,33 +325,37 @@ textarea.input {
   padding: 0;
 }
 
+.card.table-wrap {
+  overflow: hidden;
+}
+
 .card.table-wrap > :not(table) {
-  margin-right: 28px;
-  margin-left: 28px;
+  margin-right: 20px;
+  margin-left: 20px;
 }
 
 .card.table-wrap > h2:first-child {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 
 .card.table-wrap > .hint:not(:last-child) {
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .card.table-wrap > .table th,
 .card.table-wrap > .table td {
-  padding: 16px 20px;
+  padding: 9px 12px;
 }
 
 .card.table-wrap > .table th:first-child,
 .card.table-wrap > .table td:first-child {
-  padding-left: 28px;
+  padding-left: 20px;
 }
 
 .card.table-wrap > .table th:last-child,
 .card.table-wrap > .table td:last-child {
-  padding-right: 28px;
+  padding-right: 20px;
 }
 
 .card.table-wrap > .table thead th {
@@ -354,11 +366,63 @@ textarea.input {
   border-top: 0;
 }
 
-.notice {
+/* A page's title with its actions on the same line. */
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-md);
   margin-bottom: var(--space-lg);
-  padding: 13px 16px;
+}
+
+.page-head h1 {
+  margin: 0;
+}
+
+/* The search and filters above a list: one row, no card around it. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.filters .input {
+  flex: 1 1 240px;
+  max-width: 360px;
+}
+
+/* A small mark beside a value: what kind it is, or a state worth noticing. */
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  color: var(--color-label);
+  background: var(--color-divider);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+
+.tag--info {
+  color: var(--status-assigned);
+  background: var(--status-assigned-bg);
+}
+
+.tag--danger {
+  color: var(--status-cancelled);
+  background: var(--status-cancelled-bg);
+}
+
+.notice {
+  margin-bottom: var(--space-md);
+  padding: 9px 14px;
   border: 1px solid #cfe0f6;
-  border-radius: 14px;
+  border-radius: var(--radius-input);
   color: var(--color-info-text);
   background: #f5f9ff;
 }
@@ -376,18 +440,17 @@ textarea.input {
 }
 
 .stat {
-  margin-top: 14px;
+  margin-top: 6px;
   color: var(--color-text);
-  font-size: 36px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1.15;
-  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
 }
 
 @media (max-width: 700px) {
   .card {
-    padding: 16px;
-    border-radius: 16px;
+    padding: 14px;
   }
 
   .card.table-wrap > :not(table) {
@@ -401,7 +464,7 @@ textarea.input {
 
   .card.table-wrap > .table th,
   .card.table-wrap > .table td {
-    padding: 13px 14px;
+    padding: 9px 10px;
   }
 
   .card.table-wrap > .table th:first-child,
@@ -415,7 +478,6 @@ textarea.input {
   }
 
   .stat {
-    margin-top: 7px;
-    font-size: 26px;
+    font-size: 22px;
   }
 }
