@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
+import { session } from '../api';
 import { t } from '../i18n';
 import AppIcon from './AppIcon.vue';
 
@@ -32,7 +33,10 @@ const pathOf = (address: unknown) => (typeof address === 'string' ? address.spli
 function back() {
   // Stepping back in history is the same move when the page above is the one just left, and keeps its place on screen.
   const goesUp = pathOf(previous) === pathOf(props.fallback);
-  if (hasPrevious && (props.history || goesUp)) router.back();
+  // After signing out, the page before this one is a page of the tool, which would only send the
+  // driver straight back here. Go to the fallback instead.
+  const bounces = !session.user && (pathOf(previous) ?? '').startsWith('/app');
+  if (hasPrevious && !bounces && (props.history || goesUp)) router.back();
   else void router.replace(props.fallback);
 }
 </script>

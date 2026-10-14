@@ -18,7 +18,8 @@ const id = String(route.params.id);
 const booking = ref<DriverBooking | null>(null);
 const error = ref('');
 const busy = ref(false);
-const quote = reactive({ amount: '', currency: 'HKD', note: '' });
+/** The quote starts in 人民幣, as an order's prices do. */
+const quote = reactive({ amount: '', currency: 'CNY', note: '' });
 const open = computed(() => (booking.value ? bookingOpen(booking.value.status) : false));
 /** Once the passenger has agreed, the agreed price stands; the server refuses a new quote too. */
 const quotable = computed(() => booking.value?.status === 'PENDING' || booking.value?.status === 'QUOTED');
@@ -192,8 +193,8 @@ onBeforeUnmount(() => {
         <span class="section-label">{{ booking.quote ? t('修改報價') : t('你的報價') }}</span>
         <div class="amount-line booking-detail__price">
           <select v-model="quote.currency" :aria-label="t('幣種')">
-            <option value="HKD">HK$</option>
             <option value="CNY">RMB¥</option>
+            <option value="HKD">HK$</option>
             <option value="MOP">MOP$</option>
           </select>
           <input
