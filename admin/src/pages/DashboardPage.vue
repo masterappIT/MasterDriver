@@ -4,6 +4,7 @@ import { api, can } from '../api';
 import { dateTime, hkd, money, ORDER_STATUS } from '../format';
 
 interface Dashboard {
+  weekFrom: string;
   users: { total: number; newThisWeek: number };
   orders: { today: number; thisWeek: number; thisWeekByStatus: Record<string, number> };
   claimsThisWeek: number;
@@ -85,11 +86,13 @@ onMounted(load);
           <div><dt>近 7 天出單者</dt><dd>{{ data.activeDispatchersThisWeek }} 人</dd></div>
           <div><dt>近 7 天搶單嘗試</dt><dd>{{ data.claimsThisWeek }} 次</dd></div>
         </dl>
-        <p class="dashboard__label">近 7 天出的單，現在的狀態</p>
+        <p class="dashboard__label">近 7 天出的單，現在的狀態（點選查看）</p>
         <ul class="dashboard__status">
           <li v-for="(label, status) in ORDER_STATUS" :key="status">
-            <span class="muted">{{ label }}</span>
-            <strong>{{ data.orders.thisWeekByStatus[status] ?? 0 }}</strong>
+            <RouterLink :to="{ path: '/orders', query: { status, by: 'created', from: data.weekFrom } }">
+              <span class="muted">{{ label }}</span>
+              <strong>{{ data.orders.thisWeekByStatus[status] ?? 0 }}</strong>
+            </RouterLink>
           </li>
         </ul>
       </section>
@@ -258,13 +261,20 @@ onMounted(load);
   list-style: none;
 }
 
-.dashboard__status li {
+.dashboard__status a {
   display: grid;
   gap: 2px;
   padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-input);
+  color: var(--color-text);
   background: var(--color-field);
   font-size: var(--font-caption);
+}
+
+.dashboard__status a:hover {
+  border-color: var(--color-primary);
+  text-decoration: none;
 }
 
 .dashboard__status strong {

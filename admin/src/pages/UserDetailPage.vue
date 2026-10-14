@@ -1,7 +1,11 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue';
+import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, apiFetch, can } from '../api';
+import BackLink from '../components/BackLink.vue';
+import StatusBadge from '../components/StatusBadge.vue';
+import { ask, notify } from '../feedback';
+import { useRowLink } from '../list-query';
 import { CREDIT_ENTRY, dateTime, fromLocalInput, hkd, money, PLAN_NAME, PLATE_TYPE } from '../format';
 
 interface Grant {
@@ -111,7 +115,6 @@ const route = useRoute();
 const router = useRouter();
 const user = ref<UserDetail | null>(null);
 const error = ref('');
-const message = ref('');
 const credit = reactive({ type: 'TOPUP' as 'TOPUP' | 'ADJUST', amount: '', note: '' });
 const gift = reactive({ planKey: 'company', endsAt: '', reason: '' });
 
@@ -124,28 +127,34 @@ async function load() {
   }
 }
 
+/** An action on this user: how it went shows in the corner, wherever on the page it was done. */
 async function run(action: () => Promise<unknown>, done: string) {
-  error.value = '';
-  message.value = '';
   try {
     await action();
-    message.value = done;
+    notify(done);
     await load();
+    return true;
   } catch (e) {
-    error.value = (e as Error).message;
+    notify((e as Error).message, true);
+    return false;
   }
 }
 
 /** 停用: for abuse. The user is signed out everywhere and cannot sign in until restored. */
-function suspend() {
-  const reason = prompt('停用這個帳號：對方會立即被登出，之後不能再登入，直到恢復。已出的單不會自動取消。\n請寫原因（會記在操作紀錄）：')?.trim();
-  if (!reason) return;
-  return run(() => api('POST', `/users/${route.params.id}/suspend`, { reason }), '帳號已停用');
+async function suspend() {
+  const reason = await ask({
+    title: '停用這個帳號',
+    text: '對方會立即被登出，之後不能再登入，直到恢復。已出的單不會自動取消。',
+    reason: '原因（會記在操作紀錄）',
+    confirm: '停用帳號',
+    danger: true,
+  });
+  if (reason) await run(() => api('POST', `/users/${route.params.id}/suspend`, { reason }), '帳號已停用');
 }
 
-function restore() {
-  if (!confirm('恢復這個帳號？對方可以再登入。')) return;
-  return run(() => api('POST', `/users/${route.params.id}/restore`), '帳號已恢復');
+async function restore() {
+  if ((await ask({ title: '恢復這個帳號', text: '對方可以再登入。', confirm: '恢復帳號' })) === null) return;
+  await run(() => api('POST', `/users/${route.params.id}/restore`), '帳號已恢復');
 }
 
 // ---- complaints about the 名片頁 and 派單群: every action asks for a reason for the log.
@@ -174,27 +183,30 @@ onBeforeUnmount(() => {
 const photoPath = (photoId: string) => `/users/${route.params.id}/page/photos/${photoId}`;
 const qrPath = (inviteId: string) => `/users/${route.params.id}/group-invites/${inviteId}/qr`;
 
-function blockPage() {
-  const reason = prompt('下架名片頁：乘客打不開，司機在恢復前不能再公開，並會看到下面寫的原因。\n請寫原因：')?.trim();
-  if (!reason) return;
-  return run(() => api('POST', `/users/${route.params.id}/page/block`, { reason }), '名片頁已下架');
+async function blockPage() {
+  const reason = await ask({
+    title: '下架名片頁',
+    text: '乘客打不開這個名片頁；司機在恢復前不能再公開，並會看到你寫的原因。',
+    reason: '原因（司機看得到，也會記在操作紀錄）',
+    confirm: '下架',
+    danger: true,
+  });
+  if (reason) await run(() => api('POST', `/users/${route.params.id}/page/block`, { reason }), '名片頁已下架');
 }
 
-function restorePage() {
-  if (!confirm('恢復名片頁？司機可以再自己公開。')) return;
-  return run(() => api('POST', `/users/${route.params.id}/page/restore`), '已恢復，司機可以再公開');
+async function restorePage() {
+  if ((await ask({ title: '恢復名片頁', text: '司機可以再自己公開。', confirm: '恢復' })) === null) return;
+  await run(() => api('POST', `/users/${route.params.id}/page/restore`), '已恢復，司機可以再公開');
 }
 
-function removePhoto(photoId: string) {
-  const reason = prompt('刪除這張照片：刪除後不能還原。\n請寫原因（會記在操作紀錄）：')?.trim();
-  if (!reason) return;
-  return run(() => api('POST', `/users/${route.params.id}/page/photos/${photoId}/remove`, { reason }), '照片已刪除');
+async function removePhoto(photoId: string) {
+  const reason = await ask({ title: '刪除這張照片', text: '刪除後不能還原。', reason: '原因（會記在操作紀錄）', confirm: '刪除', danger: true });
+  if (reason) await run(() => api('POST', `/users/${route.params.id}/page/photos/${photoId}/remove`, { reason }), '照片已刪除');
 }
 
-function removeGroup(inviteId: string) {
-  const reason = prompt('移除這個派單群：搶單頁不再顯示，刪除後不能還原。\n請寫原因（會記在操作紀錄）：')?.trim();
-  if (!reason) return;
-  return run(() => api('POST', `/users/${route.params.id}/group-invites/${inviteId}/remove`, { reason }), '派單群已移除');
+async function removeGroup(inviteId: string) {
+  const reason = await ask({ title: '移除這個派單群', text: '搶單頁不再顯示，刪除後不能還原。', reason: '原因（會記在操作紀錄）', confirm: '移除', danger: true });
+  if (reason) await run(() => api('POST', `/users/${route.params.id}/group-invites/${inviteId}/remove`, { reason }), '派單群已移除');
 }
 
 /** 代改司機資料: the same fields and rules as the driver's own form. */
@@ -234,20 +246,23 @@ function editProfile() {
 }
 
 async function saveProfile() {
-  await run(
+  const saved = await run(
     () => api('PUT', `/users/${route.params.id}/profile`, { ...profileForm, seats: profileForm.seats ? Number(profileForm.seats) : undefined }),
     '司機資料已更新',
   );
-  if (!error.value) editingProfile.value = false;
+  if (saved) editingProfile.value = false;
 }
 
-function changeCredits() {
-  return run(async () => {
-    await api('POST', `/users/${route.params.id}/credits`, {
-      type: credit.type,
-      amount: Number(credit.amount),
-      note: credit.note,
-    });
+async function changeCredits() {
+  const amount = Number(credit.amount);
+  const confirmed = await ask({
+    title: credit.type === 'TOPUP' ? '人工充值' : '調整點數',
+    text: `${credit.type === 'TOPUP' ? '充值' : '調整'} ${hkd(amount)}，備註「${credit.note}」。立即生效，記在點數紀錄和操作紀錄。`,
+    confirm: '確定',
+  });
+  if (confirmed === null) return;
+  await run(async () => {
+    await api('POST', `/users/${route.params.id}/credits`, { type: credit.type, amount, note: credit.note });
     credit.amount = '';
     credit.note = '';
   }, '點數已更新');
@@ -265,19 +280,18 @@ function giftPlan() {
   }, '已贈送方案');
 }
 
-function endOverride(id: string) {
-  if (!confirm('確定結束這項贈送？')) return;
-  return run(() => api('DELETE', `/users/${route.params.id}/overrides/${id}`), '已結束贈送');
+async function endOverride(id: string) {
+  if ((await ask({ title: '結束這項贈送', text: '立即結束，這位用戶回到原本的方案。', confirm: '結束贈送', danger: true })) === null) return;
+  await run(() => api('DELETE', `/users/${route.params.id}/overrides/${id}`), '已結束贈送');
 }
 
 /** 主動聯繫: opens this user's 客服 conversation, creating it when there is none. */
 async function contact() {
-  error.value = '';
   try {
     const { id } = await api<{ id: string }>('POST', '/support/conversations', { userId: route.params.id });
     await router.push(`/support/${id}`);
   } catch (e) {
-    error.value = (e as Error).message;
+    notify((e as Error).message, true);
   }
 }
 
@@ -288,17 +302,57 @@ onMounted(load);
 /** The page in parts, so the one being worked on is not far down a long page. */
 const TABS = [
   { key: 'profile', label: '司機資料' },
+  { key: 'orders', label: '訂單' },
   { key: 'page', label: '名片頁與派單群' },
   { key: 'money', label: '點數與方案' },
   { key: 'notices', label: '通知' },
 ] as const;
-const tab = ref<(typeof TABS)[number]['key']>('profile');
+type Tab = (typeof TABS)[number]['key'];
+// The open tab is in the address, so 返回 from an order opened here comes back to it.
+const tab = ref<Tab>(TABS.some((item) => item.key === route.query.tab) ? (route.query.tab as Tab) : 'profile');
+watch(tab, (value) => void router.replace({ query: value === 'profile' ? {} : { tab: value } }));
+
+// ---- 訂單: what this user put out and what they drove, the latest first; the order list has the rest.
+
+interface OrderRow {
+  id: string;
+  code: string;
+  status: string;
+  pickupAt: string;
+  origin: string;
+  destination: string;
+  driverPrice: { amount: number; currency: string } | null;
+  passengerConfirmed: boolean;
+  selfDrive: boolean;
+  dispatcher: { id: string; name: string | null; phone: string };
+  claimedBy: { id: string; name: string | null; phone: string } | null;
+}
+const orderRole = ref<'dispatcher' | 'driver'>('dispatcher');
+const orders = ref<{ total: number; items: OrderRow[] } | null>(null);
+const ordersError = ref('');
+async function loadOrders() {
+  ordersError.value = '';
+  try {
+    orders.value = await api('GET', `/orders?${new URLSearchParams({ page: '1', user: String(route.params.id), role: orderRole.value })}`);
+  } catch (e) {
+    ordersError.value = (e as Error).message;
+  }
+}
+watch(
+  [tab, orderRole],
+  ([value]) => {
+    if (value === 'orders') void loadOrders();
+  },
+  { immediate: true },
+);
+/** Who was on the other side of the order: its driver for what this user put out, its dispatcher for what they drove. */
+const rowLink = useRowLink();
+const otherSide = (order: OrderRow) => (order.selfDrive ? null : orderRole.value === 'dispatcher' ? order.claimedBy : order.dispatcher);
 </script>
 
 <template>
-  <RouterLink to="/users" class="back-link">返回用戶</RouterLink>
+  <BackLink to="/users" label="返回用戶" />
   <div v-if="error" class="notice error">{{ error }}</div>
-  <div v-if="message" class="notice">{{ message }}</div>
   <template v-if="user">
     <div class="page-head">
       <div class="page-head__title">
@@ -318,7 +372,10 @@ const tab = ref<(typeof TABS)[number]['key']>('profile');
 
     <div class="card">
       <dl class="facts facts--numbers">
-        <div><dt>派單／接單</dt><dd>{{ user.counts.dispatched }} / {{ user.counts.claimed }}</dd></div>
+        <div>
+          <dt>派單／接單</dt>
+          <dd><a href="#" class="user-detail__count" @click.prevent="tab = 'orders'">{{ user.counts.dispatched }} / {{ user.counts.claimed }}</a></dd>
+        </div>
         <div>
           <dt>
             點數餘額<span class="tag">服務費：{{
@@ -401,6 +458,58 @@ const tab = ref<(typeof TABS)[number]['key']>('profile');
         </div>
       </form>
       <p v-if="!user.profile" class="hint">註冊：{{ dateTime(user.createdAt) }}　介面語言：{{ user.locale === 'zh-Hans' ? '簡體' : '繁體' }}</p>
+    </div>
+
+    <div v-if="tab === 'orders'" class="card table-wrap">
+      <div class="user-detail__orders-head">
+        <h2>訂單</h2>
+        <div class="segmented" role="group" aria-label="出的單或接的單">
+          <button type="button" :class="{ active: orderRole === 'dispatcher' }" :aria-pressed="orderRole === 'dispatcher'" @click="orderRole = 'dispatcher'">
+            出的單 {{ user.counts.dispatched }}
+          </button>
+          <button type="button" :class="{ active: orderRole === 'driver' }" :aria-pressed="orderRole === 'driver'" @click="orderRole = 'driver'">
+            接的單 {{ user.counts.claimed }}
+          </button>
+        </div>
+        <RouterLink :to="{ path: '/orders', query: { user: user.id, role: orderRole } }" class="user-detail__all">在訂單列表篩選</RouterLink>
+      </div>
+      <div v-if="ordersError" class="notice error">{{ ordersError }} <button class="button secondary" type="button" @click="loadOrders">重試</button></div>
+      <table v-else-if="orders" class="table table--links">
+        <thead>
+          <tr>
+            <th>出發時間</th>
+            <th>路線</th>
+            <th>狀態</th>
+            <th>{{ orderRole === 'dispatcher' ? '接單司機' : '出單者' }}</th>
+            <th class="num">出單價</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="order in orders.items" :key="order.id" @click="rowLink(`/orders/${order.id}`)($event)">
+            <td class="nowrap">
+              <RouterLink :to="`/orders/${order.id}`" class="cell-title">{{ dateTime(order.pickupAt) }}</RouterLink>
+              <div class="hint">單號 {{ order.code }}</div>
+            </td>
+            <td class="wide">{{ order.origin }} 至 {{ order.destination }}</td>
+            <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
+            <td class="nowrap">
+              <template v-if="otherSide(order)">
+                <RouterLink :to="`/users/${otherSide(order)!.id}`">{{ otherSide(order)!.name ?? '未填姓名' }}</RouterLink>
+                <div class="hint">{{ otherSide(order)!.phone }}</div>
+              </template>
+              <span v-else class="muted">{{ order.selfDrive ? (orderRole === 'dispatcher' ? '自己做' : '自己出的單') : '—' }}</span>
+            </td>
+            <td class="num">{{ money(order.driverPrice) }}</td>
+          </tr>
+          <tr v-if="orders.items.length === 0" class="table__empty">
+            <td colspan="5" class="muted">{{ orderRole === 'dispatcher' ? '還沒有出過單' : '還沒有接過單' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="muted user-detail__loading">載入中…</p>
+      <p v-if="orders && orders.total > orders.items.length" class="hint user-detail__more">
+        只列出最近 {{ orders.items.length }} 張，共 {{ orders.total }} 張；全部請到訂單列表。
+      </p>
     </div>
 
     <div v-show="tab === 'page'" class="card">
@@ -570,6 +679,34 @@ const tab = ref<(typeof TABS)[number]['key']>('profile');
 </template>
 
 <style scoped>
+.user-detail__count {
+  color: inherit;
+}
+.user-detail__count:hover {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+.user-detail__orders-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: 20px !important;
+  margin-bottom: var(--space-md) !important;
+}
+.user-detail__orders-head h2 {
+  margin: 0;
+}
+.user-detail__all {
+  margin-left: auto;
+  font-size: var(--font-label);
+  font-weight: 600;
+}
+.user-detail__loading,
+.user-detail__more {
+  margin-top: var(--space-md) !important;
+  margin-bottom: var(--space-md) !important;
+}
 .user-profile-form {
   display: flex;
   flex-direction: column;

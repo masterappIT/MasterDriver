@@ -659,3 +659,95 @@ textarea.input {
     font-size: 22px;
   }
 }
+
+/* ---- Lists (2026-10-14): one way for every list page. */
+
+/* The search applies on Enter or 搜尋; a choice in a select applies at once. */
+.filters__group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-sm);
+}
+
+.filters .filters__date {
+  flex: 0 0 auto;
+  width: 150px;
+}
+
+.filters__clear {
+  padding: 4px 6px;
+  border: 0;
+  color: var(--color-primary);
+  background: none;
+  font-size: var(--font-label);
+  font-weight: 600;
+}
+
+/* A row opens its detail page wherever it is clicked; its title is the link a keyboard reaches. */
+.table--links tbody tr:not(.table__empty) {
+  cursor: pointer;
+}
+
+.table .cell-title {
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.table--links tbody tr:hover .cell-title {
+  color: var(--color-primary);
+}
+
+/* Reloading after a filter changed: the old rows stay, faded, instead of a blank page. */
+.is-loading {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+/* Two or three choices side by side, one of them on: which part of a list to show. */
+.segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-input);
+  background: var(--color-field);
+}
+
+.segmented button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  background: none;
+  font-size: var(--font-label);
+  font-weight: 600;
+}
+
+.segmented button.active {
+  color: var(--color-text);
+  background: var(--color-surface);
+  box-shadow: 0 1px 3px rgba(39, 72, 111, 0.12);
+}
+
+/* A filter that came from elsewhere and has no field of its own, with a way to take it off. */
+.filters__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: calc(var(--space-sm) * -1) 0 var(--space-lg);
+  padding: 4px 6px 4px 12px;
+  border-radius: var(--radius-pill);
+  color: var(--color-info-text);
+  background: var(--color-tint);
+  font-size: var(--font-label);
+}
+
+.filters__chip button {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--color-info-text);
+  background: rgb(255 255 255 / 70%);
+  font-size: var(--font-caption);
+  font-weight: 600;
+}

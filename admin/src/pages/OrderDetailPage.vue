@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api, can } from '../api';
+import BackLink from '../components/BackLink.vue';
 import StatusBadge from '../components/StatusBadge.vue';
+import { ask, notify } from '../feedback';
 import { dateTime, hkd, money, PLATE_TYPE } from '../format';
 
 type Money = { amount: number; currency: string } | null;
@@ -33,6 +35,7 @@ interface OrderDetail {
   payment: { showPaymentMethods: boolean; paidAt: string | null; settledAt: string | null };
   tripGroup: { platform: 'WHATSAPP' | 'WECHAT'; expiresAt: string | null } | null;
   driver: {
+    id: string;
     name: string | null;
     phone: string;
     profile: {
@@ -71,26 +74,39 @@ function otherPhones(driver: NonNullable<OrderDetail['driver']>): string {
 }
 
 const route = useRoute();
+const router = useRouter();
 const order = ref<OrderDetail | null>(null);
 const error = ref('');
-
-const message = ref('');
 const busy = ref(false);
 
 /** 代為取消: for a complaint or an abandoned order. It runs as the dispatcher's own cancel, and the reason is logged. */
 async function cancelForDispatcher() {
-  const reason = prompt('代出單者取消這張單。服務費會照規則退回，接單司機和乘客打開連結會看到已取消。\n請寫原因（會記在操作紀錄）：')?.trim();
+  const reason = await ask({
+    title: '代出單者取消這張單',
+    text: '服務費會照規則退回；接單司機和乘客打開連結會看到已取消。',
+    reason: '原因（會記在操作紀錄）',
+    confirm: '取消這張單',
+    danger: true,
+  });
   if (!reason) return;
-  error.value = '';
-  message.value = '';
   busy.value = true;
   try {
     order.value = await api<OrderDetail>('POST', `/orders/${route.params.id}/cancel`, { reason });
-    message.value = '已取消這張單';
+    notify('已取消這張單');
   } catch (e) {
-    error.value = (e as Error).message;
+    notify((e as Error).message, true);
   } finally {
     busy.value = false;
+  }
+}
+
+/** 用客服聯絡: opens that person's 客服 conversation, for a dispute or a complaint about this order. */
+async function contact(userId: string) {
+  try {
+    const { id } = await api<{ id: string }>('POST', '/support/conversations', { userId });
+    await router.push(`/support/${id}`);
+  } catch (e) {
+    notify((e as Error).message, true);
   }
 }
 
@@ -104,9 +120,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <RouterLink to="/orders" class="back-link">返回訂單</RouterLink>
+  <BackLink to="/orders" label="返回訂單" />
   <div v-if="error" class="notice error">{{ error }}</div>
-  <div v-if="message" class="notice">{{ message }}</div>
   <template v-if="order">
     <div class="page-head">
       <div class="page-head__title">
@@ -164,12 +179,14 @@ onMounted(async () => {
             <dt>出單者</dt>
             <dd>
               <RouterLink :to="`/users/${order.dispatcher.id}`">{{ order.dispatcher.name ?? '未填姓名' }}（{{ order.dispatcher.phone }}）</RouterLink>
+              <button v-if="can.write()" class="order-detail__contact" type="button" @click="contact(order.dispatcher.id)">用客服聯絡</button>
             </dd>
           </div>
           <div v-if="order.driver" class="facts__wide">
             <dt>接單司機</dt>
             <dd>
-              {{ order.driver.name ?? '未填姓名' }}（{{ order.driver.phone }}）
+              <RouterLink :to="`/users/${order.driver.id}`">{{ order.driver.name ?? '未填姓名' }}（{{ order.driver.phone }}）</RouterLink>
+              <button v-if="can.write()" class="order-detail__contact" type="button" @click="contact(order.driver.id)">用客服聯絡</button>
               <span class="muted">
                 {{ [order.driver.profile?.hkPlate, order.driver.profile?.macauPlate, order.driver.profile?.mainlandPlate].filter(Boolean).join(' / ') }}
               </span>
@@ -252,6 +269,21 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.order-detail__contact {
+  margin-left: var(--space-sm);
+  padding: 1px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-label);
+  background: var(--color-surface);
+  font-size: var(--font-caption);
+  font-weight: 600;
+  vertical-align: 1px;
+}
+.order-detail__contact:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .order-detail__tags {
   display: flex;
   flex-wrap: wrap;

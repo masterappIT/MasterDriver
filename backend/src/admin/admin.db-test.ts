@@ -90,7 +90,7 @@ test('the admin sees the money marks, filters by them, and counts what is still 
   await ctx.orders.complete(dispatcher, own.id);
   await ctx.orders.create(dispatcher, sampleOrder);
 
-  const page = { page: 1 };
+  const page = { page: 1, by: 'pickup' as const };
   let dashboard = await ctx.adminData.dashboard();
   assert.deepEqual(dashboard.money, { unpaidCompleted: 2, unsettledCompleted: 1 }, '這單我自己做 has nobody to settle with');
   assert.equal((await ctx.adminData.listOrders({ ...page, money: 'UNPAID' }, 'SUPER_ADMIN')).total, 2);
@@ -221,4 +221,54 @@ test("the user detail shows what the user turned off and their latest notificati
   const { notifications } = await ctx.adminData.getUser(dispatcher);
   assert.deepEqual(notifications.off, ['BOOKINGS']);
   assert.deepEqual(notifications.recent.map((item) => [item.kind, item.read]), [['ORDER_CLAIMED', false]]);
+});
+
+test('the order list narrows to some days, by trip date or by the day it was put out', async () => {
+  const dispatcher = await createDriver(ctx);
+  const early = await ctx.orders.create(dispatcher, sampleOrder);
+  const late = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.prisma.order.update({ where: { id: early.id }, data: { pickupAt: new Date('2026-11-02T23:30:00+08:00'), createdAt: new Date('2026-10-01T10:00:00+08:00') } });
+  await ctx.prisma.order.update({ where: { id: late.id }, data: { pickupAt: new Date('2026-11-03T00:30:00+08:00'), createdAt: new Date('2026-10-02T10:00:00+08:00') } });
+  const list = (query: Partial<{ by: 'pickup' | 'created'; from: string; to: string }>) =>
+    ctx.adminData.listOrders({ page: 1, by: 'pickup', ...query }, 'SUPER_ADMIN').then((result) => result.items.map((item) => item.id));
+
+  assert.deepEqual(await list({ from: '2026-11-02', to: '2026-11-02' }), [early.id], 'Hong Kong days: 23:30 is still the 2nd');
+  assert.deepEqual(await list({ from: '2026-11-03' }), [late.id]);
+  assert.deepEqual(await list({ from: '2026-11-01', to: '2026-11-30' }), [late.id, early.id], 'latest trip first');
+  assert.deepEqual(await list({ by: 'created', to: '2026-10-01' }), [early.id]);
+});
+
+test('the user list shows drivers, those without driver details, published pages or suspended accounts', async () => {
+  const driver = await createDriver(ctx, '有資料');
+  const bare = await ctx.prisma.user.create({ data: { countryCode: '+86', phone: '13800000001' } });
+  const suspended = await createDriver(ctx, '被停用');
+  await ctx.prisma.user.update({ where: { id: suspended }, data: { suspendedAt: new Date(), suspendedReason: '測試' } });
+  await ctx.profilePages.update(driver, { published: true, intro: '' });
+  const ids = (status?: 'DRIVER' | 'NO_PROFILE' | 'PAGE_PUBLISHED' | 'SUSPENDED') =>
+    ctx.adminData.listUsers({ page: 1, status }).then((result) => result.items.map((item) => item.id).sort());
+
+  assert.deepEqual(await ids('DRIVER'), [driver, suspended].sort());
+  assert.deepEqual(await ids('NO_PROFILE'), [bare.id]);
+  assert.deepEqual(await ids('PAGE_PUBLISHED'), [driver]);
+  assert.deepEqual(await ids('SUSPENDED'), [suspended]);
+  assert.deepEqual((await ctx.adminData.listUsers({ page: 1, q: bare.id })).items.map((item) => item.id), [bare.id], 'found by 帳戶 ID');
+});
+
+test('one user\'s orders: those they put out, those they drove, or both; with a status and the money marks at once', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const other = await createDriver(ctx);
+  const theirs = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(theirs.code, driver);
+  const driven = await ctx.orders.create(other, sampleOrder);
+  await ctx.orders.claim(driven.code, dispatcher);
+  await ctx.orders.complete(dispatcher, driven.id);
+  await ctx.orders.create(other, sampleOrder);
+  const ids = (query: { user: string; role?: 'dispatcher' | 'driver'; status?: 'COMPLETED'; money?: 'UNPAID' }) =>
+    ctx.adminData.listOrders({ page: 1, by: 'pickup', ...query }, 'SUPER_ADMIN').then((result) => result.items.map((item) => item.id).sort());
+
+  assert.deepEqual(await ids({ user: dispatcher, role: 'dispatcher' }), [theirs.id]);
+  assert.deepEqual(await ids({ user: dispatcher, role: 'driver' }), [driven.id]);
+  assert.deepEqual(await ids({ user: dispatcher }), [theirs.id, driven.id].sort());
+  assert.deepEqual(await ids({ user: dispatcher, money: 'UNPAID', status: 'COMPLETED' }), [driven.id], 'a status and a money mark narrow together');
 });

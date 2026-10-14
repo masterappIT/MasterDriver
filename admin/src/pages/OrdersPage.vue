@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref } from 'vue';
 import { api } from '../api';
 import PagerBar from '../components/PagerBar.vue';
 import StatusBadge from '../components/StatusBadge.vue';
 import { dateTime, hkd, money, ORDER_STATUS } from '../format';
+import { useListQuery, useRowLink } from '../list-query';
 
 interface Person {
   id: string;
@@ -29,37 +29,30 @@ interface OrderRow {
   legIndex: number | null;
   paidAt: string | null;
   settledAt: string | null;
+  createdAt: string;
 }
 
-const q = ref('');
-const status = ref('');
-/** 帳: trips still waiting on the dispatcher's own marks. */
-// The dashboard's cards open this page already filtered.
-const asked = useRoute().query.money;
-const moneyFilter = ref(asked === 'UNPAID' || asked === 'UNSETTLED' ? asked : '');
-const page = ref(1);
 const result = ref<{ total: number; pageSize: number; items: OrderRow[] } | null>(null);
 const error = ref('');
+const loading = ref(false);
+const rowLink = useRowLink();
 
-async function load() {
+// The overview's cards open this page already filtered, through the same address.
+const list = useListQuery({ q: '', status: '', money: '', by: 'pickup', from: '', to: '', user: '', role: '' }, async (query) => {
   error.value = '';
+  loading.value = true;
   try {
-    const params = new URLSearchParams({ page: String(page.value) });
-    if (q.value) params.set('q', q.value);
-    if (status.value) params.set('status', status.value);
-    if (moneyFilter.value) params.set('money', moneyFilter.value);
+    const params = new URLSearchParams({ page: String(query.page) });
+    for (const key of ['q', 'status', 'money', 'from', 'to', 'user', 'role'] as const) if (query[key]) params.set(key, query[key]);
+    if (query.from || query.to) params.set('by', query.by);
     result.value = await api('GET', `/orders?${params}`);
   } catch (e) {
     error.value = (e as Error).message;
+  } finally {
+    loading.value = false;
   }
-}
-
-function search() {
-  page.value = 1;
-  void load();
-}
-
-const who = (person: Person | null) => (person ? `${person.name ?? '未填姓名'}（${person.phone}）` : '—');
+});
+const { filters } = list;
 
 /** 收款與結清, as the dispatcher marked them. Nothing to say before a driver has the order. */
 function moneyMarks(order: OrderRow): string {
@@ -68,66 +61,98 @@ function moneyMarks(order: OrderRow): string {
   if (order.selfDrive) return paid;
   return order.status === 'COMPLETED' ? `${paid}・${order.settledAt ? '已結清' : '未結清'}` : paid;
 }
-
-onMounted(load);
 </script>
 
 <template>
-  <h1>訂單</h1>
-  <form class="filters" @submit.prevent="search">
-    <input v-model="q" class="input" placeholder="單號、地點或手機號碼" />
-    <select v-model="status" class="select" @change="search">
+  <div class="page-head">
+    <div class="page-head__title">
+      <h1>訂單</h1>
+      <span v-if="result" class="muted">共 {{ result.total }} 張{{ list.filtered.value ? '符合' : '' }}</span>
+    </div>
+  </div>
+  <form class="filters" @submit.prevent="list.apply()">
+    <input v-model="filters.q" class="input" type="search" placeholder="單號、地點或手機號碼" />
+    <select v-model="filters.status" class="select" aria-label="狀態" @change="list.apply()">
       <option value="">全部狀態</option>
       <option v-for="(label, key) in ORDER_STATUS" :key="key" :value="key">{{ label }}</option>
     </select>
-    <select v-model="moneyFilter" class="select" @change="search">
+    <select v-model="filters.money" class="select" aria-label="收款與結清" @change="list.apply()">
       <option value="">收款與結清：全部</option>
       <option value="UNPAID">未收款（已有司機或已完成）</option>
       <option value="UNSETTLED">未結清（已完成、別的司機接）</option>
     </select>
-    <button class="button" type="submit">搜尋</button>
+    <span class="filters__group">
+      <select v-model="filters.by" class="select" aria-label="日期依據" @change="(filters.from || filters.to) && list.apply()">
+        <option value="pickup">出發日期</option>
+        <option value="created">出單日期</option>
+      </select>
+      <input v-model="filters.from" class="input filters__date" type="date" aria-label="從" @change="list.apply()" />
+      <span class="muted">至</span>
+      <input v-model="filters.to" class="input filters__date" type="date" aria-label="到" @change="list.apply()" />
+    </span>
+    <button class="button secondary" type="submit">搜尋</button>
+    <button v-if="list.filtered.value" class="filters__clear" type="button" @click="list.clear()">清除篩選</button>
   </form>
-  <div v-if="error" class="notice error">{{ error }}</div>
-  <p class="hint orders__note">收款與結清是出單者自己的記號，平台不經手車費，也不核對。</p>
-  <div v-if="result" class="card table-wrap">
-    <table class="table">
+  <!-- Opened from a user's page: only that user's orders, until this is taken off. -->
+  <p v-if="filters.user" class="filters__chip">
+    只看
+    <RouterLink :to="`/users/${filters.user}`">這位用戶</RouterLink>
+    {{ filters.role === 'dispatcher' ? '出的單' : filters.role === 'driver' ? '接的單' : '出或接的單' }}
+    <button type="button" aria-label="取消只看這位用戶" @click="list.apply({ user: '', role: '' })">取消</button>
+  </p>
+  <div v-if="error" class="notice error">{{ error }} <button class="button secondary" type="button" @click="list.goTo(list.page.value)">重試</button></div>
+  <div v-if="result" class="card table-wrap" :class="{ 'is-loading': loading }">
+    <table class="table table--links">
       <thead>
         <tr>
           <th>出發時間</th>
           <th>路線</th>
           <th>狀態</th>
+          <th>出單者</th>
+          <th>接單司機</th>
           <th class="num">出單價</th>
           <th>收款／結清</th>
           <th class="num">服務費</th>
-          <th>出單者</th>
-          <th>接單司機</th>
-          <th class="num">搶單次數</th>
+          <th class="num">搶單</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="order in result.items" :key="order.id">
-          <td class="nowrap"><RouterLink :to="`/orders/${order.id}`">{{ dateTime(order.pickupAt) }}</RouterLink></td>
-          <td class="wide">{{ order.origin }} 至 {{ order.destination }}<span v-if="order.legIndex" class="tag">接駁第 {{ order.legIndex }} 段</span></td>
+        <tr v-for="order in result.items" :key="order.id" @click="rowLink(`/orders/${order.id}`)($event)">
+          <td class="nowrap">
+            <RouterLink :to="`/orders/${order.id}`" class="cell-title">{{ dateTime(order.pickupAt) }}</RouterLink>
+            <div class="hint">單號 {{ order.code }}</div>
+          </td>
+          <td class="wide">
+            {{ order.origin }} 至 {{ order.destination }}
+            <div v-if="order.legIndex" class="hint">接駁第 {{ order.legIndex }} 段</div>
+          </td>
           <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
+          <td class="nowrap">
+            <RouterLink :to="`/users/${order.dispatcher.id}`">{{ order.dispatcher.name ?? '未填姓名' }}</RouterLink>
+            <div class="hint">{{ order.dispatcher.phone }}</div>
+          </td>
+          <td class="nowrap">
+            <template v-if="order.selfDrive"><span class="muted">出單者自己做</span></template>
+            <template v-else-if="order.claimedBy">
+              <RouterLink :to="`/users/${order.claimedBy.id}`">{{ order.claimedBy.name ?? '未填姓名' }}</RouterLink>
+              <div class="hint">{{ order.claimedBy.phone }}</div>
+            </template>
+            <span v-else class="muted">—</span>
+          </td>
           <td class="num">{{ money(order.driverPrice) }}</td>
           <td class="nowrap">{{ moneyMarks(order) }}</td>
           <td class="num">{{ hkd(order.serviceFee) }}</td>
-          <td class="wide">{{ who(order.dispatcher) }}</td>
-          <td class="wide">{{ order.selfDrive ? '出單者自己做' : who(order.claimedBy) }}</td>
           <td class="num">{{ order.claimAttempts }}</td>
         </tr>
-        <tr v-if="result.items.length === 0">
-          <td colspan="9" class="muted">沒有符合的訂單</td>
+        <tr v-if="result.items.length === 0" class="table__empty">
+          <td colspan="9" class="muted">
+            沒有符合的訂單。<button v-if="list.filtered.value" class="filters__clear" type="button" @click="list.clear()">清除篩選</button>
+          </td>
         </tr>
       </tbody>
     </table>
-    <PagerBar :page="page" :page-size="result.pageSize" :total="result.total" @change="(p) => ((page = p), load())" />
+    <PagerBar :page="list.page.value" :page-size="result.pageSize" :total="result.total" @change="list.goTo" />
   </div>
+  <p v-else-if="loading" class="card muted">載入中…</p>
+  <p class="hint">收款與結清是出單者自己的記號，平台不經手車費，也不核對。</p>
 </template>
-
-<style scoped>
-.orders__note {
-  display: block;
-  margin: 0 0 var(--space-sm);
-}
-</style>

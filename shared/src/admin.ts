@@ -35,13 +35,33 @@ export const pageQuerySchema = z.object({
     .transform((value) => value || undefined),
 });
 
+/** A Hong Kong calendar day, as <input type="date"> gives it. */
+const hongKongDay = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => !Number.isNaN(new Date(`${value}T00:00:00+08:00`).getTime()), { message: 'DATE_INVALID' });
+
 export const adminOrderQuerySchema = pageQuerySchema.extend({
   status: z.enum(['OPEN', 'ASSIGNED', 'COMPLETED', 'CANCELLED']).optional(),
   /** Orders that still wait on money: the fare not marked received, or the driver not marked settled. */
   money: z.enum(['UNPAID', 'UNSETTLED']).optional(),
+  /** Which date `from` and `to` are about: the trip's (出發) or when it was put out (出單). */
+  by: z.enum(['pickup', 'created']).default('pickup'),
+  /** Hong Kong days, both included. */
+  from: hongKongDay.optional(),
+  to: hongKongDay.optional(),
+  /** One user's orders: those they put out (`dispatcher`), drove (`driver`), or either. */
+  user: z.string().trim().min(1).max(40).optional(),
+  role: z.enum(['dispatcher', 'driver']).optional(),
 });
 export type AdminOrderQuery = z.infer<typeof adminOrderQuerySchema>;
 export type PageQuery = z.infer<typeof pageQuerySchema>;
+
+/** 用戶: who the list shows besides the search. */
+export const adminUserQuerySchema = pageQuerySchema.extend({
+  status: z.enum(['DRIVER', 'NO_PROFILE', 'PAGE_PUBLISHED', 'SUSPENDED']).optional(),
+});
+export type AdminUserQuery = z.infer<typeof adminUserQuerySchema>;
 
 export const adminAuditQuerySchema = pageQuerySchema.extend({
   action: z.string().trim().max(60).optional(),

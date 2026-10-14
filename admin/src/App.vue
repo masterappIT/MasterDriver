@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, can, ROLE_LABEL, session, type AdminRole } from './api';
+import FeedbackLayer from './components/FeedbackLayer.vue';
 import { COPYRIGHT } from './copyright';
 import { supportUnread, watchSupportUnread } from './support-unread';
 
@@ -149,8 +150,8 @@ async function logout() {
     </aside>
     <main class="admin-shell__main">
       <span class="eyebrow admin-shell__eyebrow">{{ section }}</span>
-      <!-- 客服 keeps its inbox while switching conversations; every other page reloads with its URL. -->
-      <RouterView :key="route.path.startsWith('/support') ? '/support' : route.fullPath" />
+      <!-- 客服 keeps its inbox while switching conversations; a list keeps itself while its filters change in the address. -->
+      <RouterView :key="route.path.startsWith('/support') ? '/support' : route.path" />
       <footer class="admin-shell__copyright">{{ COPYRIGHT }}</footer>
     </main>
   </div>
@@ -158,6 +159,7 @@ async function logout() {
     <RouterView />
     <footer class="admin-shell__copyright admin-shell__copyright--public">{{ COPYRIGHT }}</footer>
   </template>
+  <FeedbackLayer />
 </template>
 
 <style scoped>

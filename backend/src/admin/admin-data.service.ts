@@ -9,7 +9,7 @@ import type {
   AdminPolicyCreate,
   AdminPolicyUpdate,
   AdminRole,
-  PageQuery,
+  AdminUserQuery,
 } from '@masterdriver/shared';
 import type { Prisma } from '../../generated/prisma';
 import { CommissionService, COMMISSION_EXEMPT_FEATURE } from '../billing/commission.service';
@@ -54,7 +54,8 @@ export class AdminDataService {
 
   async dashboard(now = new Date()) {
     const today = startOfHongKongDay(now);
-    const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
+    // 近 7 天: today and the six Hong Kong days before it, so the order list can show the same orders by date.
+    const weekAgo = new Date(today.getTime() - 6 * DAY_MS);
     const [users, newUsers, ordersToday, ordersWeek, byStatus, claimsWeek, dispatchers, credits, fee, devLogin, freePeriods, supportWaiting, supportUnread, unpaid, unsettled, bookingsWeek, bookingsPending] =
       await Promise.all([
         this.prisma.user.count(),
@@ -79,6 +80,8 @@ export class AdminDataService {
         this.prisma.bookingRequest.count({ where: { status: 'PENDING' } }),
       ]);
     return {
+      /** The first day of 近 7 天, for links to the order list. */
+      weekFrom: new Date(weekAgo.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10),
       users: { total: users, newThisWeek: newUsers },
       orders: {
         today: ordersToday,
@@ -109,18 +112,29 @@ export class AdminDataService {
 
   // ------------------------------------------------------------------ users
 
-  async listUsers(query: PageQuery) {
+  async listUsers(query: AdminUserQuery) {
     // A complaint usually comes with the 名片頁 link (…/p/{code}): it finds the page's owner too.
     const pageCode = query.q?.match(/\/p\/([A-Za-z0-9]{8})\b/)?.[1] ?? query.q;
-    const where: Prisma.UserWhereInput = query.q
-      ? {
-          OR: [
-            { phone: { contains: query.q } },
-            { profile: { name: { contains: query.q, mode: 'insensitive' } } },
-            { profilePage: { code: pageCode } },
-          ],
-        }
-      : {};
+    const STATUS: Record<NonNullable<AdminUserQuery['status']>, Prisma.UserWhereInput> = {
+      DRIVER: { profile: { isNot: null } },
+      NO_PROFILE: { profile: { is: null } },
+      PAGE_PUBLISHED: { profilePage: { published: true, blockedAt: null } },
+      SUSPENDED: { suspendedAt: { not: null } },
+    };
+    const where: Prisma.UserWhereInput = {
+      ...(query.status ? STATUS[query.status] : {}),
+      ...(query.q
+        ? {
+            OR: [
+              { phone: { contains: query.q } },
+              { profile: { name: { contains: query.q, mode: 'insensitive' } } },
+              { profilePage: { code: pageCode } },
+              // The 帳戶 ID that 客服 and the audit log show.
+              { id: query.q },
+            ],
+          }
+        : {}),
+    };
     const [total, users] = await Promise.all([
       this.prisma.user.count({ where }),
       this.prisma.user.findMany({
@@ -448,26 +462,47 @@ export class AdminDataService {
 
   async listOrders(query: AdminOrderQuery, role: AdminRole) {
     const q = query.q;
+    const dateField = query.by === 'created' ? 'createdAt' : 'pickupAt';
+    const dated = Boolean(query.from || query.to);
     const where: Prisma.OrderWhereInput = {
       ...(query.status ? { status: query.status } : {}),
-      ...(query.money === 'UNPAID' ? UNPAID : query.money === 'UNSETTLED' ? this.unsettled() : {}),
-      ...(q
+      ...(dated
         ? {
-            OR: [
-              { code: q },
-              { origin: { contains: q, mode: 'insensitive' } },
-              { destination: { contains: q, mode: 'insensitive' } },
-              { dispatcher: { phone: { contains: q } } },
-              { claimedBy: { phone: { contains: q } } },
-            ],
+            [dateField]: {
+              ...(query.from ? { gte: new Date(`${query.from}T00:00:00+08:00`) } : {}),
+              ...(query.to ? { lt: new Date(new Date(`${query.to}T00:00:00+08:00`).getTime() + DAY_MS) } : {}),
+            },
           }
         : {}),
+      // The money marks, the search and the user each set fields the others may set too (the status, an OR), so they meet in an AND.
+      AND: [
+        query.money === 'UNPAID' ? UNPAID : query.money === 'UNSETTLED' ? this.unsettled() : {},
+        q
+          ? {
+              OR: [
+                { code: q },
+                { origin: { contains: q, mode: 'insensitive' } },
+                { destination: { contains: q, mode: 'insensitive' } },
+                { dispatcher: { phone: { contains: q } } },
+                { claimedBy: { phone: { contains: q } } },
+              ],
+            }
+          : {},
+        query.user
+          ? query.role === 'dispatcher'
+            ? { dispatcherId: query.user }
+            : query.role === 'driver'
+              ? { claimedById: query.user }
+              : { OR: [{ dispatcherId: query.user }, { claimedById: query.user }] }
+          : {},
+      ],
     };
     const [total, orders] = await Promise.all([
       this.prisma.order.count({ where }),
       this.prisma.order.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        // Looking at some days' trips: in the order of that date, latest first.
+        orderBy: dated ? [{ [dateField]: 'desc' }, { createdAt: 'desc' }] : { createdAt: 'desc' },
         skip: (query.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
         include: {
@@ -560,7 +595,7 @@ export class AdminDataService {
         name: order.dispatcher.profile?.name ?? null,
         phone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
       },
-      driver: claimer && { name: claimer.profile?.name ?? null, phone: `${claimer.countryCode} ${claimer.phone}`, profile: claimer.profile },
+      driver: claimer && order.claimedById && { id: order.claimedById, name: claimer.profile?.name ?? null, phone: `${claimer.countryCode} ${claimer.phone}`, profile: claimer.profile },
       timeline: {
         createdAt: order.createdAt.toISOString(),
         claimedAt: iso(order.claimedAt),

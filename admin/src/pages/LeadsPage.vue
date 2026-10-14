@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { ref } from 'vue';
 import { api } from '../api';
 import { dateTime, hkd, PLAN_NAME } from '../format';
+import { useListQuery } from '../list-query';
 
 type LeadStatus = 'NEW' | 'CONTACTED' | 'INTERESTED' | 'CONVERTED' | 'NOT_INTERESTED';
 
@@ -26,17 +27,19 @@ const STATUS: Record<LeadStatus, string> = {
 };
 const PART: Record<string, string> = { orders: '單量', drivers: '司機數×3', activeDays: '活躍天數×2', growth: '成長×2', paying: '付費' };
 
-const days = ref(30);
-const status = ref<LeadStatus | ''>('');
-const leads = ref<Lead[]>([]);
+const leads = ref<Lead[] | null>(null);
 const editing = ref<string | null>(null);
 const draft = ref<{ status: LeadStatus; note: string }>({ status: 'NEW', note: '' });
 const error = ref('');
 
-async function load() {
+// The period and the follow-up state stay in the address, like every list.
+const list = useListQuery({ days: '30', status: '' }, (query) => void load(query));
+const { filters } = list;
+
+async function load(query: { days: string; status: string } = filters) {
   error.value = '';
   try {
-    const params = new URLSearchParams({ days: String(days.value), ...(status.value ? { status: status.value } : {}) });
+    const params = new URLSearchParams({ days: query.days, ...(query.status ? { status: query.status } : {}) });
     leads.value = (await api<{ items: Lead[] }>('GET', `/leads?${params}`)).items;
   } catch (e) {
     error.value = (e as Error).message;
@@ -63,19 +66,23 @@ const breakdown = (lead: Lead) =>
     .filter(([, value]) => value > 0)
     .map(([key, value]) => `${PART[key] ?? key}：${value}`);
 
-onMounted(load);
 </script>
 
 <template>
-  <h1>潛在客戶</h1>
+  <div class="page-head">
+    <div class="page-head__title">
+      <h1>潛在客戶</h1>
+      <span v-if="leads" class="muted">共 {{ leads.length }} 位</span>
+    </div>
+  </div>
   <p class="muted">按派單量、帶動的司機數、活躍天數、成長和付費情況排名，找出最可能需要 Master Travel 的車隊。</p>
   <div class="filters">
-    <select v-model.number="days" class="select" @change="load">
-      <option :value="14">近 14 天</option>
-      <option :value="30">近 30 天</option>
-      <option :value="90">近 90 天</option>
+    <select v-model="filters.days" class="select" aria-label="期間" @change="list.apply()">
+      <option value="14">近 14 天</option>
+      <option value="30">近 30 天</option>
+      <option value="90">近 90 天</option>
     </select>
-    <select v-model="status" class="select" @change="load">
+    <select v-model="filters.status" class="select" aria-label="跟進狀態" @change="list.apply()">
       <option value="">全部跟進狀態</option>
       <option v-for="(label, key) in STATUS" :key="key" :value="key">{{ label }}</option>
     </select>
@@ -97,7 +104,7 @@ onMounted(load);
         </tr>
       </thead>
       <tbody>
-        <tr v-for="(lead, index) in leads" :key="lead.userId">
+        <tr v-for="(lead, index) in leads ?? []" :key="lead.userId">
           <td>{{ index + 1 }}</td>
           <td class="nowrap">
             <RouterLink :to="`/users/${lead.userId}`">{{ lead.name ?? '未填姓名' }}</RouterLink>
@@ -135,7 +142,7 @@ onMounted(load);
             </template>
           </td>
         </tr>
-        <tr v-if="leads.length === 0">
+        <tr v-if="leads?.length === 0">
           <td colspan="9" class="muted">這段期間沒有派單紀錄</td>
         </tr>
       </tbody>

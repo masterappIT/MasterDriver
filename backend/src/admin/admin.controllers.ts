@@ -14,7 +14,7 @@ import {
   adminPolicyUpdateSchema,
   commissionUpdateSchema,
   developmentLoginUpdateSchema,
-  pageQuerySchema,
+  adminUserQuerySchema,
   type AdminAuditQuery,
   type AdminCreate,
   type AdminCreditChange,
@@ -29,7 +29,7 @@ import {
   type AdminPolicyUpdate,
   type CommissionUpdate,
   type DevelopmentLoginUpdate,
-  type PageQuery,
+  type AdminUserQuery,
 } from '@masterdriver/shared';
 import type { Request, Response } from 'express';
 import { DevelopmentLoginService } from '../auth/development-login.service';
@@ -127,7 +127,7 @@ export class AdminController {
   // ---- users
 
   @Get('users')
-  users(@Query(new ZodPipe(pageQuerySchema)) query: PageQuery) {
+  users(@Query(new ZodPipe(adminUserQuerySchema)) query: AdminUserQuery) {
     return this.data.listUsers(query);
   }
 
