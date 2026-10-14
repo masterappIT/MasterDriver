@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api, errorText } from '../api';
 import BottomSheet from '../components/BottomSheet.vue';
 import ContactLines from '../components/ContactLines.vue';
@@ -90,6 +90,7 @@ interface Detail {
 }
 
 const route = useRoute();
+const router = useRouter();
 // Legs of one trip link to each other on this same page, so follow the route.
 const id = computed(() => String(route.params.id));
 const order = ref<Detail | null>(null);
@@ -157,7 +158,22 @@ function ask(path: string, done: string, question: string, label: string, note: 
 async function confirmPending() {
   const action = pending.value;
   pending.value = null;
-  if (action) await act(action.path, action.done);
+  if (action?.path === 'release') await release();
+  else if (action) await act(action.path, action.done);
+}
+
+/** 取消接單: the order (with 接駁, this leg) goes back to the group, so the page is no longer the driver's. */
+async function release() {
+  busy.value = true;
+  try {
+    await api('POST', `/orders/${id.value}/release`);
+    toast('已取消接單');
+    await router.replace('/app/orders');
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function act(path: string, done: string) {
@@ -735,6 +751,24 @@ watch(id, () => {
             {{ order.journey ? t('取消整張接駁單') : t('取消這張單') }}
           </button>
         </template>
+        <!-- The driver who took it can give it back until the trip is done; with 接駁, only their own leg. -->
+        <button
+          v-else-if="order.status === 'ASSIGNED'"
+          class="detail__cancel"
+          type="button"
+          :disabled="busy"
+          @click="
+            ask(
+              'release',
+              '已取消接單',
+              order.journey ? `確定不做第 ${order.journey.legIndex} 段？只退出你這一段，另一段不受影響。` : '確定不做這張單？',
+              '取消接單',
+              '這單會回到等人搶，群裡同一個連結可以再搶；出單者會收到通知，最好也直接告訴出單者。',
+            )
+          "
+        >
+          {{ t('取消接單') }}
+        </button>
       </section>
 
       <BottomSheet v-if="pending" :title="t(pending.label)" @close="pending = null">

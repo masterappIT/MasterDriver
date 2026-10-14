@@ -105,6 +105,7 @@ const NOTIFICATION_KIND: Record<string, string> = {
   ORDER_CANCELLED: '接的單被取消',
   ORDER_CANCELLED_BY_STAFF: '平台代為取消',
   ORDER_REOPENED: '接的單被改派',
+  ORDER_RELEASED: '司機取消接單',
   ORDER_SETTLED: '已結清',
   CONTACT_REVEALED: '可以看乘客電話了',
   BOOKING_NEW: '新預約',

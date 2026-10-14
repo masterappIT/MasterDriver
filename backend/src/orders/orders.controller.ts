@@ -135,6 +135,12 @@ export class OrdersController {
     return this.orders.reopen(user.id, id);
   }
 
+  @Post(':id/release')
+  @HttpCode(200)
+  release(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    return this.orders.release(user.id, id);
+  }
+
   @Post(':id/complete')
   @HttpCode(200)
   complete(@CurrentUser() user: SessionUser, @Param('id') id: string) {

@@ -332,6 +332,55 @@ test('cancelling from either leg cancels the whole order and returns the fee onc
   assert.equal(await ctx.prisma.creditEntry.count({ where: { userId: dispatcher, type: 'REFUND' } }), 2);
 });
 
+test('取消接單: the driver gives the order back, it is open again, and the dispatcher is told', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const other = await createDriver(ctx);
+  const created = await ctx.orders.create(dispatcher, sampleOrder);
+  await ctx.orders.claim(created.code, driver);
+  await ctx.orders.confirmByPassenger(created.links.passengerConfirm.split('/c/')[1]);
+
+  await rejectsWith(ctx.orders.release(other, created.id), 'ORDER_NOT_FOUND');
+  await rejectsWith(ctx.orders.release(dispatcher, created.id), 'ORDER_NOT_FOUND'); // the dispatcher uses 改派
+  const released = await ctx.orders.release(driver, created.id);
+  assert.equal(released.status, 'OPEN');
+  const stored = await ctx.prisma.order.findUniqueOrThrow({ where: { id: created.id } });
+  assert.deepEqual([stored.claimedById, stored.claimedAt, stored.passengerConfirmedAt], [null, null, null]);
+  assert.equal(await ctx.prisma.notification.count({ where: { userId: dispatcher, kind: 'ORDER_RELEASED', orderId: created.id } }), 1);
+  await rejectsWith(ctx.orders.release(driver, created.id), 'ORDER_NOT_FOUND'); // no longer theirs
+  assert.equal((await ctx.orders.claim(created.code, other)).result, 'WON', 'the same link is open to claim');
+
+  await ctx.orders.complete(other, created.id);
+  await rejectsWith(ctx.orders.release(other, created.id), 'INVALID_ORDER_STATUS'); // not once the trip is done
+
+  const own = await ctx.orders.create(dispatcher, { ...sampleOrder, selfDrive: true });
+  await rejectsWith(ctx.orders.release(dispatcher, own.id), 'INVALID_ORDER_STATUS'); // 這單我自己做 is handed over with 交給別的司機
+});
+
+test('取消接單 on a 接駁 order gives back only that leg; the other leg and the order go on', async () => {
+  await ctx.commission.update({ enabled: true, fee: 5 }, 'test');
+  const dispatcher = await createDriver(ctx);
+  const hkDriver = await createDriver(ctx);
+  const mainlandDriver = await createDriver(ctx);
+  await ctx.credits.credit(dispatcher, 2000, { type: 'TOPUP', source: 'MANUAL', createdBy: 'test' });
+  const order = await ctx.orders.create(dispatcher, transferOrder);
+  const [first, second] = order.journey!.legs;
+  await ctx.orders.claim(first.code, hkDriver);
+  await ctx.orders.claim(second.code, mainlandDriver);
+  const legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+
+  const released = await ctx.orders.release(mainlandDriver, legs[1].id);
+  assert.equal(released.status, 'OPEN');
+  const after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(after.map((leg) => [leg.status, leg.claimedById]), [['ASSIGNED', hkDriver], ['OPEN', null]]);
+  assert.equal(await balanceOf(dispatcher), 1500, 'the fee stays: the order goes on');
+  assert.equal(await ctx.prisma.notification.count({ where: { userId: dispatcher, kind: 'ORDER_RELEASED' } }), 1);
+  assert.equal(await ctx.prisma.notification.count({ where: { userId: hkDriver } }), 0, 'the other leg is not disturbed');
+
+  await rejectsWith(ctx.orders.claim(second.code, hkDriver), 'ONE_LEG_PER_DRIVER');
+  assert.equal((await ctx.orders.claim(second.code, mainlandDriver)).result, 'WON', 'the leg can be taken again');
+});
+
 test('the passenger sees one trip, one price and two drivers, never where the cars meet', async () => {
   const dispatcher = await createDriver(ctx, '派單師傅');
   const hkDriver = await createDriver(ctx, '香港師傅');

@@ -330,6 +330,32 @@ export class OrdersService {
     return view;
   }
 
+  /**
+   * 取消接單: the driver gives the order back, or with 接駁 only their own leg; it is open for
+   * claiming again on the same link and the dispatcher is told. Allowed until the trip is done.
+   */
+  async release(userId: string, id: string) {
+    const order = await this.prisma.order.findFirst({
+      where: { id, claimedById: userId },
+      select: { code: true, dispatcherId: true, journeyId: true },
+    });
+    if (!order) throw this.notFound();
+    // 這單我自己做 is the dispatcher's own: they hand it over with 交給別的司機 instead.
+    if (order.dispatcherId === userId) throw this.invalidStatus();
+    const released = await this.prisma.$transaction(async (tx) => {
+      // 接駁: under the order's lock, as a claim on either leg is.
+      if (order.journeyId) await this.lockJourney(tx, order.journeyId);
+      return tx.order.updateMany({
+        where: { id, claimedById: userId, status: 'ASSIGNED' },
+        data: { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null },
+      });
+    });
+    if (released.count === 0) throw this.invalidStatus();
+    await this.tell(id, 'ORDER_RELEASED', 'dispatcher');
+    telemetry.domain('order.release');
+    return this.getByCode(order.code, userId);
+  }
+
   /** Either side marks the trip done; the other side is told. */
   async complete(userId: string, id: string, now = new Date()) {
     const view = await this.transition(userId, id, ['ASSIGNED'], { status: 'COMPLETED', completedAt: now }, 'participant');

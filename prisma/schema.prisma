@@ -1066,6 +1066,8 @@ enum NotificationKind {
   ORDER_CANCELLED_BY_STAFF
   /// To the driver: the dispatcher took the order back to give it to someone else (改派).
   ORDER_REOPENED
+  /// To the dispatcher: the driver gave the order (or their leg of a 接駁 order) back; it is open again.
+  ORDER_RELEASED
   /// To the driver: the dispatcher marked the account settled.
   ORDER_SETTLED
   /// To the driver: the passenger's phone is now shown on the order.
