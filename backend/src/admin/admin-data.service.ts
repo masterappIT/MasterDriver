@@ -135,15 +135,19 @@ export class AdminDataService {
           }
         : {}),
     };
-    const [total, users] = await Promise.all([
+    const [total, all, drivers, published, suspended, users] = await Promise.all([
       this.prisma.user.count({ where }),
+      this.prisma.user.count(),
+      this.prisma.user.count({ where: STATUS.DRIVER }),
+      this.prisma.user.count({ where: STATUS.PAGE_PUBLISHED }),
+      this.prisma.user.count({ where: STATUS.SUSPENDED }),
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         skip: (query.page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
         include: {
-          profile: { select: { name: true, plateType: true, hkPlate: true, macauPlate: true, mainlandPlate: true } },
+          profile: { select: { name: true, plateType: true, vehicleType: true, hkPlate: true, macauPlate: true, mainlandPlate: true } },
           profilePage: { select: { published: true } },
           creditAccount: { select: { balanceMinor: true } },
           _count: { select: { dispatchedOrders: true, claimedOrders: true } },
@@ -152,6 +156,8 @@ export class AdminDataService {
     ]);
     return {
       total,
+      /** Counts over everyone, whatever the search: the cards above the list, each a filter. */
+      summary: { all, drivers, published, suspended },
       page: query.page,
       pageSize: PAGE_SIZE,
       items: users.map((user) => ({
@@ -160,6 +166,7 @@ export class AdminDataService {
         name: user.profile?.name ?? null,
         plates: [user.profile?.hkPlate, user.profile?.macauPlate, user.profile?.mainlandPlate].filter(Boolean),
         plateType: user.profile?.plateType ?? null,
+        vehicleType: user.profile?.vehicleType ?? null,
         pagePublished: user.profilePage?.published ?? false,
         dispatched: user._count.dispatchedOrders,
         claimed: user._count.claimedOrders,

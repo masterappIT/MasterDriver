@@ -17,8 +17,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { public: true, title: '登入' } },
   { path: '/', component: () => import('./pages/DashboardPage.vue'), meta: { title: '總覽' } },
   { path: '/observability', component: () => import('./pages/ObservabilityPage.vue'), meta: { title: '數據流監控', roles: WRITE } },
-  { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { title: '用戶' } },
-  { path: '/users/:id', component: () => import('./pages/UserDetailPage.vue'), meta: { title: '用戶詳情' } },
+  { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { title: '用戶', ownHeading: true } },
+  // A user's details are a drawer over the list now; links to the old page open it.
+  { path: '/users/:id', redirect: (to) => ({ path: '/users', query: { open: String(to.params.id) } }) },
   { path: '/orders', component: () => import('./pages/OrdersPage.vue'), meta: { title: '訂單' } },
   { path: '/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '訂單詳情' } },
   { path: '/support', component: () => import('./pages/SupportPage.vue'), meta: { title: '客服', roles: WRITE } },

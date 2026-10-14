@@ -252,6 +252,7 @@ test('the user list shows drivers, those without driver details, published pages
   assert.deepEqual(await ids('PAGE_PUBLISHED'), [driver]);
   assert.deepEqual(await ids('SUSPENDED'), [suspended]);
   assert.deepEqual((await ctx.adminData.listUsers({ page: 1, q: bare.id })).items.map((item) => item.id), [bare.id], 'found by 帳戶 ID');
+  assert.deepEqual((await ctx.adminData.listUsers({ page: 1, status: 'SUSPENDED' })).summary, { all: 3, drivers: 2, published: 1, suspended: 1 }, 'the cards count everyone');
 });
 
 test('one user\'s orders: those they put out, those they drove, or both; with a status and the money marks at once', async () => {

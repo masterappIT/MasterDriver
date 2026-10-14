@@ -27,7 +27,9 @@ export function useListQuery<T extends Record<string, string>>(defaults: T, load
   const filtered = computed(() => keys.some((key) => fromAddress()[key] !== defaults[key]));
 
   function write(values: T, toPage: number) {
+    // Other things in the address (an open drawer) stay as they are.
     const query: Record<string, string> = {};
+    for (const [key, value] of Object.entries(route.query)) if (!keys.includes(key) && key !== 'page' && typeof value === 'string') query[key] = value;
     for (const key of keys) if (values[key] && values[key] !== defaults[key]) query[key] = values[key];
     if (toPage > 1) query.page = String(toPage);
     void router.replace({ query });
@@ -48,19 +50,25 @@ export function useListQuery<T extends Record<string, string>>(defaults: T, load
     write({ ...defaults }, 1);
   }
 
-  // The address is the source: loads on open, on every change, and on the browser's back and forward.
+  // The address is the source: loads on open, on every change of the list's own part, and on the
+  // browser's back and forward. Leaving for another page, or opening a drawer, is not this list's business.
+  const listPart = () => (route.path === path ? JSON.stringify([fromAddress(), page.value]) : null);
   watch(
-    () => route.fullPath,
-    () => {
-      // Leaving for a detail page changes the address too; that is not this list's business.
-      if (route.path !== path) return;
+    listPart,
+    (part) => {
+      if (part === null) return;
       Object.assign(filters, fromAddress());
       load({ ...fromAddress(), page: page.value });
     },
     { immediate: true },
   );
 
-  return { filters, page, filtered, apply, goTo, clear };
+  /** Loads the same list again, after something in it changed. */
+  function reload() {
+    load({ ...fromAddress(), page: page.value });
+  }
+
+  return { filters, page, filtered, apply, goTo, clear, reload };
 }
 
 /**
@@ -75,4 +83,31 @@ export function useRowLink() {
     if (event.metaKey || event.ctrlKey) window.open(router.resolve(to).href, '_blank', 'noopener');
     else void router.push(to);
   };
+}
+
+/**
+ * The detail drawer over a list, kept in the address as ?open=<id>: a link from elsewhere opens it,
+ * the browser's back closes it, and a reload keeps it open.
+ */
+export function useDrawer() {
+  const route = useRoute();
+  const router = useRouter();
+  const openId = computed(() => (typeof route.query.open === 'string' ? route.query.open : ''));
+
+  function open(id: string) {
+    if (id === openId.value) return;
+    const query = { ...route.query, open: id };
+    // From one drawer to the next replaces, so back still closes the drawer rather than stepping through them.
+    void (openId.value ? router.replace({ query }) : router.push({ query }));
+  }
+
+  function close() {
+    const { open: _open, ...query } = route.query;
+    const without = router.resolve({ query }).fullPath;
+    // Opened from this list: back. Opened from a link elsewhere: stay here and drop the drawer.
+    if ((window.history.state as { back?: string | null } | null)?.back === without) router.back();
+    else void router.replace({ query });
+  }
+
+  return { openId, open, close };
 }

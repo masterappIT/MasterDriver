@@ -1,0 +1,1206 @@
+/*
+ * The Master Travel admin's look, shared by the pages that have moved to it (docs/DECISIONS.md,
+ * 2026-10-14 「後台改用 Master Travel 後台的樣式與頁面結構」). Taken from Master Travel
+ * admin/src/styles/administrators.css, users.css, user-management.css, tables.css and overlays.css at
+ * c902bb5a (docs/REUSE.md); the class names are this project's, prefixed mt-.
+ */
+
+/* ---- A page: an eyebrow, the title and a line on what it is for, its main action on the right. */
+.mt-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.mt-eyebrow {
+  display: block;
+  color: #59708e;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.16em;
+}
+
+.mt-muted {
+  color: #7c8ca1;
+  font-size: 12px;
+}
+
+.mt-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.mt-heading h2 {
+  margin: 6px 0 5px;
+  color: #12243b;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+
+.mt-heading p {
+  max-width: 620px;
+  margin: 0;
+}
+
+.mt-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 11px;
+  color: #fff;
+  background: linear-gradient(135deg, #155dcc, #2684f5);
+  box-shadow: 0 7px 16px rgba(23, 105, 224, 0.22);
+  font-size: 13px;
+  font-weight: 750;
+  white-space: nowrap;
+  transition: filter 0.16s ease, transform 0.16s ease;
+}
+
+.mt-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+/* ---- Counts above a list; on 用戶 each is also a filter. */
+.mt-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+}
+
+.mt-stats > * {
+  display: grid;
+  gap: 5px;
+  min-height: 104px;
+  padding: 18px 20px;
+  border: 1px solid #e1e8f2;
+  border-radius: 16px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 10px 24px rgba(39, 72, 111, 0.06);
+  font: inherit;
+  text-align: left;
+}
+
+.mt-stats span {
+  color: #647892;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.mt-stats strong {
+  color: #1769e0;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+}
+
+.mt-stats small {
+  color: #8a9ab0;
+  font-size: 11px;
+}
+
+button.mt-stat {
+  cursor: pointer;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+button.mt-stat:hover {
+  border-color: #9bbce8;
+}
+
+button.mt-stat.is-active {
+  border-color: #1769e0;
+  box-shadow: 0 0 0 3px rgba(23, 105, 224, 0.12);
+}
+
+/* ---- A panel: a white card, its toolbar at the top and a table running edge to edge. */
+.mt-panel {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #e1e8f2;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 32px rgba(39, 72, 111, 0.08);
+}
+
+/* Counts across the top of a panel, side by side. */
+.mt-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  border-bottom: 1px solid #e8eef6;
+  background: #e8eef6;
+}
+
+.mt-counts > div {
+  display: grid;
+  gap: 4px;
+  padding: 18px 24px;
+  background: #fbfcfe;
+}
+
+.mt-counts strong {
+  color: #1769e0;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+
+.mt-counts span {
+  color: #71849d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mt-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 26px 28px 20px;
+  border-bottom: 1px solid #e8eef6;
+}
+
+.mt-toolbar h3 {
+  margin: 0 0 4px;
+  color: #12243b;
+  font-size: 18px;
+}
+
+.mt-toolbar p {
+  margin: 0;
+}
+
+.mt-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  min-width: min(470px, 100%);
+}
+
+.mt-search {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 190px;
+  height: 42px;
+  padding: 0 11px;
+  border: 1px solid #ccd8e7;
+  border-radius: 10px;
+  color: #7890aa;
+  background: #f8fafd;
+}
+
+.mt-search:focus-within {
+  border-color: #4a8df0;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(74, 141, 240, 0.13);
+}
+
+.mt-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: #29415f;
+  background: transparent;
+  font-size: 13px;
+}
+
+.mt-filters select,
+.mt-filters input[type='date'] {
+  height: 42px;
+  min-width: 108px;
+  padding: 0 10px;
+  border: 1px solid #ccd8e7;
+  border-radius: 10px;
+  color: #425974;
+  background: #f8fafd;
+  font-size: 13px;
+}
+
+.mt-clear {
+  height: 42px;
+  min-width: 88px;
+  padding: 0 12px;
+  border: 1px solid #ccd8e7;
+  border-radius: 10px;
+  color: #425974;
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mt-clear:hover {
+  border-color: #4a8df0;
+  color: #1769e0;
+  background: #f5f9ff;
+}
+
+.mt-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 12px 28px;
+  border-bottom: 1px solid #edf1f6;
+  color: #7c8ca1;
+  font-size: 12px;
+}
+
+.mt-table-wrap {
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.mt-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.mt-table th,
+.mt-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid #edf1f6;
+  vertical-align: middle;
+}
+
+.mt-table th {
+  color: #667a94;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.mt-table th:first-child,
+.mt-table td:first-child {
+  padding-left: 28px;
+}
+
+.mt-table th:last-child,
+.mt-table td:last-child {
+  padding-right: 28px;
+}
+
+.mt-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.mt-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mt-table td small {
+  display: block;
+  margin-top: 3px;
+  color: #8a9ab0;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* A row that opens its detail, and the one open now. */
+.mt-table tr.mt-row {
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.mt-table tr.mt-row:hover td {
+  background: #f7fbff;
+}
+
+.mt-table tr.mt-row.is-selected td {
+  background: #eef5ff;
+}
+
+.mt-empty {
+  padding: 48px 24px !important;
+  text-align: center;
+}
+
+.mt-empty strong,
+.mt-empty span {
+  display: block;
+}
+
+.mt-empty span {
+  margin-top: 7px;
+  color: #8293a9;
+  font-size: 12px;
+}
+
+/* A person: the first character in a round mark, the name over the ID. */
+.mt-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mt-avatar {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  color: #1769e0;
+  background: linear-gradient(135deg, #e5f0ff, #f1e8ff);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.mt-identity strong {
+  display: block;
+  color: #12243b;
+}
+
+/* The ID stays on one line; the column is wide enough for it. */
+.mt-identity small {
+  white-space: nowrap;
+}
+
+.mt-table td.mt-nowrap {
+  white-space: nowrap;
+}
+
+/* ---- Status and kind tags. */
+.mt-status {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  color: #425974;
+  background: #edf2f8;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.mt-status.completed {
+  color: #137044;
+  background: #def6e9;
+}
+
+.mt-status.cancelled {
+  color: #a52b2b;
+  background: #ffe4e4;
+}
+
+.mt-status.confirmed {
+  color: #125dbb;
+  background: #e2efff;
+}
+
+.mt-status.pending {
+  color: #8b6200;
+  background: #fff3cc;
+}
+
+.mt-status.purple {
+  color: #7444a8;
+  background: #f1e8ff;
+}
+
+.mt-status + .mt-status {
+  margin-left: 4px;
+}
+
+/* ---- Buttons in a row: light, coloured by what they do. */
+.mt-actions {
+  white-space: nowrap;
+}
+
+.mt-actions button,
+.mt-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  margin-right: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #1769e0;
+  background: #f1f7ff;
+  font-size: 12px;
+  font-weight: 750;
+  transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.mt-actions button:last-child {
+  margin-right: 0;
+}
+
+.mt-actions button:hover,
+.mt-action:hover {
+  color: #fff;
+  background: #1769e0;
+}
+
+.mt-actions .is-danger,
+.mt-action.is-danger {
+  color: #c2414a;
+  background: #fff4f4;
+}
+
+.mt-actions .is-danger:hover,
+.mt-action.is-danger:hover {
+  color: #fff;
+  background: #c2414a;
+}
+
+.mt-actions .is-restore,
+.mt-action.is-restore {
+  color: #217346;
+  background: #f0faf3;
+}
+
+.mt-actions .is-restore:hover,
+.mt-action.is-restore:hover {
+  color: #fff;
+  background: #217346;
+}
+
+/* ---- Pages. */
+.mt-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #edf1f6;
+  color: #12243b;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mt-pagination button {
+  min-width: 88px;
+  padding: 9px 14px;
+  border: 1px solid #cfdae8;
+  border-radius: 9px;
+  color: #29415f;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mt-pagination button:hover:not(:disabled) {
+  border-color: #1769e0;
+  color: #1769e0;
+  background: #f5f9ff;
+}
+
+.mt-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ---- A form over the page, in the middle. */
+.mt-modal-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(18, 36, 59, 0.48);
+  backdrop-filter: blur(5px);
+  animation: mt-fade-in 0.18s ease-out;
+}
+
+.mt-modal {
+  display: grid;
+  gap: 14px;
+  width: min(540px, 100%);
+  max-height: calc(100vh - 48px);
+  margin: 0;
+  padding: 28px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(18, 36, 59, 0.24);
+  animation: mt-slide-in 0.2s ease-out;
+}
+
+.mt-form-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 2px;
+}
+
+.mt-form-heading h3 {
+  margin: 5px 0 4px;
+  color: #12243b;
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+
+.mt-form-heading p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.mt-close {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  color: #647892;
+  background: transparent;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.mt-close:hover {
+  color: #12243b;
+  background: #eaf2fc;
+}
+
+/* Fields: the label over the box, its note under it. */
+.mt-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: #526985;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.mt-field input:not([type='checkbox']),
+.mt-field select,
+.mt-field textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid #ccd8e7;
+  border-radius: 10px;
+  outline: 0;
+  color: #29415f;
+  background: #f8fafd;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.mt-field textarea {
+  min-height: 88px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.mt-field input:focus,
+.mt-field select:focus,
+.mt-field textarea:focus {
+  border-color: #4a8df0;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(74, 141, 240, 0.13);
+}
+
+.mt-field > small {
+  margin-top: -2px;
+  color: #7c8ca1;
+  font-weight: 500;
+}
+
+.mt-field b {
+  color: #c24141;
+}
+
+.mt-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dbe7f5;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #29415f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mt-check input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: #1769e0;
+}
+
+.mt-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mt-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mt-form-section {
+  margin: 8px 0 0;
+  color: #233d5d;
+  font-size: 14px;
+}
+
+.mt-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 16px;
+  border-top: 1px solid #edf1f6;
+}
+
+.mt-form-actions button {
+  min-width: 120px;
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.mt-form-actions .primary,
+.mt-button {
+  border: 0;
+  color: #fff;
+  background: linear-gradient(135deg, #1769e0, #3f8df0);
+  box-shadow: 0 6px 14px rgba(23, 105, 224, 0.16);
+}
+
+.mt-form-actions .primary:hover:not(:disabled),
+.mt-button:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.mt-form-actions .secondary,
+.mt-button.secondary {
+  border: 1px solid #cfdae8;
+  color: #425974;
+  background: #f4f7fb;
+  box-shadow: none;
+}
+
+.mt-form-actions .secondary:hover:not(:disabled),
+.mt-button.secondary:hover:not(:disabled) {
+  border-color: #9bbce8;
+  color: #1769e0;
+  background: #f5f9ff;
+}
+
+.mt-form-actions .danger,
+.mt-button.danger {
+  border: 0;
+  color: #fff;
+  background: #dc4545;
+  box-shadow: 0 3px 8px rgba(220, 69, 69, 0.16);
+}
+
+.mt-button.restore {
+  border: 0;
+  color: #fff;
+  background: #2d9b62;
+  box-shadow: 0 3px 8px rgba(45, 155, 98, 0.14);
+}
+
+.mt-form-actions button:disabled,
+.mt-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.mt-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-width: 96px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* ---- A drawer from the right: the list stays where it was. */
+.mt-drawer-backdrop {
+  position: fixed;
+  z-index: 29;
+  inset: 0;
+  background: rgba(18, 36, 59, 0.32);
+  animation: mt-fade-in 0.2s ease-out;
+}
+
+.mt-drawer {
+  position: fixed;
+  z-index: 30;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(720px, 100vw);
+  margin: 0;
+  padding-bottom: 28px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #f7fbff;
+  box-shadow: -18px 0 50px rgba(18, 36, 59, 0.22);
+  animation: mt-drawer-in 0.2s ease-out;
+}
+
+/* The second drawer, for editing, over the first. */
+.mt-drawer.mt-drawer--edit {
+  z-index: 32;
+  width: min(620px, 100vw);
+  padding: 0;
+}
+
+.mt-drawer-backdrop.mt-drawer-backdrop--edit {
+  z-index: 31;
+}
+
+.mt-drawer-head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  padding: 22px 96px 18px 24px;
+  border-bottom: 1px solid #dbe7f5;
+  background: #f7fbff;
+}
+
+.mt-drawer-head h2 {
+  margin: 5px 0 4px;
+  color: #12243b;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+  overflow-wrap: anywhere;
+}
+
+.mt-drawer-head > .mt-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+}
+
+.mt-drawer-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #edf1f6;
+}
+
+.mt-drawer-meta span {
+  display: grid;
+  gap: 6px;
+  color: #233d5d;
+  font-size: 13px;
+}
+
+.mt-drawer-meta b {
+  color: #647892;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mt-drawer-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.mt-drawer-body {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px 0;
+}
+
+/* A part of a drawer: a white card with its heading, the heading's actions on the right. */
+.mt-section {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #e1eaf4;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.mt-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #edf1f6;
+}
+
+.mt-section-head h3 {
+  margin: 3px 0 0;
+  color: #233d5d;
+  font-size: 15px;
+}
+
+.mt-section-head .mt-eyebrow {
+  font-size: 10px;
+}
+
+.mt-section > p {
+  margin: 10px 0 0;
+  color: #8a9ab0;
+  font-size: 12px;
+}
+
+/* Facts: a small label over each value. */
+.mt-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 12px;
+  margin: 0;
+}
+
+.mt-facts > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mt-facts dt {
+  color: #647892;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.mt-facts dd {
+  margin: 0;
+  color: #233d5d;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.mt-facts .is-wide {
+  grid-column: 1 / -1;
+}
+
+/* Money and counts in a drawer, each with its action. */
+.mt-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.mt-cards article {
+  padding: 18px;
+  border: 1px solid #dce7f5;
+  border-radius: 14px;
+  background: #f8fbff;
+}
+
+.mt-cards span {
+  color: #647892;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mt-cards strong {
+  display: block;
+  margin: 8px 0 10px;
+  color: #12243b;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.mt-cards small {
+  display: block;
+  color: #8a9ab0;
+  font-size: 11px;
+}
+
+/* A short form inside a section, such as 調整點數. */
+.mt-inline-form {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(110px, 0.8fr) minmax(160px, 1.5fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid #d7e4f2;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.mt-inline-form .mt-field input,
+.mt-inline-form .mt-field select {
+  min-height: 38px;
+  height: 38px;
+  padding: 0 10px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.mt-inline-form .mt-button {
+  height: 38px;
+}
+
+/* A small table inside a drawer section. */
+.mt-history {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.mt-history th,
+.mt-history td {
+  padding: 9px 8px;
+  border-bottom: 1px solid #edf1f6;
+  text-align: left;
+  vertical-align: top;
+}
+
+.mt-history th {
+  color: #8a9ab0;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mt-history td {
+  color: #29425f;
+}
+
+.mt-history tr:last-child td {
+  border-bottom: 0;
+}
+
+.mt-history .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.mt-history tr.mt-row {
+  cursor: pointer;
+}
+
+.mt-history tr.mt-row:hover td {
+  background: #f7fbff;
+}
+
+.mt-history-wrap {
+  overflow-x: auto;
+}
+
+/* Two or three choices, one on. */
+.mt-segmented {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #eef3f9;
+}
+
+.mt-segmented button {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 8px;
+  color: #647892;
+  background: none;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mt-segmented button.is-active {
+  color: #12243b;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(39, 72, 111, 0.12);
+}
+
+/* The edit drawer: its heading and its buttons stay while the fields scroll. */
+.mt-edit-head {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px;
+  border-bottom: 1px solid #dbe7f5;
+  background: #f7fbff;
+}
+
+.mt-edit-head h3 {
+  margin: 5px 0 0;
+  color: #12243b;
+  font-size: 18px;
+}
+
+.mt-edit-body {
+  display: grid;
+  gap: 14px;
+  padding: 20px 22px;
+}
+
+.mt-edit-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 16px 22px 22px;
+  border-top: 1px solid #dbe7f5;
+  background: #f7fbff;
+}
+
+.mt-edit-actions button {
+  min-width: 108px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+body.mt-overlay-open {
+  overflow: hidden;
+}
+
+@keyframes mt-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mt-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mt-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 700px) {
+  .mt-heading {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .mt-heading .mt-primary {
+    width: 100%;
+  }
+
+  .mt-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .mt-stats > * {
+    min-height: 88px;
+    padding: 14px 16px;
+  }
+
+  .mt-toolbar,
+  .mt-summary {
+    padding-inline: 16px;
+  }
+
+  .mt-filters {
+    min-width: 0;
+  }
+
+  .mt-search {
+    flex: 1 1 100%;
+  }
+
+  .mt-table th:first-child,
+  .mt-table td:first-child {
+    padding-left: 16px;
+  }
+
+  .mt-modal {
+    padding: 22px;
+  }
+
+  .mt-form-actions button {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* On a phone the heading scrolls away with the rest; only the close button stays in reach. */
+  .mt-drawer-head {
+    position: static;
+    padding: 18px 70px 14px 16px;
+  }
+
+  .mt-drawer-head > .mt-close {
+    position: fixed;
+    z-index: 3;
+    top: 12px;
+    right: 12px;
+    background: rgb(247 251 255 / 92%);
+  }
+
+  .mt-drawer-meta,
+  .mt-facts,
+  .mt-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mt-drawer-body {
+    padding: 14px 12px 0;
+  }
+
+  .mt-cards,
+  .mt-grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .mt-inline-form {
+    grid-template-columns: 1fr 1fr;
+  }
+}
