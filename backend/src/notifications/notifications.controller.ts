@@ -39,6 +39,7 @@ export class NotificationsController {
   async stream(@CurrentUser() user: SessionUser, @Req() request: Request, @Res() response: Response) {
     this.streams.open(user.id, request, response);
     await this.notifications.revealDue(user.id);
+    await this.notifications.unclaimedDue(user.id);
   }
 }
 

@@ -32,6 +32,15 @@ export const orderInclude = {
 export type OrderWithPeople = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
 export type JourneyLeg = NonNullable<OrderWithPeople['journeyHead']>['journeyLegs'][number];
 
+/** 行程進度 as the driver reported it: when they set out, reached the pickup and had the passenger on board. */
+function progressOf(order: { departedAt: Date | null; arrivedAt: Date | null; pickedUpAt: Date | null }) {
+  return {
+    departedAt: order.departedAt?.toISOString() ?? null,
+    arrivedAt: order.arrivedAt?.toISOString() ?? null,
+    pickedUpAt: order.pickedUpAt?.toISOString() ?? null,
+  };
+}
+
 /** The legs of the trip this order belongs to, or null when it is a single order. */
 export const legsOf = (order: OrderWithPeople): JourneyLeg[] | null => order.journeyHead?.journeyLegs ?? null;
 
@@ -184,6 +193,7 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         legIndex: leg.legIndex,
         status: leg.status,
         pickupAt: leg.pickupAt.toISOString(),
+        immediate: leg.immediate,
         origin: leg.origin,
         destination: leg.destination,
         code: leg.code,
@@ -191,7 +201,7 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         driverPrice: driverPriceOf(leg),
         mine: Boolean(userId && leg.claimedById === userId),
         selfDrive: leg.claimedById === order.dispatcherId,
-        ...(viewer === 'dispatcher' ? { id: leg.id } : {}),
+        ...(viewer === 'dispatcher' ? { id: leg.id, progress: progressOf(leg), changePending: Boolean(leg.changePendingAt) } : {}),
         ...(viewer !== 'other'
           ? { driver: driver && (contactVisible ? driver : { ...driver, phone: null, phones: [], wechatId: null, whatsapp: null }) }
           : {}),
@@ -218,6 +228,8 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     code: order.code,
     status: order.status,
     pickupAt: order.pickupAt.toISOString(),
+    // 即時單: pickupAt is when it was put out to leave now.
+    immediate: order.immediate,
     origin: order.origin,
     destination: order.destination,
     waypoints: order.waypoints,
@@ -226,7 +238,10 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     vehicleType: order.vehicleType,
     driverPrice: driverPriceOf(order),
     notes: order.notes,
+    flightNo: order.flightNo,
     requiredPlates: order.requiredPlates,
+    // 先給常用司機: until when only the dispatcher's 常用司機 may claim it.
+    favoritesOnlyUntil: order.favoritesUntil && order.favoritesUntil > now ? order.favoritesUntil.toISOString() : null,
     journey: journeyOf(order, viewer, contactVisible, userId),
     dispatcherName: order.dispatcher.profile?.name ?? null,
     // Before claiming, a driver can look at who put the order out: their 名片頁, when it is public.
@@ -249,6 +264,9 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
           // Dispatchers publish their number in their group nickname; the winning driver gets it here.
           dispatcherPhone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
           dispatcherContact: { ...pageContactOf(order.dispatcher.profilePage), phones: phonesOf(order.dispatcher) },
+          progress: progressOf(order),
+          // 修改行程 the driver has not confirmed yet: what changed and when.
+          change: order.changePendingAt ? { summary: order.changeSummary ?? '', at: order.changePendingAt.toISOString() } : null,
           // 已結清: the dispatcher's mark, shown to the driver too. Nothing to settle on 這單我自己做.
           settledAt: isSelfDriven(order) ? null : (order.settledAt?.toISOString() ?? null),
           // 行程群: the passenger is in it, so the driver gets it when they may see the passenger's contact.
@@ -290,6 +308,8 @@ function passengerLeg(leg: JourneyLeg, confirmCode: string) {
     vehicleType: leg.vehicleType,
     price: leg.showPassengerPrice ? passengerPriceOf(leg) : null,
     passengerConfirmedAt: leg.passengerConfirmedAt?.toISOString() ?? null,
+    flightNo: leg.flightNo,
+    progress: progressOf(leg),
     driver: driver && {
       name: driver.name,
       // The driver may keep their plates from passengers; the page then says to ask before boarding.
@@ -359,13 +379,16 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
             ...pageContactOf(order.dispatcher.profilePage),
           },
     passengerConfirmedAt: confirmed,
+    flightNo: lead.flightNo,
+    // 行程進度 of the leg under way: the first leg not yet over.
+    progress: (shown?.find((leg) => leg.status !== 'COMPLETED') ?? lead).progress,
     // 行程群: the group the dispatcher made for this trip, when there is one. Not once the trip
     // is over: the driver is in it, and the passenger no longer gets ways to reach the driver.
     tripGroup: status === 'COMPLETED' ? null : tripGroupOf(order, `/api/c/${order.confirmCode}/trip-group/qr`, false, now),
     driver: lead.driver,
     transfer,
     legs: transfer
-      ? shown!.map(({ legIndex, status: legStatus, passengerConfirmedAt, driver }) => ({ legIndex, status: legStatus, passengerConfirmedAt, driver }))
+      ? shown!.map(({ legIndex, status: legStatus, passengerConfirmedAt, driver, progress }) => ({ legIndex, status: legStatus, passengerConfirmedAt, driver, progress }))
       : null,
   };
 }

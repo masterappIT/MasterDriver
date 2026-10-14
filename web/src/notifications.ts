@@ -11,6 +11,9 @@ export type NotificationKind =
   | 'ORDER_CANCELLED_BY_STAFF'
   | 'ORDER_REOPENED'
   | 'ORDER_RELEASED'
+  | 'ORDER_UNCLAIMED'
+  | 'ORDER_CHANGED'
+  | 'ORDER_CHANGE_ACKED'
   | 'ORDER_SETTLED'
   | 'CONTACT_REVEALED'
   | 'BOOKING_NEW'
@@ -37,6 +40,9 @@ const TITLES: Record<NotificationKind, string> = {
   ORDER_CANCELLED_BY_STAFF: '平台客服代你取消了一張單',
   ORDER_REOPENED: '出單者已改派你接的單',
   ORDER_RELEASED: '接單司機取消了接單，已回到等人搶',
+  ORDER_UNCLAIMED: '你出的單還沒人接',
+  ORDER_CHANGED: '出單者改了你接的行程，請確認',
+  ORDER_CHANGE_ACKED: '接單司機確認了行程修改',
   ORDER_SETTLED: '出單者標記了已結清',
   CONTACT_REVEALED: '現在可以看乘客電話了',
   BOOKING_NEW: '名片頁有新預約',

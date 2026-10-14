@@ -8,6 +8,7 @@ import TripGroupJoin, { type TripGroup } from '../components/TripGroupJoin.vue';
 import RoutePoints from '../components/RoutePoints.vue';
 import { copyText } from '../device';
 import { loadLine, money, pickup, plateKind, shortTime } from '../format';
+import { progressLine, type TripProgress } from '../journey';
 import { t } from '../i18n';
 import { PAYMENT_KINDS, type PassengerPayment } from '../payment';
 import { toast } from '../toast';
@@ -36,6 +37,7 @@ interface TripLeg {
   status: string;
   passengerConfirmedAt: string | null;
   driver: TripDriver | null;
+  progress: TripProgress;
 }
 
 interface PassengerView {
@@ -48,6 +50,10 @@ interface PassengerView {
   luggage: number;
   vehicleType: string | null;
   passengerName: string | null;
+  /** 航班號 the person who arranged the trip noted. */
+  flightNo: string | null;
+  /** 行程進度 of the leg under way, as its driver reported it. */
+  progress: TripProgress;
   price: { amount: number; currency: string } | null;
   dispatcherName: string | null;
   /** Who arranged the trip and how to reach them; null when they are the driver. */
@@ -62,6 +68,9 @@ interface PassengerView {
   /** 收款: how to pay the dispatcher, when they chose to show it. */
   payment: PassengerPayment | null;
 }
+
+/** "13:50": the time of day only, for the driver's progress. */
+const clock = (iso: string) => shortTime(iso).split(' ')[1] ?? '';
 
 /** The passenger's page: no sign-in, no ads, never the driver price. */
 const route = useRoute();
@@ -150,12 +159,14 @@ onBeforeUnmount(() => {
           <div class="confirm-page__time">{{ pickup(trip.pickupAt) }}</div>
           <RoutePoints :origin="trip.origin" :destination="trip.destination" :waypoints="trip.waypoints" />
           <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
+          <p v-if="trip.flightNo" class="confirm-page__load">{{ t(`航班：${trip.flightNo}`) }}</p>
           <p class="confirm-page__transfer">{{ t('接駁行程：中途會換車，由兩位司機接送。') }}</p>
           <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(trip.price) }}</strong></div>
         </section>
         <template v-for="leg in trip.legs" :key="leg.legIndex">
           <section class="card">
             <p class="confirm-page__label">{{ leg.legIndex === 1 ? t('第 1 段司機（先接你的車）') : t('第 2 段司機（換車後的車）') }}</p>
+            <p v-if="leg.status === 'ASSIGNED' && progressLine(leg.progress, clock)" class="confirm-page__progress">{{ t(progressLine(leg.progress, clock)) }}</p>
             <div v-if="leg.driver" class="confirm-page__driver">
               <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>
               <span class="muted">{{ [leg.driver.vehicleType, leg.driver.color, plateKind(leg.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
@@ -178,11 +189,13 @@ onBeforeUnmount(() => {
           <div class="confirm-page__time">{{ pickup(trip.pickupAt) }}</div>
           <RoutePoints :origin="trip.origin" :destination="trip.destination" :waypoints="trip.waypoints" />
           <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
+          <p v-if="trip.flightNo" class="confirm-page__load">{{ t(`航班：${trip.flightNo}`) }}</p>
           <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(trip.price) }}</strong></div>
         </section>
 
         <section v-if="trip.driver" class="card">
           <p class="confirm-page__label">{{ t('接送司機') }}</p>
+          <p v-if="trip.status === 'ASSIGNED' && progressLine(trip.progress, clock)" class="confirm-page__progress">{{ t(progressLine(trip.progress, clock)) }}</p>
           <div class="confirm-page__driver">
             <strong>{{ trip.driver.name ? t(trip.driver.name) : t('司機') }}</strong>
             <span class="muted">{{ [trip.driver.vehicleType, trip.driver.color, plateKind(trip.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
@@ -252,6 +265,11 @@ onBeforeUnmount(() => {
   text-wrap: balance;
 }
 .confirm-page__done {
+  font-weight: 600;
+}
+.confirm-page__progress {
+  margin: 0 0 var(--space-sm);
+  color: var(--status-confirmed);
   font-weight: 600;
 }
 .confirm-page__label {

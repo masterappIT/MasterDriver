@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, errorText } from '../api';
 import BottomSheet from '../components/BottomSheet.vue';
 import ContactLines from '../components/ContactLines.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
+import OrderMoneyMarks from '../components/OrderMoneyMarks.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
 import RoutePoints from '../components/RoutePoints.vue';
@@ -12,12 +13,12 @@ import StatusBadge from '../components/StatusBadge.vue';
 import TripGroupJoin, { type TripGroup } from '../components/TripGroupJoin.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import { imageForUpload } from '../image';
-import { loadLine, money, pickup, plateKind, shortTime, type Money } from '../format';
+import { fromLocalInput, loadLine, money, pickup, plateKind, shortTime, toLocalInput, type Money } from '../format';
 import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GroupText from '../components/GroupText.vue';
 import { t } from '../i18n';
-import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
+import { PROGRESS_STEPS, legLabel, plateRequirement, progressLine, type Journey, type PlateRegion, type TripProgress } from '../journey';
 import { toast } from '../toast';
 import type { PlateType } from '@masterdriver/shared/vehicle-plate';
 
@@ -53,8 +54,16 @@ interface Detail {
   luggage: number;
   vehicleType: string | null;
   notes: string | null;
+  /** 航班號 of an airport pickup or drop-off. */
+  flightNo: string | null;
+  /** 即時單: pickupAt is when it was put out to leave now. */
+  immediate?: boolean;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
+  /** 行程進度 the driver reported. */
+  progress?: TripProgress;
+  /** 修改行程 the driver has not confirmed yet: what changed and when. */
+  change?: { summary: string; at: string } | null;
   dispatcherName: string | null;
   dispatcherPhone?: string;
   /** The dispatcher's 名片頁, when it is public. */
@@ -136,10 +145,217 @@ const cancelQuestion = computed(() =>
   order.value?.journey ? '確定取消整張接駁單？兩段都會取消。只想換其中一段的司機，請用「改派」。' : '確定取消這張單？',
 );
 
+/** "13:50": the time of day only, for the 行程進度 line. */
+const clock = (iso: string) => shortTime(iso).split(' ')[1] ?? '';
+/** What the driver reported so far, in one line. */
+const progressText = computed(() => progressLine(order.value?.progress, clock));
+/** The one who drives it (the driver, or the dispatcher on 這單我自己做) reports the next step. */
+const drivesIt = computed(() => order.value?.status === 'ASSIGNED' && (!isDispatcher.value || selfDriven.value));
+const nextProgress = computed(() => {
+  const progress = order.value?.progress;
+  if (!drivesIt.value || !progress) return null;
+  return PROGRESS_STEPS.find((one) => !progress[one.field]) ?? null;
+});
+
+/**
+ * 行程進度 as the one who drives is asked for it at the top of the page, worded by how close the
+ * pickup time is: calm while there is time, urgent from 30 minutes before (出發) or once the time
+ * has passed (到了上車點).
+ */
+const progressAsk = computed(() => {
+  const step = nextProgress.value;
+  const o = order.value;
+  if (!step || !o) return null;
+  const left = new Date(o.pickupAt).getTime() - Date.now();
+  if (step.step === 'DEPARTED') {
+    if (left > 30 * 60_000) return { text: '出發時按「已出發」', urgent: false };
+    return { text: o.immediate ? '即時單，出發了嗎？' : '快到時間了，出發了嗎？', urgent: true };
+  }
+  if (step.step === 'ARRIVED') {
+    // A 即時單's time is when it went out: it has "passed" from the start, so nothing is late yet.
+    if (left > 0 || o.immediate) return { text: '到了上車點就按「已到上車點」', urgent: false };
+    return { text: '過了出發時間，到了上車點就按', urgent: true };
+  }
+  return { text: '乘客上車後按「乘客已上車」', urgent: false };
+});
+
+/**
+ * Two steps are also asked in a sheet, once each per order on this phone, when the page is opened:
+ * 出發了嗎 from 30 minutes before the pickup time, 到了上車點嗎 once it has passed (a 即時單,
+ * whose time passed when it went out: 15 minutes after 已出發). Not right after a step was
+ * reported, and never again after 稍後 / 還沒; the card at the top keeps asking.
+ */
+const progressPrompt = ref<(typeof PROGRESS_STEPS)[number] | null>(null);
+let promptOnLoad = true;
+
+function checkProgressPrompt() {
+  const step = nextProgress.value;
+  const o = order.value;
+  if (!step || !o || pending.value || editingTrip.value) return;
+  const left = new Date(o.pickupAt).getTime() - Date.now();
+  const departed = o.progress?.departedAt ? Date.now() - new Date(o.progress.departedAt).getTime() : 0;
+  const arrivalDue = o.immediate ? departed >= 15 * 60_000 : left <= 0;
+  const due = (step.step === 'DEPARTED' && left <= 30 * 60_000) || (step.step === 'ARRIVED' && arrivalDue);
+  if (!due) return;
+  const key = `md:progress-prompt:${o.id}:${step.step}`;
+  try {
+    if (localStorage.getItem(key)) return;
+    localStorage.setItem(key, '1');
+  } catch {
+    // Without storage the sheet may come again next time; the card asks anyway.
+  }
+  progressPrompt.value = step;
+}
+
+async function reportProgress(step: string, label: string) {
+  progressPrompt.value = null;
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('POST', `/orders/${id.value}/progress`, { step });
+    toast(`已回報：${label}`);
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** 知道了: the driver confirms the dispatcher's change; the dispatcher is told. */
+async function ackChange() {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('POST', `/orders/${id.value}/change-ack`);
+    toast('已確認，出單者會收到通知');
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+/**
+ * 還沒人接 close to the time: 3 hours before pickup the dispatcher is asked to raise the price and
+ * paste the order again; a 即時單, once 10 minutes have gone by (IMMEDIATE_UNCLAIMED_MINUTES in
+ * shared/src/schemas.ts). Says what is late, or null when it does not apply.
+ */
+const unclaimedSoon = computed(() => {
+  const o = order.value;
+  if (!o || !isDispatcher.value || o.status !== 'OPEN' || selfDriven.value) return null;
+  if (o.immediate) {
+    const waited = Date.now() - new Date(o.pickupAt).getTime();
+    return waited < 10 * 60_000 ? null : `即時單出了 ${Math.floor(waited / 60_000)} 分鐘，還沒人接`;
+  }
+  const left = new Date(o.pickupAt).getTime() - Date.now();
+  if (left <= 0 || left > 3 * 3_600_000) return null;
+  return `出發前${left < 3_600_000 ? `${Math.max(1, Math.round(left / 60_000))} 分鐘` : `不到 ${Math.ceil(left / 3_600_000)} 小時`}，還沒人接`;
+});
+/** Set once the driver price went up on this page: the text pasted again says 加價. */
+const raised = ref(false);
+/** 帳 folded for the dispatcher; opened to change the price. */
+const moneyOpen = ref(false);
+
+async function startRaise() {
+  moneyOpen.value = true;
+  editPrices();
+  await nextTick();
+  document.getElementById('detail-money')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function repost() {
+  const share = order.value?.share;
+  if (!share) return;
+  const text = inWeChat ? share.dispatch.wechat : share.dispatch.whatsapp;
+  void copy(raised.value ? `【加價】${text}` : text, '已複製，回到群裡長按輸入框貼上');
+}
+
+/** 修改行程 is waiting for a driver's 知道了: on this leg or, for 接駁, on either. */
+const changeWaiting = computed(() => Boolean(order.value?.change || order.value?.journey?.legs.some((leg) => leg.changePending)));
+
+/** The dispatcher's page opens with what to do now; the rest folds into 行程, 乘客 and 帳. */
+const foldDetails = computed(() => isDispatcher.value && !ownTrip.value);
+const tripSummary = computed(() => {
+  const o = order.value;
+  if (!o) return '';
+  return `${o.immediate ? '即時 ' : ''}${pickup(o.pickupAt)} · ${o.origin} → ${o.destination}`;
+});
+const passengerSummary = computed(() => {
+  const o = order.value;
+  if (!o) return '';
+  return [o.passengerName ?? '乘客', o.passengerContact, o.passengerConfirmedAt ? '已確認' : '還沒確認'].filter(Boolean).join(' · ');
+});
+const moneySummary = computed(() => {
+  const o = order.value;
+  if (!o) return '';
+  return [
+    `出單價 ${money(o.driverPrice) || '未填'}`,
+    tripPriceHere.value && o.passengerPrice ? `乘客價 ${money(o.passengerPrice)}` : '',
+    o.status === 'CANCELLED' ? '' : o.paidAt ? '已收款' : '未收款',
+    canSettle.value ? (o.settledAt ? '已結清' : '未結清') : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+});
+
+/** 修改行程: time, places and load; with 接駁 the time is this leg's, the places the trip's. */
+const editingTrip = ref(false);
+const tripForm = reactive({ pickupAt: '', origin: '', destination: '', transferPlace: '', passengers: '', luggage: '', vehicleType: '', flightNo: '', notes: '' });
+let tripBefore = { ...tripForm };
+
+function editTrip() {
+  const o = order.value;
+  if (!o) return;
+  Object.assign(tripForm, {
+    pickupAt: toLocalInput(new Date(o.pickupAt)),
+    origin: o.journey?.origin ?? o.origin,
+    destination: o.journey?.destination ?? o.destination,
+    transferPlace: o.journey?.transferPlaces[0] ?? '',
+    passengers: String(o.passengers),
+    luggage: String(o.luggage),
+    vehicleType: o.vehicleType ?? '',
+    flightNo: o.flightNo ?? '',
+    notes: o.notes ?? '',
+  });
+  tripBefore = { ...tripForm };
+  editingTrip.value = true;
+}
+
+async function saveTrip() {
+  const body: Record<string, unknown> = {};
+  // Number inputs hand back numbers: compare as text.
+  const changed = (field: keyof typeof tripForm) => String(tripForm[field]).trim() !== String(tripBefore[field]).trim();
+  if (changed('pickupAt')) body.pickupAt = fromLocalInput(tripForm.pickupAt);
+  for (const field of ['origin', 'destination', 'vehicleType'] as const) if (changed(field)) body[field] = String(tripForm[field]).trim();
+  if (order.value?.journey && changed('transferPlace')) body.transferPlace = tripForm.transferPlace.trim();
+  if (changed('passengers')) body.passengers = Number(tripForm.passengers);
+  if (changed('luggage')) body.luggage = Number(tripForm.luggage);
+  if (changed('flightNo')) body.flightNo = String(tripForm.flightNo).trim() || null;
+  if (changed('notes')) body.notes = String(tripForm.notes).trim() || null;
+  if (Object.keys(body).length === 0) {
+    editingTrip.value = false;
+    return;
+  }
+  busy.value = true;
+  try {
+    const updated = await api<Detail>('PATCH', `/orders/${id.value}/trip`, body);
+    order.value = updated;
+    editingTrip.value = false;
+    toast(updated.change || updated.journey?.legs.some((leg) => leg.changePending) ? '已修改，已通知接單司機確認' : '已修改');
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function load() {
   try {
     order.value = await api<Detail>('GET', `/orders/${id.value}`);
     error.value = '';
+    // When the page is opened or comes back, not on every refresh.
+    if (promptOnLoad) {
+      promptOnLoad = false;
+      checkProgressPrompt();
+    }
   } catch (e) {
     error.value = errorText(e);
   }
@@ -220,6 +436,8 @@ async function setPayment(body: { showPaymentMethods?: boolean; paid?: boolean }
 const remindPayment = computed(() => {
   const o = order.value;
   if (!o || !isDispatcher.value || o.paidAt || o.status === 'CANCELLED' || o.status === 'OPEN') return false;
+  // A 即時單's time is when it was put out: the fare is due once the passenger is on board.
+  if (o.immediate) return o.status === 'COMPLETED' || Boolean(o.progress?.pickedUpAt);
   return o.status === 'COMPLETED' || new Date(o.pickupAt).getTime() <= Date.now();
 });
 
@@ -352,7 +570,11 @@ function savePrices() {
   // 接駁: the second leg has no passenger price of its own.
   const body: Record<string, unknown> = tripPriceHere.value ? { passengerPrice: money(prices.passenger, prices.passengerCurrency) } : {};
   // The driver price (and its currency) is fixed once a driver has taken the order.
-  if (order.value?.status === 'OPEN') body.driverPrice = money(prices.driver, prices.currency);
+  if (order.value?.status === 'OPEN') {
+    body.driverPrice = money(prices.driver, prices.currency);
+    const before = order.value.driverPrice;
+    if (prices.driver && (!before || (before.currency === prices.currency && Number(prices.driver) > before.amount))) raised.value = true;
+  }
   return patchPrices(body, '價格已更新');
 }
 
@@ -365,12 +587,14 @@ const REFRESH_MS = 10_000;
 let timer: ReturnType<typeof setInterval> | undefined;
 
 function refresh() {
-  if (document.visibilityState !== 'visible' || busy.value || pending.value || !live.value) return;
+  if (document.visibilityState !== 'visible' || busy.value || pending.value || editingTrip.value || progressPrompt.value || !live.value) return;
   void load();
 }
 
 function onVisible() {
-  if (document.visibilityState === 'visible') refresh();
+  if (document.visibilityState !== 'visible') return;
+  promptOnLoad = true;
+  refresh();
 }
 
 onMounted(() => {
@@ -414,37 +638,99 @@ watch(id, () => {
         </p>
       </section>
 
-      <!-- The moment to send the passenger their link: a driver is set, and the passenger has not confirmed. -->
-      <section v-if="remindPayment" class="detail__remind" style="order: 2">
+      <!-- 出單者改了行程: the driver reads what changed and confirms it. -->
+      <section v-if="!isDispatcher && order.change && live" class="detail__remind detail__remind--change" style="order: 0">
         <p>
-          {{ t('乘客付款了嗎？') }}
-          <small>{{ t('查過自己的帳戶，收到了就按「已收款」。乘客直接付給你，平台不經手。') }}</small>
+          {{ t(`出單者改了行程：${order.change.summary}`) }}
+          <small>{{ t(`${shortTime(order.change.at)} 修改。請看下面的新行程，沒問題就按「知道了」；不能做可以取消接單。`) }}</small>
         </p>
-        <button class="button" type="button" :disabled="busy" @click="setPayment({ paid: true }, '已記為已收款')">{{ t('已收款') }}</button>
+        <button class="button" type="button" :disabled="busy" @click="ackChange">{{ t('知道了') }}</button>
       </section>
 
-      <section v-if="isDispatcher && canSettle && !order.settledAt" class="detail__remind" style="order: 2">
-        <p>
-          {{ t(`和${order.driver?.name ?? '接單司機'}結清了嗎？`) }}
-          <small>{{ t('你們自己結，結好了按「已結清」，司機那邊也會看到。平台不經手、不核對。') }}</small>
-        </p>
-        <button class="button" type="button" :disabled="busy" @click="setSettled(true)">{{ t('已結清') }}</button>
-      </section>
+      <!-- 現在要做的事: the dispatcher's next step at this stage of the order, first on the page. -->
+      <div
+        v-if="
+          (live && progressAsk) ||
+          (isDispatcher && (unclaimedSoon || waitingForDriver || changeWaiting || remindPayment || (canSettle && !order.settledAt) || (remindPassenger && order.share)))
+        "
+        class="detail__next"
+        style="order: 2"
+      >
+        <span class="section-label">{{ t('現在要做的事') }}</span>
+        <!-- 行程進度: the one who drives reports each step here; the dispatcher and the passenger see it. -->
+        <section v-if="live && progressAsk && nextProgress" class="detail__remind" :class="{ 'detail__remind--calm': !progressAsk.urgent }">
+          <p>
+            {{ t(progressAsk.text) }}
+            <small>{{ t('按一下，出單者和乘客就知道你到哪了，不用再打給你。') }}</small>
+          </p>
+          <button class="button" type="button" :disabled="busy" @click="reportProgress(nextProgress.step, nextProgress.label)">
+            {{ t(nextProgress.label) }}
+          </button>
+        </section>
+        <template v-if="isDispatcher">
+          <section v-if="unclaimedSoon" class="detail__remind">
+            <p>
+              {{ t(unclaimedSoon) }}
+              <small>{{ t('可以加價，再貼一次到群裡；有人接會通知你。') }}</small>
+            </p>
+            <div class="detail__pair">
+              <button class="button secondary" type="button" :disabled="busy" @click="startRaise">{{ t('改出單價') }}</button>
+              <button class="button" type="button" @click="repost"><AppIcon name="copy" :size="18" />{{ raised ? t('複製加價重發') : t('複製重發') }}</button>
+            </div>
+          </section>
+          <section v-else-if="waitingForDriver" class="detail__remind">
+            <p>
+              {{ t('等司機搶') }}
+              <small>{{ t('把下面的群文字貼到群裡；有人接會通知你。') }}</small>
+            </p>
+          </section>
+          <section v-if="changeWaiting" class="detail__remind">
+            <p>
+              {{ t('已通知接單司機行程有修改') }}
+              <small>{{ t('等他按「知道了」；急的話可以直接打給他。') }}</small>
+            </p>
+          </section>
 
-      <section v-if="remindPassenger && order.share" class="detail__remind" style="order: 2">
-        <p>
-          {{ selfDriven ? t('這單你自己做，把確認連結傳給乘客') : t(`${order.driver?.name ?? '司機'} 接了這張單，把確認連結傳給乘客`) }}
-          <small>{{ t('乘客會看到司機和車牌，按一下就確認行程') }}</small>
-        </p>
-        <button class="button" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
-          <AppIcon name="copy" :size="18" />{{ t('複製給乘客') }}
-        </button>
-      </section>
+        <!-- The moment to send the passenger their link: a driver is set, and the passenger has not confirmed. -->
+        <section v-if="remindPayment" class="detail__remind">
+          <p>
+            {{ t('乘客付款了嗎？') }}
+            <small>{{ t('查過自己的帳戶，收到了就按「已收款」。乘客直接付給你，平台不經手。') }}</small>
+          </p>
+          <button class="button" type="button" :disabled="busy" @click="setPayment({ paid: true }, '已記為已收款')">{{ t('已收款') }}</button>
+        </section>
+
+        <section v-if="isDispatcher && canSettle && !order.settledAt" class="detail__remind">
+          <p>
+            {{ t(`和${order.driver?.name ?? '接單司機'}結清了嗎？`) }}
+            <small>{{ t('你們自己結，結好了按「已結清」，司機那邊也會看到。平台不經手、不核對。') }}</small>
+          </p>
+          <button class="button" type="button" :disabled="busy" @click="setSettled(true)">{{ t('已結清') }}</button>
+        </section>
+
+        <section v-if="remindPassenger && order.share" class="detail__remind">
+          <p>
+            {{ selfDriven ? t('這單你自己做，把確認連結傳給乘客') : t(`${order.driver?.name ?? '司機'} 接了這張單，把確認連結傳給乘客`) }}
+            <small>{{ t('乘客會看到司機和車牌，按一下就確認行程') }}</small>
+          </p>
+          <button class="button" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
+            <AppIcon name="copy" :size="18" />{{ t('複製給乘客') }}
+          </button>
+        </section>
+        </template>
+      </div>
 
       <!-- The trip in the order of the group text: time, route, load, then what must be noticed. -->
-      <section class="card" style="order: 3">
+      <component :is="foldDetails ? 'details' : 'section'" class="card" :class="{ detail__fold: foldDetails }" style="order: 3">
+        <summary v-if="foldDetails">
+          <span class="detail__fold-text">
+            <strong>{{ t('行程') }}</strong>
+            <span class="hint">{{ t(tripSummary) }}</span>
+          </span>
+          <AppIcon name="chevron" class="detail__fold-arrow" />
+        </summary>
         <div class="detail__top">
-          <strong class="detail__time">{{ pickup(order.pickupAt) }}</strong>
+          <strong class="detail__time">{{ pickup(order.pickupAt) }}<span v-if="order.immediate" class="now-tag detail__now">{{ t('即時') }}</span></strong>
           <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
         </div>
         <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" /></div>
@@ -454,8 +740,11 @@ watch(id, () => {
           <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
         </div>
         <p v-if="order.journey" class="detail__line">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
+        <p v-if="order.flightNo" class="detail__line">{{ t(`航班：${order.flightNo}`) }}</p>
         <p v-if="order.notes" class="detail__note">{{ t(order.notes) }}</p>
-      </section>
+        <p v-if="progressText && !endedForDriver" class="detail__progress">{{ t(progressText) }}</p>
+        <button v-if="isDispatcher && live" class="chip detail__edit-trip" type="button" :disabled="busy" @click="editTrip">{{ t('修改行程') }}</button>
+      </component>
 
       <!-- 接駁: both legs of the order; the dispatcher opens a leg to manage its driver. -->
       <section v-if="order.journey && !endedForDriver" class="card" style="order: 5">
@@ -464,7 +753,14 @@ watch(id, () => {
       </section>
 
       <!-- The passenger: after the group text while waiting for a driver, after the driver once taken. -->
-      <section v-if="!endedForDriver" class="card" style="order: 10">
+      <component :is="foldDetails ? 'details' : 'section'" v-if="!endedForDriver" class="card" :class="{ detail__fold: foldDetails }" style="order: 10">
+        <summary v-if="foldDetails">
+          <span class="detail__fold-text">
+            <strong>{{ t('乘客') }}</strong>
+            <span class="hint">{{ t(passengerSummary) }}</span>
+          </span>
+          <AppIcon name="chevron" class="detail__fold-arrow" />
+        </summary>
         <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
         <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
         <p v-else-if="order.contactEnded" class="detail__waiting">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
@@ -494,7 +790,7 @@ watch(id, () => {
           <span class="section-label">{{ t('行程群：乘客、出單者都在裡面') }}</span>
           <TripGroupJoin :group="order.tripGroup" />
         </div>
-      </section>
+      </component>
 
       <!-- 行程群: the dispatcher's own group for this trip, passed on to the passenger and the driver; folded to one line. -->
       <details v-if="isDispatcher && order.status !== 'CANCELLED'" class="card detail__fold" style="order: 14" :open="editingGroup || undefined">
@@ -609,7 +905,22 @@ watch(id, () => {
       </section>
 
       <!-- Prices: the dispatcher sees both and the spread; the driver only the driver price -->
-      <section v-if="!endedForDriver" class="card" style="order: 12">
+      <component
+        :is="foldDetails ? 'details' : 'section'"
+        v-if="!endedForDriver"
+        id="detail-money"
+        class="card"
+        :class="{ detail__fold: foldDetails }"
+        style="order: 12"
+        :open="foldDetails && (moneyOpen || editingPrices) ? true : undefined"
+      >
+        <summary v-if="foldDetails">
+          <span class="detail__fold-text">
+            <strong>{{ t('帳') }}</strong>
+            <span class="hint">{{ t(moneySummary) }}</span>
+          </span>
+          <AppIcon name="chevron" class="detail__fold-arrow" />
+        </summary>
         <!-- 自己做: one price, what the passenger pays, and whether it came in. -->
         <template v-if="ownTrip && !editingPrices">
           <div class="detail__paid">
@@ -683,54 +994,27 @@ watch(id, () => {
             <button class="button" type="submit" :disabled="busy">{{ t('儲存') }}</button>
           </div>
         </form>
-      </section>
+        <!-- The dispatcher's 收款與結清 belong with the prices, in one 帳. -->
+        <OrderMoneyMarks
+          v-if="foldDetails"
+          :order="order"
+          :is-dispatcher="true"
+          :can-settle="canSettle"
+          :busy="busy"
+          @payment="setPayment"
+          @settled="setSettled"
+        />
+      </component>
 
-      <!-- 收款與結清: the dispatcher's own marks, apart from the prices. The platform takes no money and checks nothing. -->
-      <section
-        v-if="((isDispatcher && order.status !== 'CANCELLED') || canSettle) && !ownTrip"
-        class="card detail__money"
-        :style="{ order: doneForDriver ? 4 : 13 }"
-      >
-        <span class="section-label">{{ isDispatcher ? t('收款與結清') : doneForDriver ? t('這趟的帳') : t('結清') }}</span>
+      <!-- 結清 for the driver who took it (the dispatcher's marks are in 帳). The platform takes no money and checks nothing. -->
+      <section v-if="!isDispatcher && canSettle" class="card detail__money" :style="{ order: doneForDriver ? 4 : 13 }">
+        <span class="section-label">{{ doneForDriver ? t('這趟的帳') : t('結清') }}</span>
         <!-- The driver's finished trip: what they are owed, then whether it is settled. -->
         <div v-if="doneForDriver" class="detail__price">
           <span class="section-label">{{ t('出單價') }}</span>
           <strong>{{ money(order.driverPrice) || t('未填') }}</strong>
         </div>
-        <!-- 收款: the dispatcher's own mark, after checking their account. -->
-        <div v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__paid detail__divided">
-          <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.paidAt }">
-            {{ order.paidAt ? t(`${shortTime(order.paidAt)} 已收款`) : t('未收款') }}
-          </span>
-          <button class="chip" type="button" :disabled="busy" @click="setPayment({ paid: !order.paidAt }, order.paidAt ? '已改回未收款' : '已記為已收款')">
-            {{ order.paidAt ? t('改回未收款') : t('標記已收款') }}
-          </button>
-        </div>
-        <label v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__switch detail__divided">
-          <span>
-            {{ t('乘客確認頁顯示收款方式') }}
-            <small>{{ order.journey ? t('整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
-          </span>
-          <input
-            class="switch"
-            type="checkbox"
-            :checked="order.showPaymentMethods"
-            :disabled="busy"
-            @change="setPayment({ showPaymentMethods: !order.showPaymentMethods }, '已更新')"
-          />
-        </label>
-        <!-- 已結清: the dispatcher's own mark; the driver sees it. No amount, and the platform does not check it. -->
-        <div v-if="canSettle" class="detail__paid detail__divided">
-          <span class="detail__settle">
-            <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.settledAt }">
-              {{ order.settledAt ? t(`${shortTime(order.settledAt)} 已結清`) : t('未結清') }}
-            </span>
-            <small>{{ isDispatcher ? t('和接單司機的帳，你們自己結，平台不經手') : t('和出單者的帳，由出單者標記，平台不經手') }}</small>
-          </span>
-          <button v-if="isDispatcher" class="chip" type="button" :disabled="busy" @click="setSettled(!order.settledAt)">
-            {{ order.settledAt ? t('改回未結清') : t('標記已結清') }}
-          </button>
-        </div>
+        <OrderMoneyMarks :order="order" :is-dispatcher="false" :can-settle="canSettle" :busy="busy" />
       </section>
 
       <section v-if="order.driver && !ownTrip && !endedForDriver" class="card" style="order: 7">
@@ -774,7 +1058,16 @@ watch(id, () => {
 
       <!-- What can still be done, least drastic first; cancelling is a quiet red link. -->
       <section v-if="live" class="detail__actions" style="order: 20">
-        <button v-if="order.status === 'ASSIGNED'" class="button block large" type="button" :disabled="busy" @click="ask('complete', '已完成', '確定這趟行程已完成？', '標記完成')">{{ t('標記完成') }}</button>
+        <button
+          v-if="order.status === 'ASSIGNED'"
+          class="button block"
+          :class="nextProgress ? 'secondary' : 'large'"
+          type="button"
+          :disabled="busy"
+          @click="ask('complete', '已完成', '確定這趟行程已完成？', '標記完成')"
+        >
+          {{ t('標記完成') }}
+        </button>
         <template v-if="isDispatcher">
           <button
             v-if="order.status === 'ASSIGNED'"
@@ -813,12 +1106,85 @@ watch(id, () => {
         </button>
       </section>
 
+      <!-- 出回程單: the same trip back, the route turned around; from the trip's first leg for 接駁. -->
+      <RouterLink v-if="isDispatcher" class="button secondary block detail__return" style="order: 21" :to="`/app/new?return=${order.journey?.legs[0]?.id ?? order.id}`">
+        {{ t('出回程單') }}
+      </RouterLink>
+
+      <BottomSheet v-if="editingTrip" :title="t('修改行程')" @close="editingTrip = false">
+        <form class="detail__trip-form" @submit.prevent="saveTrip">
+          <p v-if="order.status === 'ASSIGNED' || order.journey?.legs.some((leg) => leg.status === 'ASSIGNED' && !leg.selfDrive)" class="hint">
+            {{ t('已有司機接了：改了之後會通知他確認。') }}
+          </p>
+          <label class="line-field">
+            <span>{{ order.journey ? t(`第 ${order.journey.legIndex} 段出發時間（香港時間）`) : t('出發時間（香港時間）') }}</span>
+            <input v-model="tripForm.pickupAt" class="line-input" type="datetime-local" required />
+          </label>
+          <label class="line-field">
+            <span>{{ t('出發地') }}</span>
+            <input v-model="tripForm.origin" class="line-input" maxlength="120" required />
+          </label>
+          <label v-if="order.journey" class="line-field">
+            <span>{{ t('接駁位置') }}</span>
+            <input v-model="tripForm.transferPlace" class="line-input" maxlength="120" required />
+          </label>
+          <label class="line-field">
+            <span>{{ t('目的地') }}</span>
+            <input v-model="tripForm.destination" class="line-input" maxlength="120" required />
+          </label>
+          <div class="detail__trip-load">
+            <label class="line-field">
+              <span>{{ t('人數') }}</span>
+              <input v-model="tripForm.passengers" class="line-input" type="number" min="1" max="60" inputmode="numeric" required />
+            </label>
+            <label class="line-field">
+              <span>{{ t('行李') }}</span>
+              <input v-model="tripForm.luggage" class="line-input" type="number" min="0" max="60" inputmode="numeric" />
+            </label>
+            <label class="line-field">
+              <span>{{ t('車型') }}</span>
+              <input v-model="tripForm.vehicleType" class="line-input" maxlength="30" required />
+            </label>
+          </div>
+          <label class="line-field">
+            <span>{{ t('航班號（選填）') }}</span>
+            <input v-model="tripForm.flightNo" class="line-input" maxlength="20" />
+          </label>
+          <label class="line-field">
+            <span>{{ t('備註') }}</span>
+            <textarea v-model="tripForm.notes" class="line-input" maxlength="500" />
+          </label>
+          <div class="detail__pair">
+            <button class="button secondary" type="button" @click="editingTrip = false">{{ t('取消') }}</button>
+            <button class="button" type="submit" :disabled="busy">{{ t('儲存') }}</button>
+          </div>
+        </form>
+      </BottomSheet>
+
       <BottomSheet v-if="pending" :title="t(pending.label)" @close="pending = null">
         <p class="detail__question">{{ t(pending.question) }}</p>
         <p v-if="pending.note" class="hint">{{ t(pending.note) }}</p>
         <div class="detail__pair">
           <button class="button secondary" type="button" @click="pending = null">{{ t('先不要') }}</button>
           <button class="button" type="button" :disabled="busy" @click="confirmPending">{{ t(pending.label) }}</button>
+        </div>
+      </BottomSheet>
+
+      <!-- 行程進度 asked once at the two times it matters most; 稍後 / 還沒 leaves it to the card at the top. -->
+      <BottomSheet
+        v-if="progressPrompt"
+        :title="progressPrompt.step === 'DEPARTED' ? t('出發了嗎？') : t('到了上車點嗎？')"
+        @close="progressPrompt = null"
+      >
+        <p class="detail__question">{{ t(`${pickup(order.pickupAt)}　${order.origin} 至 ${order.destination}`) }}</p>
+        <p class="hint">{{ t('按一下，出單者和乘客就知道你到哪了，不用再打給你。') }}</p>
+        <div class="detail__pair">
+          <button class="button secondary" type="button" @click="progressPrompt = null">
+            {{ progressPrompt.step === 'DEPARTED' ? t('稍後') : t('還沒') }}
+          </button>
+          <button class="button" type="button" :disabled="busy" @click="reportProgress(progressPrompt.step, progressPrompt.label)">
+            {{ t(progressPrompt.label) }}
+          </button>
         </div>
       </BottomSheet>
     </div>
@@ -829,6 +1195,10 @@ watch(id, () => {
 .detail__body {
   display: flex;
   flex-direction: column;
+}
+.detail__now {
+  margin-left: var(--space-sm);
+  vertical-align: middle;
 }
 .detail__fold summary {
   display: flex;
@@ -926,6 +1296,34 @@ watch(id, () => {
 .detail__paid-state--yes {
   color: var(--status-confirmed);
 }
+.detail__next {
+  display: flex;
+  flex-direction: column;
+}
+.detail__next > .section-label {
+  margin-bottom: var(--space-sm);
+}
+.detail__progress {
+  margin: var(--space-sm) 0 0;
+  color: var(--status-confirmed);
+  font-weight: 600;
+}
+.detail__edit-trip {
+  margin-top: var(--space-md);
+}
+.detail__return {
+  margin-top: var(--space-md);
+}
+.detail__trip-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+.detail__trip-load {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+}
 .detail__ended strong {
   font-size: var(--font-body-large);
 }
@@ -953,6 +1351,13 @@ watch(id, () => {
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
   font-weight: 400;
+}
+/* 行程進度 while there is still time: asked, not urged. */
+.detail__remind--calm {
+  background: var(--color-tint);
+}
+.detail__remind--calm p {
+  color: var(--color-text);
 }
 .detail__top {
   display: flex;

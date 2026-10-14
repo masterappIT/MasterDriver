@@ -14,6 +14,14 @@ test('「现在深圳湾送九龙8座」 — 现在 means a few minutes from now
   assert.deepEqual(order.missing, []);
 });
 
+test('words for "now" make it a 即時單; a time does not', () => {
+  for (const line of ['现在深圳湾送九龙8座', '馬上皇崗口岸去機場', '而家福田口岸到香港 2人']) {
+    assert.equal(parseQuickOrder(line, now).immediate, true, line);
+  }
+  assert.equal(parseQuickOrder('明天15:40澳门送香港', now).immediate, undefined);
+  assert.equal(parseQuickOrder('馬上皇崗口岸去機場', now).origin, '皇崗口岸');
+});
+
 test('「明天15:40澳门送香港，直车」 — a service word after a comma is a note', () => {
   const order = parseQuickOrder('明天15:40澳门送香港，直车', now);
   assert.equal(order.pickupAt, '2026-10-14T15:40:00+08:00');

@@ -176,7 +176,7 @@ onBeforeUnmount(() => clearInterval(clock));
 
     <RouterLink v-if="pool && pool.length" to="/app/pool" class="card home__summary">
       <span class="home__label">{{ t('接單池') }}</span>
-      <span>{{ t(`有 ${pool.length} 張單，最快 ${pickup(pool[0].pickupAt)} 出發`) }}</span>
+      <span>{{ t(pool[0].immediate ? `有 ${pool.length} 張單，有即時單` : `有 ${pool.length} 張單，最快 ${pickup(pool[0].pickupAt)} 出發`) }}</span>
     </RouterLink>
 
     <AdBanner position="HOME" />

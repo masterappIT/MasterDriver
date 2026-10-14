@@ -150,6 +150,16 @@ export const createOrderSchema = z.object({
   passengerContact: passengerPhoneSchema,
   /** The one-line text the order was written from, as typed. */
   rawText: optionalText(300),
+  /** 航班號 of an airport pickup or drop-off, e.g. "CX123". */
+  flightNo: optionalText(20),
+  /** 先給常用司機: for the first 30 minutes only the dispatcher's 常用司機 may claim it. */
+  favoritesFirst: z.boolean().default(false),
+  /**
+   * 即時單: leave now. The API takes the time it is put out as the pickup time (with 接駁, the
+   * first leg's); `pickupAt` is ignored. 先給常用司機 does not apply. Goes into the 接單池 unless
+   * `inPool` says otherwise.
+   */
+  immediate: z.boolean().default(false),
   /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */
   contactRevealMinutes: contactReveal.optional(),
   /**
@@ -249,6 +259,48 @@ export type PreferencesUpdate = z.infer<typeof preferencesUpdateSchema>;
 
 export const poolUpdateSchema = z.object({ inPool: z.boolean() });
 export type PoolUpdate = z.infer<typeof poolUpdateSchema>;
+
+/** 先給常用司機: how long an order is the dispatcher's 常用司機's alone before everyone may claim it. */
+export const FAVORITES_FIRST_MINUTES = 30;
+/** 先給常用司機 is only offered for an order that leaves more than this long after it is put out; never for 即時單. */
+export const FAVORITES_FIRST_MIN_LEAD_MINUTES = 60;
+/** 即時單: how long an unclaimed one stays in the 接單池, and when its dispatcher hears nobody has taken it. */
+export const IMMEDIATE_POOL_MINUTES = 120;
+export const IMMEDIATE_UNCLAIMED_MINUTES = 10;
+
+/** 行程進度: what the driver who took the order reports, in this order. */
+export const TRIP_PROGRESS_STEPS = ['DEPARTED', 'ARRIVED', 'PICKED_UP'] as const;
+export const orderProgressSchema = z.object({ step: z.enum(TRIP_PROGRESS_STEPS) });
+export type OrderProgress = z.infer<typeof orderProgressSchema>;
+
+/**
+ * 修改行程: the dispatcher changes the trip after putting it out. With 接駁, `pickupAt` is the leg's
+ * own time; `origin` is the trip's start, `destination` its end and `transferPlace` where the cars
+ * change. A driver who already took a changed leg confirms it with 知道了.
+ */
+export const updateTripSchema = z
+  .object({
+    pickupAt: z.string().datetime({ offset: true }).optional(),
+    origin: text(120).optional(),
+    destination: text(120).optional(),
+    transferPlace: text(120).optional(),
+    passengers: z.number().int().min(1).max(60).optional(),
+    luggage: z.number().int().min(0).max(60).optional(),
+    vehicleType: z.string().trim().min(1).max(30).optional(),
+    notes: z.string().trim().max(500).nullable().optional(),
+    flightNo: z.string().trim().max(20).nullable().optional(),
+  })
+  .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });
+export type UpdateTripInput = z.infer<typeof updateTripSchema>;
+
+/** 我的司機: the dispatcher's own mark and note on a driver who took their orders. */
+export const driverNoteUpdateSchema = z
+  .object({
+    favorite: z.boolean().optional(),
+    note: z.string().trim().max(200).nullable().optional(),
+  })
+  .refine((value) => value.favorite !== undefined || value.note !== undefined, { message: 'NOTHING_TO_UPDATE' });
+export type DriverNoteUpdate = z.infer<typeof driverNoteUpdateSchema>;
 
 /** 接單池 filters: a day in Hong Kong time (YYYY-MM-DD) and a word in the origin or destination. */
 export const poolQuerySchema = z.object({

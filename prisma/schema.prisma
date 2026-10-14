@@ -14,15 +14,15 @@ datasource db {
 
 /// A verified phone number. Every user can both dispatch and claim orders.
 model User {
-  id                   String   @id @default(cuid())
+  id                   String              @id @default(cuid())
   countryCode          String
   phone                String
-  locale               String   @default("zh-Hant")
+  locale               String              @default("zh-Hant")
   /// Default for new orders: minutes before pickup when the winning driver may see
   /// the passenger's contact. Null means as soon as the order is claimed.
-  contactRevealMinutes Int?     @default(60)
+  contactRevealMinutes Int?                @default(60)
   /// Default for new orders: whether they are also listed in the 接單池.
-  poolByDefault        Boolean  @default(false)
+  poolByDefault        Boolean             @default(false)
   /// 停用: set by the platform's staff for abuse. A suspended user cannot sign in
   /// and every session they had stops working; their past orders stay as they are.
   suspendedAt          DateTime?
@@ -30,13 +30,16 @@ model User {
   /// 通知設定: the kinds of notification (NotificationGroup) this user turned off. Nothing is
   /// recorded for them. The alert sound and its tone are kept on each phone, not here.
   notificationsOff     NotificationGroup[] @default([])
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   profile              DriverProfile?
   sessions             Session[]
   dispatchedOrders     Order[]               @relation("OrderDispatcher")
   claimedOrders        Order[]               @relation("OrderClaimer")
+  /// 我的司機: the dispatcher's own marks and notes on drivers who took their orders.
+  driverNotes          DriverNote[]          @relation("DriverNoteOwner")
+  notedBy              DriverNote[]          @relation("DriverNoteDriver")
   claims               OrderClaim[]
   subscriptions        Subscription[]
   entitlementOverrides EntitlementOverride[]
@@ -199,6 +202,11 @@ model Order {
   notes                String?
   /// The one-line text the order was written from (一句話發單), kept as typed.
   rawText              String?
+  /// 航班號 of an airport pickup or drop-off, as the dispatcher typed it. Shown to drivers and in the group text.
+  flightNo             String?
+  /// 即時單: put out to leave now; pickupAt is when it was put out. Only the first leg of a 接駁 order.
+  /// Cleared when 修改行程 sets a time.
+  immediate            Boolean   @default(false)
   passengerName        String?
   /// Visible to the dispatcher always; to the driver who claimed the order only
   /// from contactRevealMinutes before pickup (null: as soon as claimed).
@@ -225,9 +233,18 @@ model Order {
   /// order as settled. A mark only: who paid whom and how much is between the two
   /// of them, and the platform neither sees the money nor checks it.
   settledAt            DateTime?
+  /// 先給常用司機: until then only the dispatcher's 常用司機 may claim it, and the 接單池 shows it only to them.
+  favoritesUntil       DateTime?
   claimedById          String?
   claimedAt            DateTime?
   passengerConfirmedAt DateTime?
+  /// 行程進度, as the driver who took the order reports it: set out, at the pickup, passenger on board.
+  departedAt           DateTime?
+  arrivedAt            DateTime?
+  pickedUpAt           DateTime?
+  /// 修改行程: what the dispatcher changed after a driver took the order, until that driver confirms it.
+  changeSummary        String?
+  changePendingAt      DateTime?
   completedAt          DateTime?
   cancelledAt          DateTime?
   createdAt            DateTime      @default(now())
@@ -247,6 +264,22 @@ model Order {
   @@index([inPool, status, pickupAt])
 }
 
+/// 我的司機: a dispatcher's own mark and note on a driver who took one of their orders. Seen only by them.
+model DriverNote {
+  ownerId   String
+  driverId  String
+  /// 常用司機: offered the dispatcher's orders first when they choose 先給常用司機.
+  favorite  Boolean  @default(false)
+  note      String?
+  updatedAt DateTime @updatedAt
+
+  owner  User @relation("DriverNoteOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  driver User @relation("DriverNoteDriver", fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@id([ownerId, driverId])
+  @@index([driverId])
+}
+
 enum ClaimResult {
   WON
   LOST
@@ -254,11 +287,13 @@ enum ClaimResult {
 
 /// Every claim attempt, won or lost, kept as evidence for disputes.
 model OrderClaim {
-  id        String      @id @default(cuid())
-  orderId   String
-  driverId  String
-  result    ClaimResult
-  createdAt DateTime    @default(now())
+  id         String      @id @default(cuid())
+  orderId    String
+  driverId   String
+  result     ClaimResult
+  createdAt  DateTime    @default(now())
+  /// 取消接單: when the driver gave a won claim back.
+  releasedAt DateTime?
 
   order  Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   driver User  @relation(fields: [driverId], references: [id])
@@ -704,21 +739,21 @@ enum SmsProviderKind {
 /// One per route (+86, and +852 / +853): which provider sends its sign-in codes, and the
 /// route's own 253 account. Choosing Spug for a route leaves its 253 account as it is.
 model SmsChannel {
-  route           SmsRoute  @id
+  route           SmsRoute        @id
   /// The provider that sends this route's codes. Each keeps its own settings.
   provider        SmsProviderKind @default(SMS253)
   /// This route's 253 account is switched on.
-  enabled         Boolean   @default(false)
-  endpoint        String    @default("")
-  account         String    @default("")
+  enabled         Boolean         @default(false)
+  endpoint        String          @default("")
+  account         String          @default("")
   passwordEnc     String?
   /// Must contain {code}.
-  template        String    @default("")
-  testPhone       String    @default("")
+  template        String          @default("")
+  testPhone       String          @default("")
   lastTestedAt    DateTime?
   lastTestStatus  String?
   lastTestMessage String?
-  updatedAt       DateTime  @updatedAt
+  updatedAt       DateTime        @updatedAt
   updatedBy       String?
 }
 
@@ -742,7 +777,7 @@ model SpugSetting {
 
 /// One row per SMS attempt. The verification code itself is never stored.
 model SmsMessage {
-  id            String   @id @default(cuid())
+  id            String          @id @default(cuid())
   route         SmsRoute
   provider      SmsProviderKind @default(SMS253)
   countryCode   String
@@ -751,7 +786,7 @@ model SmsMessage {
   status        String
   providerCode  String?
   providerError String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime        @default(now())
 
   @@index([createdAt])
   @@index([countryCode, phone, createdAt])
@@ -941,24 +976,24 @@ model SupportMedia {
 /// One page per user. The name and vehicle come from DriverProfile; what is
 /// here is what only the page shows.
 model ProfilePage {
-  id        String   @id @default(cuid())
-  userId    String   @unique
+  id            String    @id @default(cuid())
+  userId        String    @unique
   /// Unguessable code in the page's address (/p/{code}).
-  code      String   @unique
+  code          String    @unique
   /// Nobody but the owner sees the page until it is published.
-  published Boolean  @default(false)
-  intro     String   @default("")
-  routes    String[] @default([])
-  languages String[] @default([])
-  regions   String[] @default([])
-  wechatId  String   @default("")
-  whatsapp  String   @default("")
+  published     Boolean   @default(false)
+  intro         String    @default("")
+  routes        String[]  @default([])
+  languages     String[]  @default([])
+  regions       String[]  @default([])
+  wechatId      String    @default("")
+  whatsapp      String    @default("")
   /// 下架: the platform's staff took the page down after a complaint. The owner cannot publish
   /// it again until staff restore it, and its photos are not shown to passengers either.
   blockedAt     DateTime?
   blockedReason String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   photos   ProfilePhoto[]
@@ -1041,7 +1076,9 @@ model BookingRequest {
 // bell while the app is open. There is no push to a closed page, SMS or WeChat message.
 // ---------------------------------------------------------------------------
 
-/** The groups a user can turn off in 通知設定. */
+/**
+ * The groups a user can turn off in 通知設定.
+ */
 enum NotificationGroup {
   /// Orders the user put out.
   DISPATCHED
@@ -1068,6 +1105,12 @@ enum NotificationKind {
   ORDER_REOPENED
   /// To the dispatcher: the driver gave the order (or their leg of a 接駁 order) back; it is open again.
   ORDER_RELEASED
+  /// To the dispatcher: an open order (or leg) still has no driver close to its time.
+  ORDER_UNCLAIMED
+  /// To the driver: the dispatcher changed the trip they took; they confirm with 知道了.
+  ORDER_CHANGED
+  /// To the dispatcher: the driver confirmed the change.
+  ORDER_CHANGE_ACKED
   /// To the driver: the dispatcher marked the account settled.
   ORDER_SETTLED
   /// To the driver: the passenger's phone is now shown on the order.

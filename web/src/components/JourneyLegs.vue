@@ -26,7 +26,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
           <span class="leg-tag">{{ t(`第 ${leg.legIndex} 段`) }}<template v-if="leg.legIndex === current">・{{ t('本段') }}</template></span>
           <StatusBadge :status="leg.status" />
         </div>
-        <div class="journey-legs__time">{{ pickup(leg.pickupAt) }}</div>
+        <div class="journey-legs__time">{{ pickup(leg.pickupAt) }}<span v-if="leg.immediate" class="now-tag journey-legs__now">{{ t('即時') }}</span></div>
         <div v-if="leg.selfDrive" class="hint">{{ t('出單者自己開') }}</div>
         <div>{{ t(`${leg.origin} 至 ${leg.destination}`) }}</div>
         <div v-if="leg.driver && leg.legIndex !== current" class="journey-legs__driver">
@@ -74,6 +74,9 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
 .journey-legs__time {
   font-weight: 600;
   margin-top: var(--space-xs);
+}
+.journey-legs__now {
+  margin-left: var(--space-xs);
 }
 .journey-legs__driver {
   display: flex;

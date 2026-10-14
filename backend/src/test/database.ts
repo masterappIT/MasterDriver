@@ -36,6 +36,7 @@ const TABLES = [
   'ObservabilityRequestStat',
   'ObservabilityInstance',
   'Notification',
+  'DriverNote',
   'BookingRequest',
   'ProfilePhoto',
   'ProfilePage',

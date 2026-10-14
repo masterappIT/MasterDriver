@@ -3,12 +3,12 @@ import { BillingModule } from '../billing/billing.module';
 import { EntitlementsModule } from '../entitlements/entitlements.module';
 import { GroupsModule } from '../groups/groups.module';
 import { PaymentMethodsModule } from '../payment-methods/payment-methods.module';
-import { DispatchLinkController, OrdersController, PassengerLinkController } from './orders.controller';
+import { DispatchLinkController, MyDriversController, OrdersController, PassengerLinkController } from './orders.controller';
 import { OrdersService } from './orders.service';
 
 @Module({
   imports: [EntitlementsModule, BillingModule, GroupsModule, PaymentMethodsModule],
-  controllers: [OrdersController, DispatchLinkController, PassengerLinkController],
+  controllers: [OrdersController, MyDriversController, DispatchLinkController, PassengerLinkController],
   providers: [OrdersService],
   exports: [OrdersService],
 })

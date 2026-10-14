@@ -120,3 +120,11 @@ test('the passenger message for a 接駁 order says the car changes on the way, 
   assert.ok(text.includes('費用 HK$1,000'));
   assert.ok(!text.includes('港珠澳大橋香港口岸'));
 });
+test('即時單 reads 現在出發 in the group instead of a time', () => {
+  const now = { ...order, immediate: true };
+  const text = dispatchShareText(now, 'https://example.test/o/abc');
+  assert.equal(text.wechat.split('\n')[0], '【即時】現在出發');
+  assert.equal(text.whatsapp.split('\n')[0], '*【即時】現在出發*');
+  assert.ok(text.wechat.includes('深圳灣口岸 → 香港國際機場'));
+  assert.ok(!text.wechat.includes('14:30'));
+});

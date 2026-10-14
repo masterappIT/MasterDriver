@@ -17,6 +17,8 @@ export interface JourneyLeg {
   legIndex: number;
   status: string;
   pickupAt: string;
+  /** 即時單: pickupAt is when it was put out to leave now (only ever the first leg). */
+  immediate?: boolean;
   origin: string;
   destination: string;
   /** The leg's own claim code: the one link in the group offers both legs. */
@@ -29,8 +31,34 @@ export interface JourneyLeg {
   selfDrive: boolean;
   /** Only for the dispatcher. */
   id?: string;
+  /** 行程進度 of this leg's driver (dispatcher only). */
+  progress?: TripProgress;
+  /** 修改行程 this leg's driver has not confirmed yet (dispatcher only). */
+  changePending?: boolean;
   /** Only for the dispatcher and this leg's driver. */
   driver?: LegDriver | null;
+}
+
+/** 行程進度 as the driver who took the order reported it. */
+export interface TripProgress {
+  departedAt: string | null;
+  arrivedAt: string | null;
+  pickedUpAt: string | null;
+}
+
+/** The steps a driver reports, in order, with how they read. */
+export const PROGRESS_STEPS = [
+  { step: 'DEPARTED', field: 'departedAt', label: '已出發' },
+  { step: 'ARRIVED', field: 'arrivedAt', label: '已到上車點' },
+  { step: 'PICKED_UP', field: 'pickedUpAt', label: '乘客已上車' },
+] as const;
+
+/** "13:50 已出發・14:20 已到上車點": the steps reported so far, each with its time; empty before the first. */
+export function progressLine(progress: TripProgress | null | undefined, time: (iso: string) => string): string {
+  if (!progress) return '';
+  return PROGRESS_STEPS.filter((one) => progress[one.field])
+    .map((one) => `${time(progress[one.field] as string)} ${one.label}`)
+    .join('・');
 }
 
 /** 接駁: the order around a leg, as the API returns it: one order from origin to destination in two legs. */

@@ -38,6 +38,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/guide/customers', component: () => import('./pages/CustomerGuidePage.vue'), meta: { app: true } },
   { path: '/app/profile-page', component: () => import('./pages/MyProfilePagePage.vue'), meta: { app: true } },
   { path: '/app/passengers', component: () => import('./pages/PassengersPage.vue'), meta: { app: true } },
+  { path: '/app/drivers', component: () => import('./pages/MyDriversPage.vue'), meta: { app: true } },
   { path: '/app/payment-methods', component: () => import('./pages/PaymentMethodsPage.vue'), meta: { app: true } },
   { path: '/app/bookings', component: () => import('./pages/BookingsPage.vue'), meta: { app: true } },
   { path: '/app/bookings/:id', component: () => import('./pages/BookingDetailPage.vue'), meta: { app: true } },

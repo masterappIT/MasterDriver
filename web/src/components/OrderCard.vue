@@ -15,6 +15,8 @@ export interface OrderSummary {
   passengers: number;
   luggage: number;
   vehicleType: string | null;
+  /** 即時單: pickupAt is when it was put out to leave now. */
+  immediate?: boolean;
   driverPrice: { amount: number; currency: string } | null;
   passengerConfirmedAt: string | null;
   dispatcherName: string | null;
@@ -57,7 +59,10 @@ function legState(leg: Journey['legs'][number]) {
 <template>
   <RouterLink :to="role === 'pool' && !mineInPool ? `/o/${order.code}` : `/app/orders/${order.id}`" class="card order-card">
     <div class="order-card__top">
-      <strong class="order-card__time">{{ pickup(order.pickupAt) }}</strong>
+      <!-- 即時單 still open: its time is when it went out, so it reads 現在出發 like the claim page. -->
+      <strong class="order-card__time">
+        {{ order.immediate && order.status === 'OPEN' ? t('現在出發') : pickup(order.pickupAt) }}<span v-if="order.immediate" class="now-tag order-card__now">{{ t('即時') }}</span>
+      </strong>
       <span v-if="role === 'pool' && order.driverPrice && !whole" class="order-card__price">{{ money(order.driverPrice) }}</span>
       <StatusBadge v-else-if="role !== 'pool'" :status="status" :confirmed="Boolean(order.passengerConfirmedAt)" />
     </div>
@@ -114,6 +119,10 @@ function legState(leg: Journey['legs'][number]) {
   gap: var(--space-xs);
   color: var(--color-text);
   margin-bottom: var(--space-md);
+}
+.order-card__now {
+  margin-left: var(--space-sm);
+  vertical-align: middle;
 }
 .order-card__top {
   display: flex;

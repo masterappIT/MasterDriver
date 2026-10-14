@@ -1,6 +1,9 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import {
   createOrderSchema,
+  driverNoteUpdateSchema,
+  orderProgressSchema,
+  updateTripSchema,
   orderListQuerySchema,
   poolQuerySchema,
   poolUpdateSchema,
@@ -14,6 +17,9 @@ import {
   type OrderSettlementUpdate,
   type TripGroupUpdate,
   type CreateOrderInput,
+  type DriverNoteUpdate,
+  type OrderProgress,
+  type UpdateTripInput,
   type OrderListQuery,
   type PoolQuery,
   type PoolUpdate,
@@ -135,6 +141,26 @@ export class OrdersController {
     return this.orders.reopen(user.id, id);
   }
 
+  /** 修改行程: the dispatcher's change to time, places or load. */
+  @Patch(':id/trip')
+  updateTrip(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(updateTripSchema)) body: UpdateTripInput) {
+    return this.orders.updateTrip(user.id, id, body);
+  }
+
+  /** 知道了: the driver confirms the dispatcher's change. */
+  @Post(':id/change-ack')
+  @HttpCode(200)
+  ackChange(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    return this.orders.ackChange(user.id, id);
+  }
+
+  /** 行程進度: 已出發, 已到上車點, 乘客已上車. */
+  @Post(':id/progress')
+  @HttpCode(200)
+  progress(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(orderProgressSchema)) body: OrderProgress) {
+    return this.orders.progress(user.id, id, body);
+  }
+
   @Post(':id/release')
   @HttpCode(200)
   release(@CurrentUser() user: SessionUser, @Param('id') id: string) {
@@ -145,6 +171,23 @@ export class OrdersController {
   @HttpCode(200)
   complete(@CurrentUser() user: SessionUser, @Param('id') id: string) {
     return this.orders.complete(user.id, id);
+  }
+}
+
+/** 我的司機: the drivers who took the signed-in dispatcher's orders, with their own marks and notes. */
+@Controller('me/drivers')
+@UseGuards(AuthGuard)
+export class MyDriversController {
+  constructor(@Inject(OrdersService) private readonly orders: OrdersService) {}
+
+  @Get()
+  list(@CurrentUser() user: SessionUser) {
+    return this.orders.drivers(user.id);
+  }
+
+  @Put(':driverId')
+  update(@CurrentUser() user: SessionUser, @Param('driverId') driverId: string, @Body(new ZodPipe(driverNoteUpdateSchema)) body: DriverNoteUpdate) {
+    return this.orders.updateDriverNote(user.id, driverId, body);
   }
 }
 

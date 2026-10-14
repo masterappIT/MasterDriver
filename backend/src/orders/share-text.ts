@@ -18,6 +18,10 @@ export interface ShareOrder {
   passengerCurrency: keyof typeof CURRENCY_PREFIX;
   showPassengerPrice: boolean;
   notes: string | null;
+  /** 航班號 of an airport pickup or drop-off. */
+  flightNo?: string | null;
+  /** 即時單: leaves now, so the group reads 現在出發 instead of a time. */
+  immediate?: boolean;
   /** 接駁: this order's place in its trip; absent or null for a single order. */
   legIndex?: number | null;
   legCount?: number;
@@ -38,6 +42,11 @@ export function formatPrice(priceMinor: number, currency: keyof typeof CURRENCY_
 
 function route(order: ShareOrder) {
   return `${order.origin} → ${order.destination}`;
+}
+
+/** When the order leaves, as the group reads it: 現在出發 for 即時單. */
+function when(order: ShareOrder) {
+  return order.immediate ? '現在出發' : formatPickup(order.pickupAt);
 }
 
 /**
@@ -75,6 +84,7 @@ function dispatchLines(order: ShareOrder): string[] {
     leg ? `接駁位置：${transferPlacesOf(leg).join('、')}` : null,
     plateRequirement(order.requiredPlates),
     order.waypoints.length > 0 ? `途經：${order.waypoints.join('、')}` : null,
+    order.flightNo ? `航班：${order.flightNo}` : null,
     load,
     order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
     order.notes ? `備註：${order.notes}` : null,
@@ -87,7 +97,7 @@ function dispatchLines(order: ShareOrder): string[] {
  * the driver price only; the passenger's contact and price never appear here.
  */
 export function dispatchShareText(order: ShareOrder, dispatchUrl: string) {
-  const heading = `【有單】${formatPickup(order.pickupAt)}`;
+  const heading = order.immediate ? '【即時】現在出發' : `【有單】${formatPickup(order.pickupAt)}`;
   const body = [...dispatchLines(order), `搶單：${dispatchUrl}`];
   return {
     wechat: [heading, ...body].join('\n'),
@@ -107,19 +117,20 @@ export type ShareLeg = ShareOrder & { legIndex: number | null; selfDriven: boole
 export function transferShareText(legs: ShareLeg[], dispatchUrl: string) {
   const first = legs[0];
   const last = legs[legs.length - 1];
-  const heading = `【有單・接駁】${formatPickup(first.pickupAt)}`;
+  const heading = first.immediate ? '【即時・接駁】現在出發' : `【有單・接駁】${formatPickup(first.pickupAt)}`;
   const load = [`${first.passengers}人`, `${first.luggage}件行李`, first.vehicleType].filter(Boolean).join('｜');
   const legLines = legs.map((leg, index) => {
     const parts = leg.selfDriven
       ? ['出單者自己開']
       : [plateRequirement(leg.requiredPlates), leg.driverPriceMinor !== null ? formatPrice(leg.driverPriceMinor, leg.driverCurrency) : null];
     const detail = parts.filter((part): part is string => part !== null).join('｜');
-    return `第 ${leg.legIndex ?? index + 1} 段：${formatPickup(leg.pickupAt)} ${route(leg)}${detail ? `｜${detail}` : ''}`;
+    return `第 ${leg.legIndex ?? index + 1} 段：${when(leg)} ${route(leg)}${detail ? `｜${detail}` : ''}`;
   });
   const body = [
     `${first.origin} → ${first.destination}（換車）→ ${last.destination}`,
     ...legLines,
     first.waypoints.length > 0 ? `途經：${first.waypoints.join('、')}` : null,
+    first.flightNo ? `航班：${first.flightNo}` : null,
     load,
     first.notes ? `備註：${first.notes}` : null,
     `搶單（選一段）：${dispatchUrl}`,

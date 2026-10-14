@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import AppIcon from '../components/AppIcon.vue';
-import BottomSheet from '../components/BottomSheet.vue';
 import GroupText from '../components/GroupText.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import PageBack from '../components/PageBack.vue';
@@ -40,7 +39,8 @@ const bothTaken = computed(() => Boolean(order.value?.journey?.legs.every((leg) 
 
 /**
  * The driver who takes the order reaches the dispatcher by phone, and by WeChat or WhatsApp when
- * the dispatcher gave them. With neither, say so once in a sheet; after that a line on the page.
+ * the dispatcher gave them. With neither, say so once in a note on the page that can be closed
+ * (never over the text to paste); after that a short line at the bottom.
  */
 const ASKED_KEY = 'md.contactAsked';
 const noContact = computed(() => {
@@ -90,6 +90,14 @@ onMounted(async () => {
         <span v-if="selfDriven">{{ t('這單你自己做，不用貼到群裡') }}</span>
       </header>
 
+      <div v-if="askContact" class="notice share__ask">
+        <p>
+          {{ t('你還沒填微信號或 WhatsApp。有人接單後，對方只看得到你的電話。') }}
+          <RouterLink to="/app/profile-page" @click="closeAsk">{{ t('去填寫') }}</RouterLink>
+        </p>
+        <button class="share__ask-close" type="button" :aria-label="t('關閉提示')" @click="closeAsk"><AppIcon name="close" :size="18" /></button>
+      </div>
+
       <ol class="share__steps" :aria-label="t('進度')">
         <li class="done">{{ t('已出單') }}</li>
         <li :class="{ done: order.journey ? bothTaken : order.claimedAt }">{{ selfDriven ? t('你自己做') : order.journey ? t('兩段都有人接') : t('有人接') }}</li>
@@ -129,23 +137,16 @@ onMounted(async () => {
         </button>
       </section>
 
-      <p v-if="noContact" class="hint share__hint">
+      <p v-if="noContact && !askContact" class="hint share__hint">
         {{ t('你還沒填微信號或 WhatsApp，接單司機只能打電話找你。') }}<RouterLink to="/app/profile-page">{{ t('去填寫') }}</RouterLink>
       </p>
 
       <div class="share__next">
         <RouterLink class="button secondary" :to="`/app/orders/${order.id}`">{{ t('查看這張單') }}</RouterLink>
+        <!-- 出回程單: the same trip back, the route turned around; only the time is left to fill. -->
+        <RouterLink class="button secondary" :to="`/app/new?return=${order.id}`">{{ t('出回程單') }}</RouterLink>
       </div>
     </template>
-
-    <BottomSheet v-if="askContact" :title="t('讓接單司機找得到你')" @close="closeAsk">
-      <p class="share__ask">{{ t('你還沒填微信號或 WhatsApp。有人接單後，對方現在只看得到你的電話。填了之後，接單司機可以直接加你微信或開 WhatsApp。') }}</p>
-      <p class="hint">{{ t('只有接了你的單的司機看得到，不用公開名片頁。') }}</p>
-      <div class="share__ask-buttons">
-        <button class="button secondary" type="button" @click="closeAsk">{{ t('之後再說') }}</button>
-        <RouterLink class="button" to="/app/profile-page" @click="closeAsk">{{ t('去填寫') }}</RouterLink>
-      </div>
-    </BottomSheet>
 
     <!-- Someone other than the dispatcher opened this address: send them to the order itself. -->
     <section v-else-if="order" class="card">
@@ -242,13 +243,22 @@ onMounted(async () => {
   order: 1;
 }
 .share__ask {
-  margin: 0 0 var(--space-sm);
-}
-.share__ask-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-sm);
-  margin-top: var(--space-md);
+}
+.share__ask p {
+  flex: 1;
+  margin: 0;
+}
+.share__ask-close {
+  display: flex;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
 }
 .share__wa {
   display: block;

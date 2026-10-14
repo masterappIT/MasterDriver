@@ -36,6 +36,12 @@ interface ClaimView {
   vehicleType: string | null;
   driverPrice: { amount: number; currency: string } | null;
   notes: string | null;
+  /** 航班號 of an airport pickup or drop-off. */
+  flightNo: string | null;
+  /** 即時單: pickupAt is when it was put out to leave now. */
+  immediate?: boolean;
+  /** 先給常用司機: until then only the dispatcher's 常用司機 may claim it. */
+  favoritesOnlyUntil: string | null;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
   dispatcherName: string | null;
@@ -202,6 +208,10 @@ onBeforeUnmount(() => {
       <section v-if="order.viewer === 'driver'" class="card claim-page__won">
         <strong>{{ t('你接到這張單了') }}</strong>
         <span>{{ t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`) }}</span>
+        <!-- 行程進度 is reported on the order's own page; say so while the driver is still here. -->
+        <RouterLink v-if="order.id && order.status === 'ASSIGNED'" class="claim-page__progress-hint" :to="`/app/orders/${order.id}`">
+          {{ t('出發、到了上車點、乘客上車時，打開這張單各按一下') }}
+        </RouterLink>
         <RouterLink v-if="order.driver && !order.driver.photoIds?.length" class="claim-page__photo-hint" to="/app/profile-page">
           {{ t('上傳車輛照片，乘客在確認頁比較容易認車') }}
         </RouterLink>
@@ -218,8 +228,15 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="claim-page__when">
-          <span class="claim-page__time">{{ pickup(order.pickupAt) }}</span>
-          <span v-if="untilPickup && order.status === 'OPEN'" class="claim-page__until">{{ t(untilPickup) }}</span>
+          <template v-if="order.immediate && order.status === 'OPEN'">
+            <span class="claim-page__time">{{ t('現在出發') }}</span>
+            <span class="now-tag">{{ t('即時') }}</span>
+          </template>
+          <template v-else>
+            <span class="claim-page__time">{{ pickup(order.pickupAt) }}</span>
+            <span v-if="order.immediate" class="now-tag">{{ t('即時') }}</span>
+            <span v-if="untilPickup && order.status === 'OPEN'" class="claim-page__until">{{ t(untilPickup) }}</span>
+          </template>
         </div>
 
         <RoutePoints
@@ -234,7 +251,11 @@ onBeforeUnmount(() => {
           <span v-if="order.driverPrice && !canClaim && !offering" class="claim-page__price">{{ money(order.driverPrice) }}</span>
         </div>
 
+        <p v-if="order.flightNo" class="claim-page__notes"><strong>{{ t('航班') }}</strong>{{ order.flightNo }}</p>
         <p v-if="order.notes" class="claim-page__notes"><strong>{{ t('備註') }}</strong>{{ t(order.notes) }}</p>
+        <p v-if="order.favoritesOnlyUntil && order.viewer !== 'dispatcher'" class="claim-page__notes">
+          <strong>{{ t('先給常用司機') }}</strong>{{ t(`出單者的常用司機先搶，${shortTime(order.favoritesOnlyUntil).split(' ')[1]} 後所有人都可以搶`) }}
+        </p>
       </section>
 
       <template v-if="order.viewer === 'driver'">
@@ -292,7 +313,7 @@ onBeforeUnmount(() => {
             <span v-if="leg.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(leg.requiredPlates)) }}</span>
             <strong v-if="leg.driverPrice && !leg.selfDrive" class="claim-page__leg-price">{{ money(leg.driverPrice) }}</strong>
           </div>
-          <span class="claim-page__leg-time">{{ pickup(leg.pickupAt) }}</span>
+          <span class="claim-page__leg-time">{{ leg.immediate && leg.status === 'OPEN' ? t('現在出發') : pickup(leg.pickupAt) }}</span>
           <span>{{ t(`${leg.origin} 至 ${leg.destination}`) }}</span>
           <button v-if="leg.status === 'OPEN'" class="button block claim-page__leg-claim" type="button" :disabled="busy" @click="claim(leg.code)">
             {{ busy ? t('搶單中…') : t(`搶第 ${leg.legIndex} 段`) }}
@@ -515,6 +536,7 @@ onBeforeUnmount(() => {
   text-align: center;
   background: var(--color-tint);
 }
+.claim-page__progress-hint,
 .claim-page__photo-hint {
   margin-top: var(--space-xs);
   font-size: var(--font-label);

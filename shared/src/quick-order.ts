@@ -10,6 +10,8 @@
 export interface QuickOrder {
   /** ISO 8601 with +08:00, e.g. 2026-10-14T15:40:00+08:00. */
   pickupAt?: string;
+  /** 即時單: "即時", "馬上", "而家" and the like; leaves now, so no time is needed. */
+  immediate?: boolean;
   origin?: string;
   destination?: string;
   vehicleType?: string;
@@ -32,6 +34,9 @@ function normalize(text: string) {
     .replace(/[　\s]+/g, ' ')
     .trim();
 }
+
+/** "現在 / 马上 / 而家": now. */
+const NOW_WORDS = /(現在|现在|馬上|马上|即時|即时|而家|宜家|立即)/;
 
 /** Removes the first match and returns its groups. */
 function take(state: { text: string }, pattern: RegExp): RegExpMatchArray | null {
@@ -77,7 +82,7 @@ function isoAt(year: number, month: number, day: number, hour: number, minute: n
 
 function readTime(state: { text: string }, now: Date): string | undefined {
   // "現在 / 马上 / 而家": now, rounded up to the next five minutes.
-  if (take(state, /(現在|现在|馬上|马上|即時|即时|而家|宜家|立即)/)) {
+  if (take(state, NOW_WORDS)) {
     const next = Math.ceil(now.getTime() / (5 * 60_000)) * 5 * 60_000;
     const local = new Date(next + HK_OFFSET_MS);
     return isoAt(local.getUTCFullYear(), local.getUTCMonth() + 1, local.getUTCDate(), local.getUTCHours(), local.getUTCMinutes());
@@ -154,6 +159,8 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
   const luggage = take(state, /(\d{1,2})\s*(?:件行李|個行李|个行李|件|箱|喼)/);
   if (luggage) result.luggage = Number(luggage[1]);
 
+  // The words readTime takes as "now" make it a 即時單 too.
+  if (NOW_WORDS.test(state.text)) result.immediate = true;
   result.pickupAt = readTime(state, now);
 
   // Whatever service words remain are notes ("直車", "接駁").
@@ -174,7 +181,7 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
     if (notes) result.notes = notes;
   }
 
-  if (!result.pickupAt) result.missing.push('pickupAt');
+  if (!result.pickupAt && !result.immediate) result.missing.push('pickupAt');
   if (!result.origin) result.missing.push('origin');
   if (!result.destination) result.missing.push('destination');
   return result;
