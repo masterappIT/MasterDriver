@@ -55,9 +55,9 @@ onBeforeUnmount(() => {
         </span>
       </div>
       <div class="bookings__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
+      <span v-if="booking.transfer" class="leg-tag bookings__tag">{{ t('接駁（中途換車）') }}</span>
       <div class="bookings__meta">
         {{ t(`${booking.passengerName ?? '乘客'}｜${loadLine(booking.passengers, booking.luggage)}`) }}
-        <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span>
         <span>{{ t(`${shortTime(booking.createdAt)} 送出`) }}</span>
       </div>
     </RouterLink>
@@ -90,6 +90,9 @@ onBeforeUnmount(() => {
   font-size: var(--font-body-large);
   font-weight: 700;
   overflow-wrap: anywhere;
+}
+.bookings__tag {
+  align-self: flex-start;
 }
 .bookings__meta {
   display: flex;
