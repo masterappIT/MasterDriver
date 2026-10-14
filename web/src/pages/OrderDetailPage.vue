@@ -193,6 +193,21 @@ const remindPayment = computed(() => {
 /** 已結清: only once the trip is done, and only when someone else drove it. */
 const canSettle = computed(() => order.value?.status === 'COMPLETED' && !order.value.selfDrive);
 
+/**
+ * The page follows the order's stage. While it waits for a driver, the text to paste into groups
+ * comes right after the trip; once taken, the driver does. Sections keep their place in the
+ * markup and are arranged with flex `order`, so each is written once.
+ */
+const waitingForDriver = computed(() => isDispatcher.value && order.value?.status === 'OPEN' && !taken.value && !selfDriven.value);
+
+/** 行程群 folded to one line: what is set up now. */
+const tripGroupSummary = computed(() => {
+  const group = order.value?.tripGroup;
+  if (!group) return '還沒加上，可讓乘客和接單司機一起進群';
+  if (group.expired) return '微信群二維碼已過期，請重新上傳';
+  return group.platform === 'WHATSAPP' ? '已加上 WhatsApp 群' : `已加上微信群，${shortTime(group.expiresAt ?? null)} 前有效`;
+});
+
 async function setSettled(settled: boolean) {
   busy.value = true;
   try {
@@ -343,16 +358,16 @@ watch(id, () => {
     <PageBack :title="t('訂單詳情')" :fallback="isDispatcher ? '/app/orders?tab=dispatched' : '/app/orders'" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
-    <template v-if="order">
+    <div v-if="order" class="detail__body">
       <!-- Where the order stands: 已出單, 有人接, 乘客確認. -->
-      <ol v-if="order.status !== 'CANCELLED'" class="detail__steps" :aria-label="t('進度')">
+      <ol v-if="order.status !== 'CANCELLED'" class="detail__steps" style="order: 1" :aria-label="t('進度')">
         <li class="done">{{ t('已出單') }}</li>
         <li :class="{ done: order.claimedAt }">{{ order.driver?.name ? t(`${order.driver.name} 接單`) : t('有人接') }}</li>
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
       </ol>
 
       <!-- The moment to send the passenger their link: a driver is set, and the passenger has not confirmed. -->
-      <section v-if="remindPayment" class="detail__remind">
+      <section v-if="remindPayment" class="detail__remind" style="order: 2">
         <p>
           {{ t('乘客付款了嗎？') }}
           <small>{{ t('查過自己的帳戶，收到了就按「已收款」。乘客直接付給你，平台不經手。') }}</small>
@@ -360,7 +375,7 @@ watch(id, () => {
         <button class="button" type="button" :disabled="busy" @click="setPayment({ paid: true }, '已記為已收款')">{{ t('已收款') }}</button>
       </section>
 
-      <section v-if="isDispatcher && canSettle && !order.settledAt" class="detail__remind">
+      <section v-if="isDispatcher && canSettle && !order.settledAt" class="detail__remind" style="order: 2">
         <p>
           {{ t(`和${order.driver?.name ?? '接單司機'}結清了嗎？`) }}
           <small>{{ t('你們自己結，結好了按「已結清」，司機那邊也會看到。平台不經手、不核對。') }}</small>
@@ -368,7 +383,7 @@ watch(id, () => {
         <button class="button" type="button" :disabled="busy" @click="setSettled(true)">{{ t('已結清') }}</button>
       </section>
 
-      <section v-if="remindPassenger && order.share" class="detail__remind">
+      <section v-if="remindPassenger && order.share" class="detail__remind" style="order: 2">
         <p>
           {{ selfDriven ? t('這單你自己做，把確認連結傳給乘客') : t(`${order.driver?.name ?? '司機'} 接了這張單，把確認連結傳給乘客`) }}
           <small>{{ t('乘客會看到司機和車牌，按一下就確認行程') }}</small>
@@ -379,7 +394,7 @@ watch(id, () => {
       </section>
 
       <!-- The trip in the order of the group text: time, route, load, then what must be noticed. -->
-      <section class="card">
+      <section class="card" style="order: 3">
         <div class="detail__top">
           <strong class="detail__time">{{ pickup(order.pickupAt) }}</strong>
           <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
@@ -394,24 +409,32 @@ watch(id, () => {
         <p v-if="order.notes" class="detail__note">{{ t(order.notes) }}</p>
       </section>
 
-      <div v-if="order.status === 'CANCELLED' && otherLiveLegs.length" class="notice">
+      <div v-if="order.status === 'CANCELLED' && otherLiveLegs.length" class="notice" style="order: 4">
         {{ t('這一段已取消，接駁的其他段仍在進行。需要的話，請在下面打開該段取消。') }}
       </div>
 
       <!-- 接駁: every leg of the trip -->
-      <section v-if="order.journey" class="card">
+      <section v-if="order.journey" class="card" style="order: 5">
         <span class="section-label">{{ t(`整個接駁行程，共 ${order.journey.legCount} 段`) }}</span>
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
         <RouterLink v-if="canAddLeg" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
       </section>
 
-      <section v-else-if="canAddLeg" class="card">
-        <p class="detail__line detail__leg-hint">{{ t('乘客中途要換車？加一段接駁，另外派給下一段的司機。乘客自行過關不算接駁，下一程請另外出單。') }}</p>
+      <!-- 加接駁段 is seldom needed: one folded line, near the end. -->
+      <details v-else-if="canAddLeg" class="card detail__fold" style="order: 16">
+        <summary>
+          <span class="detail__fold-text">
+            <strong>{{ t('加接駁段') }}</strong>
+            <span class="hint">{{ t('乘客中途換車時，下一段另外派') }}</span>
+          </span>
+          <AppIcon name="chevron" class="detail__fold-arrow" />
+        </summary>
+        <p class="hint">{{ t('乘客自行過關不算接駁，下一程請另外出單。') }}</p>
         <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
-      </section>
+      </details>
 
-      <!-- The passenger, right under the trip: who to call comes before texts, prices and the driver. -->
-      <section class="card">
+      <!-- The passenger: after the group text while waiting for a driver, after the driver once taken. -->
+      <section class="card" style="order: 10">
         <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
         <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
         <p v-else-if="order.contactEnded" class="detail__waiting">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
@@ -434,48 +457,48 @@ watch(id, () => {
             <button class="chip chip--on" type="button" :disabled="busy" @click="saveReveal">{{ t('儲存') }}</button>
           </template>
         </div>
-        <p v-if="isDispatcher && !selfDriven" class="hint detail__protect">{{ t('乘客是你的客人：行程完成或取消後，接單司機就看不到乘客電話。') }}</p>
+        <p v-if="isDispatcher && !selfDriven" class="hint detail__protect">{{ t('行程結束後，接單司機就看不到乘客電話。') }}</p>
 
         <!-- 行程群: the driver joins the group the dispatcher made, while they may see the passenger. -->
         <div v-if="!isDispatcher && order.tripGroup" class="detail__divided">
           <span class="section-label">{{ t('行程群：乘客、出單者都在裡面') }}</span>
           <TripGroupJoin :group="order.tripGroup" />
         </div>
-
-        <!-- 行程群: the dispatcher's own group for this trip, passed on to the passenger and the driver. -->
-        <div v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__divided">
-          <span class="section-label">{{ t('行程群（你、乘客、司機）') }}</span>
-          <template v-if="order.tripGroup && !editingGroup">
-            <p v-if="order.tripGroup.expired" class="detail__group-expired">{{ t('微信群二維碼已超過 7 天，乘客和司機看不到了，請重新上傳。') }}</p>
-            <p v-else class="detail__line">
-              {{
-                order.tripGroup.platform === 'WHATSAPP'
-                  ? t('已加上 WhatsApp 群連結，乘客確認頁和接單司機都看得到。')
-                  : t(`已加上微信群二維碼，${shortTime(order.tripGroup.expiresAt ?? null)} 前有效，乘客確認頁和接單司機都看得到。`)
-              }}
-            </p>
-            <div class="detail__pair detail__gap">
-              <button class="button secondary" type="button" :disabled="busy" @click="editingGroup = true">{{ t('更換') }}</button>
-              <button class="button secondary" type="button" :disabled="busy" @click="setTripGroup({ platform: null }, '已移除行程群')">{{ t('移除') }}</button>
-            </div>
-          </template>
-          <template v-else>
-            <p class="hint">{{ t('先在微信或 WhatsApp 自己建好群，再把入群方式放這裡。平台不建群，也不代發訊息。') }}</p>
-            <form class="detail__group-form" @submit.prevent="setTripGroup({ platform: 'WHATSAPP', inviteUrl: groupLink.trim() }, '已加上行程群')">
-              <input v-model="groupLink" class="line-input" inputmode="url" :aria-label="t('WhatsApp 群邀請連結')" placeholder="https://chat.whatsapp.com/…" />
-              <button class="chip chip--on" type="submit" :disabled="busy || !groupLink.trim()">{{ t('加上') }}</button>
-            </form>
-            <label class="button secondary block detail__gap">
-              {{ t('上傳微信群二維碼') }}<input type="file" accept="image/*" hidden @change="pickGroupQr" />
-            </label>
-            <span class="hint">{{ t('微信群二維碼 7 天後失效；超過 200 人的群不能掃碼加入。') }}</span>
-            <button v-if="editingGroup" class="detail__link" type="button" @click="editingGroup = false">{{ t('取消') }}</button>
-          </template>
-        </div>
       </section>
 
+      <!-- 行程群: the dispatcher's own group for this trip, passed on to the passenger and the driver; folded to one line. -->
+      <details v-if="isDispatcher && order.status !== 'CANCELLED'" class="card detail__fold" style="order: 14" :open="editingGroup || undefined">
+        <summary>
+          <span class="detail__fold-text">
+            <strong>{{ t('行程群（你、乘客、司機）') }}</strong>
+            <span class="hint" :class="{ 'detail__group-expired': order.tripGroup?.expired }">{{ t(tripGroupSummary) }}</span>
+          </span>
+          <AppIcon name="chevron" class="detail__fold-arrow" />
+        </summary>
+        <template v-if="order.tripGroup && !editingGroup">
+          <p v-if="order.tripGroup.expired" class="detail__group-expired">{{ t('微信群二維碼已超過 7 天，乘客和司機看不到了，請重新上傳。') }}</p>
+          <p v-else class="hint">{{ t('乘客確認頁和接單司機都看得到。') }}</p>
+          <div class="detail__pair detail__gap">
+            <button class="button secondary" type="button" :disabled="busy" @click="editingGroup = true">{{ t('更換') }}</button>
+            <button class="button secondary" type="button" :disabled="busy" @click="setTripGroup({ platform: null }, '已移除行程群')">{{ t('移除') }}</button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="hint">{{ t('先自己建好群，再把入群方式放這裡。') }}</p>
+          <form class="detail__group-form" @submit.prevent="setTripGroup({ platform: 'WHATSAPP', inviteUrl: groupLink.trim() }, '已加上行程群')">
+            <input v-model="groupLink" class="line-input" inputmode="url" :aria-label="t('WhatsApp 群邀請連結')" placeholder="https://chat.whatsapp.com/…" />
+            <button class="chip chip--on" type="submit" :disabled="busy || !groupLink.trim()">{{ t('加上') }}</button>
+          </form>
+          <label class="button secondary block detail__gap">
+            {{ t('上傳微信群二維碼') }}<input type="file" accept="image/*" hidden @change="pickGroupQr" />
+          </label>
+          <span class="hint">{{ t('微信群二維碼 7 天後失效。') }}</span>
+          <button v-if="editingGroup" class="detail__link" type="button" @click="editingGroup = false">{{ t('取消') }}</button>
+        </template>
+      </details>
+
       <!-- Dispatcher: texts to paste into groups and to the passenger -->
-      <section v-if="isDispatcher && order.share && live" class="card">
+      <section v-if="isDispatcher && order.share && live" class="card" :style="{ order: waitingForDriver ? 6 : taken ? 8 : 15 }">
         <p v-if="selfDriven" class="detail__line">{{ t('這單你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
         <!-- Taken: the group needs to hear that, and the order must not be pasted again. -->
         <template v-else-if="taken">
@@ -487,7 +510,7 @@ watch(id, () => {
         </template>
         <template v-else>
           <span class="section-label">{{ t('貼到群裡') }}</span>
-          <GroupText :text="order.share.dispatch.wechat" :link-note="t('藍色是這張單的搶單連結，會和文字一起複製')" />
+          <GroupText :text="order.share.dispatch.wechat" :link-note="t('藍色的搶單連結會一起複製')" />
           <!-- One main button: the app this page is most likely open next to. -->
           <div class="detail__stack" :class="{ 'detail__stack--whatsapp-first': !inWeChat }">
             <button class="button" :class="{ outline: !inWeChat }" type="button" @click="copy(order.share.dispatch.wechat, '已複製，回到微信群長按輸入框貼上')">
@@ -517,16 +540,16 @@ watch(id, () => {
       </section>
 
       <!-- Prices: the dispatcher sees both and the spread; the driver only the driver price -->
-      <section class="card">
+      <section class="card" style="order: 12">
         <template v-if="!editingPrices">
           <!-- 這單我自己做 has no price for another driver, so the line is left out unless one was set. -->
           <div v-if="order.driverPrice || !order.selfDrive" class="detail__price">
             <span class="section-label">{{ t('出單價') }}</span>
-            <strong>{{ money(order.driverPrice) || t('沒有填') }}</strong>
+            <strong>{{ money(order.driverPrice) || t('未填') }}</strong>
           </div>
           <template v-if="isDispatcher">
             <p class="detail__line">
-              {{ t(`乘客價 ${money(order.passengerPrice) || '沒有填'}`) }}<template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
+              {{ t(`乘客價 ${money(order.passengerPrice) || '未填'}`) }}<template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
             </p>
             <p v-if="order.serviceFee" class="hint detail__fee">
               {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整個接駁行程只收一次，全部段都取消才退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
@@ -544,43 +567,9 @@ watch(id, () => {
               </label>
               <button class="button secondary block detail__gap" type="button" @click="editPrices">{{ t('修改價格') }}</button>
             </template>
-            <!-- 收款: the dispatcher's own mark, after checking their account. -->
-            <div v-if="order.status !== 'CANCELLED'" class="detail__paid detail__divided">
-              <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.paidAt }">
-                {{ order.paidAt ? t(`${shortTime(order.paidAt)} 已收款`) : t('未收款') }}
-              </span>
-              <button class="chip" type="button" :disabled="busy" @click="setPayment({ paid: !order.paidAt }, order.paidAt ? '已改回未收款' : '已記為已收款')">
-                {{ order.paidAt ? t('改回未收款') : t('標記已收款') }}
-              </button>
-            </div>
-            <label v-if="order.status !== 'CANCELLED'" class="detail__switch detail__divided">
-              <span>
-                {{ t('乘客確認頁顯示收款方式') }}
-                <small>{{ order.journey ? t('整個接駁行程一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
-              </span>
-              <input
-                class="switch"
-                type="checkbox"
-                :checked="order.showPaymentMethods"
-                :disabled="busy"
-                @change="setPayment({ showPaymentMethods: !order.showPaymentMethods }, '已更新')"
-              />
-            </label>
           </template>
         </template>
-        <!-- 已結清: the dispatcher's own mark; the driver sees it. No amount, and the platform does not check it. -->
-        <div v-if="canSettle && !editingPrices" class="detail__paid detail__divided">
-          <span class="detail__settle">
-            <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.settledAt }">
-              {{ order.settledAt ? t(`${shortTime(order.settledAt)} 已結清`) : t('未結清') }}
-            </span>
-            <small>{{ isDispatcher ? t('和接單司機的帳，你們自己結，平台不經手') : t('和出單者的帳，由出單者標記，平台不經手') }}</small>
-          </span>
-          <button v-if="isDispatcher" class="chip" type="button" :disabled="busy" @click="setSettled(!order.settledAt)">
-            {{ order.settledAt ? t('改回未結清') : t('標記已結清') }}
-          </button>
-        </div>
-        <form v-else-if="editingPrices" @submit.prevent="savePrices">
+        <form v-if="editingPrices" @submit.prevent="savePrices">
           <span class="section-label">{{ order.status === 'OPEN' ? t('出單價') : t('出單價（已有司機接單，不能再改）') }}</span>
           <div class="amount-line detail__gap-bottom">
             <select v-model="prices.currency" :aria-label="t('出單價幣種')" :disabled="order.status !== 'OPEN'">
@@ -606,7 +595,46 @@ watch(id, () => {
         </form>
       </section>
 
-      <section v-if="order.driver" class="card">
+      <!-- 收款與結清: the dispatcher's own marks, apart from the prices. The platform takes no money and checks nothing. -->
+      <section v-if="(isDispatcher && order.status !== 'CANCELLED') || canSettle" class="card detail__money" style="order: 13">
+        <span class="section-label">{{ isDispatcher ? t('收款與結清') : t('結清') }}</span>
+        <!-- 收款: the dispatcher's own mark, after checking their account. -->
+        <div v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__paid detail__divided">
+          <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.paidAt }">
+            {{ order.paidAt ? t(`${shortTime(order.paidAt)} 已收款`) : t('未收款') }}
+          </span>
+          <button class="chip" type="button" :disabled="busy" @click="setPayment({ paid: !order.paidAt }, order.paidAt ? '已改回未收款' : '已記為已收款')">
+            {{ order.paidAt ? t('改回未收款') : t('標記已收款') }}
+          </button>
+        </div>
+        <label v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__switch detail__divided">
+          <span>
+            {{ t('乘客確認頁顯示收款方式') }}
+            <small>{{ order.journey ? t('整個接駁行程一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
+          </span>
+          <input
+            class="switch"
+            type="checkbox"
+            :checked="order.showPaymentMethods"
+            :disabled="busy"
+            @change="setPayment({ showPaymentMethods: !order.showPaymentMethods }, '已更新')"
+          />
+        </label>
+        <!-- 已結清: the dispatcher's own mark; the driver sees it. No amount, and the platform does not check it. -->
+        <div v-if="canSettle" class="detail__paid detail__divided">
+          <span class="detail__settle">
+            <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.settledAt }">
+              {{ order.settledAt ? t(`${shortTime(order.settledAt)} 已結清`) : t('未結清') }}
+            </span>
+            <small>{{ isDispatcher ? t('和接單司機的帳，你們自己結，平台不經手') : t('和出單者的帳，由出單者標記，平台不經手') }}</small>
+          </span>
+          <button v-if="isDispatcher" class="chip" type="button" :disabled="busy" @click="setSettled(!order.settledAt)">
+            {{ order.settledAt ? t('改回未結清') : t('標記已結清') }}
+          </button>
+        </div>
+      </section>
+
+      <section v-if="order.driver" class="card" style="order: 7">
         <span class="section-label">{{ selfDriven ? t('這單你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
         <div class="detail__person">
           <strong>{{ order.driver.name ? t(order.driver.name) : t('沒有留名') }}</strong>
@@ -623,7 +651,7 @@ watch(id, () => {
       </section>
 
       <!-- The driver who took the order: how to reach whoever put it out. -->
-      <section v-if="!isDispatcher && order.dispatcherPhone" class="card">
+      <section v-if="!isDispatcher && order.dispatcherPhone" class="card" style="order: 9">
         <span class="section-label">{{ t('出單者') }}</span>
         <div class="detail__person">
           <strong>{{ order.dispatcherName ? t(order.dispatcherName) : t('沒有留名') }}</strong>
@@ -638,7 +666,7 @@ watch(id, () => {
       </section>
 
       <!-- What can still be done, least drastic first; cancelling is a quiet red link. -->
-      <section v-if="live" class="detail__actions">
+      <section v-if="live" class="detail__actions" style="order: 20">
         <button v-if="order.status === 'ASSIGNED'" class="button block large" type="button" :disabled="busy" @click="ask('complete', '已完成', '確定這趟行程已完成？', '標記完成')">{{ t('標記完成') }}</button>
         <template v-if="isDispatcher">
           <button
@@ -668,11 +696,47 @@ watch(id, () => {
           <button class="button" type="button" :disabled="busy" @click="confirmPending">{{ t(pending.label) }}</button>
         </div>
       </BottomSheet>
-    </template>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.detail__body {
+  display: flex;
+  flex-direction: column;
+}
+.detail__fold summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  list-style: none;
+}
+.detail__fold summary::-webkit-details-marker {
+  display: none;
+}
+.detail__fold[open] summary {
+  margin-bottom: var(--space-md);
+}
+.detail__fold-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.detail__fold-arrow {
+  color: var(--color-text-muted);
+  transition: transform 0.15s;
+}
+.detail__fold[open] .detail__fold-arrow {
+  transform: rotate(90deg);
+}
+/* The first line under the 收款與結清 label needs no rule above it. */
+.detail__money .section-label + .detail__divided {
+  margin-top: var(--space-sm);
+  padding-top: 0;
+  border-top: none;
+}
 .detail__steps {
   list-style: none;
   display: grid;
