@@ -95,7 +95,7 @@ onMounted(() => void refreshInbox());
   border-radius: var(--radius-pill);
   background: var(--color-error);
   color: var(--color-on-primary);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 18px;
 }

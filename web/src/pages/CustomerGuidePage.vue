@@ -90,7 +90,7 @@ const TIPS = [
 }
 .guide h2 {
   margin: 0 0 var(--space-sm);
-  font-size: 20px;
+  font-size: 22px;
 }
 .guide__lead p {
   margin: 0;

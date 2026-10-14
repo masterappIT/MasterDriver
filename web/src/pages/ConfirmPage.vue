@@ -248,7 +248,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .confirm-page__title {
   margin: var(--space-sm) 0 var(--space-lg);
-  font-size: 20px;
+  font-size: 22px;
   text-wrap: balance;
 }
 .confirm-page__done {
@@ -296,7 +296,7 @@ onBeforeUnmount(() => {
 }
 .confirm-page__time {
   margin-bottom: var(--space-lg);
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
 }
 .confirm-page__price strong {
   color: var(--color-gold-ink);
-  font-size: 20px;
+  font-size: 22px;
 }
 .confirm-page__driver {
   display: flex;
@@ -327,12 +327,12 @@ onBeforeUnmount(() => {
   margin-top: var(--space-sm);
 }
 .confirm-page__driver strong {
-  font-size: 18px;
+  font-size: 20px;
 }
 /* Plates large enough to read at the kerb. */
 .confirm-page__plates {
   margin: var(--space-sm) 0;
-  font-size: 20px;
+  font-size: 22px;
 }
 .confirm-page__handoff {
   margin: 0 0 var(--space-md) var(--space-md);
@@ -340,7 +340,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 .confirm-page__leg-time {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   margin-top: var(--space-sm);
 }
@@ -355,7 +355,7 @@ onBeforeUnmount(() => {
 }
 .confirm-page__pay-amount {
   color: var(--color-gold-ink);
-  font-size: 24px;
+  font-size: 26px;
   font-variant-numeric: tabular-nums;
 }
 .confirm-page__paid {

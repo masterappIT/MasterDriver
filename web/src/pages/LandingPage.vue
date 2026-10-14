@@ -402,7 +402,7 @@ onMounted(async () => {
 .landing__start {
   min-height: 52px;
   border-radius: var(--radius-pill);
-  font-size: 17px;
+  font-size: 19px;
   box-shadow: 0 8px 18px rgba(31, 95, 214, 0.24);
 }
 .landing__points {
@@ -421,7 +421,7 @@ onMounted(async () => {
 }
 .landing__say {
   margin: 0 0 var(--space-sm);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
 }
 .landing__bubble {
@@ -489,7 +489,7 @@ onMounted(async () => {
 }
 .landing__bubble--claim strong {
   color: var(--color-gold-ink);
-  font-size: 20px;
+  font-size: 22px;
 }
 .landing__bubble--won {
   border-color: transparent;
@@ -614,7 +614,7 @@ onMounted(async () => {
 }
 .landing__claim {
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   line-height: 1.3;
 }
@@ -771,7 +771,7 @@ onMounted(async () => {
   letter-spacing: 0.12em;
 }
 .landing__upgrade strong {
-  font-size: 19px;
+  font-size: 21px;
   line-height: 1.5;
 }
 .landing__upgrade-go {

@@ -168,7 +168,7 @@ onMounted(async () => {
   text-align: center;
 }
 .share__head strong {
-  font-size: 22px;
+  font-size: 24px;
 }
 .share__head span {
   color: var(--color-text-secondary);
@@ -230,7 +230,7 @@ onMounted(async () => {
   border-radius: 50%;
   background: var(--color-primary);
   color: var(--color-on-primary);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 .share__passenger-hint {

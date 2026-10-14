@@ -102,7 +102,7 @@ watch(() => route.path, () => void refreshUnread(), { immediate: true });
   gap: 2px;
   border-radius: var(--radius-pill);
   color: var(--color-nav-inactive);
-  font-size: 11px;
+  font-size: 13px;
   line-height: 1.2;
 }
 .tab-bar__item.active {

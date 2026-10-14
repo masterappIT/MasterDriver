@@ -94,7 +94,7 @@ function back() {
 }
 .page-back__title {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;

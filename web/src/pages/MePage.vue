@@ -189,7 +189,7 @@ onMounted(async () => {
 }
 .me__name h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
   overflow-wrap: anywhere;
 }
 .me__top-actions {
@@ -261,7 +261,7 @@ onMounted(async () => {
 }
 .me__balance {
   color: var(--color-gold-ink);
-  font-size: 18px;
+  font-size: 20px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

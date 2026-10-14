@@ -48,7 +48,7 @@ defineProps<{ id?: string }>();
   font-weight: 700;
 }
 .phone-field .line-input {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

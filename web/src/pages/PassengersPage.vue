@@ -87,7 +87,7 @@ onMounted(async () => {
 }
 .passengers__phone {
   margin-top: var(--space-xs);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }

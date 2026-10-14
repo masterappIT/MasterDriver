@@ -639,7 +639,7 @@ onMounted(async () => {
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1.5;
   resize: vertical;
   outline: none;
@@ -747,7 +747,7 @@ onMounted(async () => {
   font-weight: 700;
 }
 .new-order__phone .line-input {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }

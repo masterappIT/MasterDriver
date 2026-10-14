@@ -26,7 +26,7 @@ defineProps<{ title: string; description?: string }>();
 }
 .section-heading h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 500;
   line-height: 1.4;
 }

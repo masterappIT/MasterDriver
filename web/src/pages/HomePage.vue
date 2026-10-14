@@ -333,7 +333,7 @@ onBeforeUnmount(() => clearInterval(clock));
 .home__counts strong {
   margin-right: var(--space-xs);
   color: var(--color-text);
-  font-size: 20px;
+  font-size: 22px;
   font-variant-numeric: tabular-nums;
 }
 </style>

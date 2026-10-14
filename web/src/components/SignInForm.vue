@@ -219,7 +219,7 @@ onBeforeUnmount(() => clearInterval(timer));
   background: var(--color-tint);
   color: var(--color-primary-dark);
   font: inherit;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
 }
 .sign-in__number {
@@ -230,7 +230,7 @@ onBeforeUnmount(() => clearInterval(timer));
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.04em;
   font-variant-numeric: tabular-nums;
@@ -238,7 +238,7 @@ onBeforeUnmount(() => clearInterval(timer));
 }
 .sign-in__number::placeholder {
   color: var(--color-text-muted);
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 400;
   letter-spacing: normal;
 }
@@ -258,7 +258,7 @@ onBeforeUnmount(() => clearInterval(timer));
   height: 100%;
   opacity: 0;
   border: none;
-  font-size: 16px;
+  font-size: 18px;
   caret-color: transparent;
 }
 .sign-in__slot {
@@ -291,7 +291,7 @@ onBeforeUnmount(() => clearInterval(timer));
 .sign-in__submit {
   min-height: 48px;
   border-radius: var(--radius-pill);
-  font-size: 16px;
+  font-size: 18px;
   box-shadow: 0 8px 18px rgba(31, 95, 214, 0.24);
 }
 .sign-in__submit:disabled {
