@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { passengerPhoneSchema } from './schemas';
 
 /** 名片頁 and booking requests. */
-export const PROFILE_PHOTO_MAX = 3;
+/** One vehicle photo per driver: the car the passenger looks for. */
+export const PROFILE_PHOTO_MAX = 1;
 export const PROFILE_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
 const line = (max: number) => z.string().trim().min(1).max(max);
@@ -35,12 +36,8 @@ export const bookingCreateSchema = z.object({
   destination: line(120),
   passengers: z.number().int().min(1).max(60),
   luggage: z.number().int().min(0).max(60).default(0),
-  passengerName: z
-    .string()
-    .trim()
-    .max(40)
-    .optional()
-    .transform((value) => value || undefined),
+  /** How to address the passenger; asked for since 2026-10-14, so older requests may have none. */
+  passengerName: line(40),
   /** A phone with its country code, as on an order (2026-10-14; older requests may hold any text). */
   passengerContact: passengerPhoneSchema,
   /** Optional, only the driver sees it. */

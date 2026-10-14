@@ -128,8 +128,10 @@ test('a 名片頁 booking takes a phone with its country code, and a WeChat ID o
     origin: '香港國際機場',
     destination: '深圳灣口岸',
     passengers: 2,
+    passengerName: '王小姐',
   };
   const parsed = bookingCreateSchema.safeParse({ ...booking, passengerContact: '+86 138 0013 8000', passengerWechat: ' wang-test ' });
+  assert.equal(bookingCreateSchema.safeParse({ ...booking, passengerName: ' ', passengerContact: '+86 138 0013 8000' }).success, false, 'a name is required');
   assert.ok(parsed.success);
   assert.equal(parsed.data.passengerContact, '+86 13800138000');
   assert.equal(parsed.data.passengerWechat, 'wang-test');

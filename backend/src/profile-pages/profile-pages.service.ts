@@ -168,7 +168,9 @@ export class ProfilePagesService {
   async publicPage(code: string, viewerId?: string) {
     const page = await this.prisma.profilePage.findUnique({ where: { code }, include: pageInclude });
     if (!page || (!page.published && page.userId !== viewerId)) throw this.pageNotFound();
-    return { ...(await this.view(page)), published: page.published, mine: page.userId === viewerId };
+    const view = await this.view(page);
+    // A page from when several photos were allowed shows its newest; the owner removes the rest in their settings.
+    return { ...view, photos: view.photos.slice(-PROFILE_PHOTO_MAX), published: page.published, mine: page.userId === viewerId };
   }
 
   async createBooking(code: string, input: BookingCreate, ip: string | undefined, now = new Date()) {

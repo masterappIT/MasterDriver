@@ -88,11 +88,11 @@ const form = reactive({
   passengers: '1',
   luggage: '0',
   vehicleType: '',
-  /** The driver price's currency. */
-  currency: 'HKD',
+  /** The driver price's currency: 人民幣 unless the dispatcher picks another. */
+  currency: 'CNY',
   driverPrice: '',
   /** The passenger price's own currency: it follows the driver price's until the dispatcher picks another. */
-  passengerCurrency: 'HKD',
+  passengerCurrency: 'CNY',
   passengerPrice: '',
   showPassengerPrice: false,
   notes: '',
@@ -189,9 +189,9 @@ function copyLast() {
     luggage: String(last.luggage),
     vehicleType: last.vehicleType ?? '',
     notes: last.notes ?? '',
-    currency: last.driverPrice?.currency ?? 'HKD',
+    currency: last.driverPrice?.currency ?? 'CNY',
     driverPrice: last.driverPrice ? String(last.driverPrice.amount) : '',
-    passengerCurrency: last.passengerPrice?.currency ?? last.driverPrice?.currency ?? 'HKD',
+    passengerCurrency: last.passengerPrice?.currency ?? last.driverPrice?.currency ?? 'CNY',
     passengerPrice: last.passengerPrice ? String(last.passengerPrice.amount) : '',
     showPassengerPrice: last.showPassengerPrice ?? false,
   });
@@ -332,7 +332,7 @@ function usePassenger(passenger: BookPassenger) {
   pickingPassenger.value = false;
 }
 
-/** From 首頁「貼群文字」: start with the cursor in the one-line box, ready to paste. */
+/** With ?paste=1 (once a button on 首頁): start with the cursor in the one-line box, ready to paste. */
 const lineInput = ref<HTMLTextAreaElement | null>(null);
 
 onMounted(async () => {
@@ -485,8 +485,8 @@ onMounted(async () => {
       <span class="section-label">{{ t('出單價，拿到連結的司機看得到') }}</span>
       <div class="amount-line">
         <select v-model="form.currency" :aria-label="t('幣種')">
-          <option value="HKD">HK$</option>
           <option value="CNY">RMB¥</option>
+          <option value="HKD">HK$</option>
           <option value="MOP">MOP$</option>
         </select>
         <input v-model="form.driverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :placeholder="t('出單價')" />
@@ -494,8 +494,8 @@ onMounted(async () => {
       <span class="section-label new-order__passenger-price">{{ t('乘客價，只有你看得到') }}</span>
       <div class="amount-line amount-line--quiet">
         <select v-model="form.passengerCurrency" :aria-label="t('乘客價幣種')" @change="passengerCurrencyChosen = true">
-          <option value="HKD">HK$</option>
           <option value="CNY">RMB¥</option>
+          <option value="HKD">HK$</option>
           <option value="MOP">MOP$</option>
         </select>
         <input v-model="form.passengerPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('乘客價')" :placeholder="t('乘客價（選填）')" />
@@ -523,7 +523,7 @@ onMounted(async () => {
         <span class="section-label">{{ t('乘客') }}</span>
         <button v-if="past.length" class="new-order__book" type="button" @click="openBook">{{ t('從通訊錄選') }}</button>
       </div>
-      <input v-model="form.passengerName" class="line-input new-order__name" maxlength="40" :aria-label="t('乘客稱呼')" :placeholder="t('稱呼（選填），例如：王小姐')" />
+      <input v-model.trim="form.passengerName" class="line-input new-order__name" maxlength="40" :aria-label="t('乘客稱呼')" :placeholder="t('稱呼，例如：王小姐')" :required="!fromBooking" />
       <div class="line-field new-order__last">
         <label for="passenger-phone">{{ t('電話') }}</label>
         <div class="new-order__phone">

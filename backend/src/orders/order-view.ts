@@ -1,11 +1,15 @@
+import { PROFILE_PHOTO_MAX } from '@masterdriver/shared';
 import type { Prisma } from '../../generated/prisma';
 import { transferPlacesOf } from './share-text';
 
 /** The 名片頁 fields that say how to reach someone, and whether the page is public. */
 const contactPageSelect = { select: { code: true, published: true, wechatId: true, whatsapp: true } } as const;
-/** The driver's page also carries the vehicle photos (at most three), which the passenger sees on their link. */
+/**
+ * The driver's page also carries the vehicle photo, which the passenger sees on their link. A page
+ * from when several were allowed gives its newest.
+ */
 const driverPageSelect = {
-  select: { ...contactPageSelect.select, photos: { select: { id: true }, orderBy: { createdAt: 'asc' }, take: 3 } },
+  select: { ...contactPageSelect.select, photos: { select: { id: true }, orderBy: { createdAt: 'desc' }, take: PROFILE_PHOTO_MAX } },
 } as const;
 const claimerSelect = { select: { countryCode: true, phone: true, profile: true, profilePage: driverPageSelect } } as const;
 

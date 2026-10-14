@@ -89,7 +89,7 @@ const ERROR_TEXT: Record<string, string> = {
   BOOKING_PAGE_FULL: '這位司機今天的預約已滿，請直接聯絡司機或明天再試',
   PHOTO_TYPE: '照片只接受 PNG、JPG 或 WebP',
   PHOTO_TOO_LARGE: '照片太大，上限 5 MB',
-  PHOTO_LIMIT: '照片已達上限，請先刪除一張',
+  PHOTO_LIMIT: '車輛照片只可以放一張，要換請先刪除現有的',
   PHOTO_NOT_FOUND: '找不到這張照片',
   SUPPORT_MEDIA_TYPE: '只能傳送圖片（PNG、JPG、WebP）或影片（MP4、MOV、WebM）',
   SUPPORT_MEDIA_TOO_LARGE: '檔案太大：圖片上限 5 MB，影片上限 25 MB',
@@ -101,6 +101,7 @@ const ERROR_TEXT: Record<string, string> = {
   SUPPORT_GUEST_LIMIT: '暫時無法開始新的訪客對話，請登入後再聯絡客服',
   TRANSFER_PLACE_LOCKED: '上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段',
   VEHICLE_TYPE_REQUIRED: '請填車型，例如 7座',
+  PASSENGER_NAME_REQUIRED: '請填乘客稱呼，例如 王小姐',
   HK_MACAU_PHONE_REQUIRED: '請填港澳號碼',
   MAINLAND_PHONE_REQUIRED: '請填內地號碼',
 };

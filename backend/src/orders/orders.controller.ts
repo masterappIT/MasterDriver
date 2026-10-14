@@ -49,6 +49,9 @@ export class OrdersController {
     // 車型 goes into the group text, so an order offered to other drivers must say it.
     // 這單我自己做 from a booking is the dispatcher's own car and is never pasted into a group.
     if (!body.vehicleType && !body.selfDrive) throw apiError(HttpStatus.BAD_REQUEST, 'VEHICLE_TYPE_REQUIRED', 'An order offered to drivers needs a vehicle type');
+    // An order names its passenger. One made from a booking takes the booking's, and bookings
+    // from before the name was asked for have none.
+    if (!body.passengerName && !body.bookingId) throw apiError(HttpStatus.BAD_REQUEST, 'PASSENGER_NAME_REQUIRED', 'An order needs the passenger name');
     return this.orders.create(user.id, body);
   }
 

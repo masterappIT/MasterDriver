@@ -237,7 +237,7 @@ onMounted(async () => {
         <summary>
           <span class="my-page__fold-text">
             <strong>{{ t('車輛照片') }}</strong>
-            <span class="hint">{{ page.photos.length ? t(`${page.photos.length} 張，最多 ${page.photoLimit} 張`) : t(`還沒有照片，最多 ${page.photoLimit} 張`) }}</span>
+            <span class="hint">{{ page.photos.length > page.photoLimit ? t(`只會顯示最新的 ${page.photoLimit} 張，請刪除其餘的`) : page.photos.length ? t('已上傳') : t(`還沒有照片，可以放 ${page.photoLimit} 張`) }}</span>
           </span>
           <AppIcon name="chevron" class="my-page__fold-arrow" />
         </summary>
@@ -262,7 +262,7 @@ onMounted(async () => {
         </div>
         <input ref="picker" class="my-page__picker" type="file" accept="image/*" @change="picked" />
         <PhotoCrop v-if="cropping" :file="cropping" @done="upload" @cancel="cropping = null" @failed="cropFailed" />
-        <p class="hint">{{ t('只放自己車輛的照片，不要拍到他人車牌。你接單後，乘客在確認頁也看得到，方便認車。') }}</p>
+        <p class="hint">{{ t('只放一張自己車輛的照片，不要拍到他人車牌；要換請先刪除現有的。你接單後，乘客在確認頁也看得到，方便認車。') }}</p>
       </details>
 
       <button v-if="!page.published" class="button block large" type="button" :disabled="busy || !page.hasDriverProfile || Boolean(page.blocked)" @click="save(true)">

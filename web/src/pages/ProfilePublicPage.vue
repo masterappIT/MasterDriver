@@ -169,7 +169,7 @@ onBeforeUnmount(() => watcher?.disconnect());
             <input v-model="form.luggage" class="line-input" type="number" min="0" max="60" inputmode="numeric" />
           </label>
         </div>
-        <input v-model="form.passengerName" class="line-input profile__gap" maxlength="40" :aria-label="t('稱呼')" :placeholder="t('怎樣稱呼你（選填）')" />
+        <input v-model.trim="form.passengerName" class="line-input profile__gap" maxlength="40" :aria-label="t('稱呼')" :placeholder="t('怎樣稱呼你，例如：王小姐')" required />
         <div class="line-field">
           <label for="booking-phone">{{ t('你的電話，只有這位司機看得到') }}</label>
           <PhoneField id="booking-phone" v-model:country="form.passengerCountry" v-model:phone="form.passengerPhone" />

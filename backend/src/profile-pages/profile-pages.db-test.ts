@@ -58,15 +58,13 @@ test('a page is private until published, shows what the driver wrote, and counts
   await rejectsWith(ctx.profilePages.update(noDetails, { published: true }), 'PROFILE_REQUIRED');
 });
 
-test('photos: real pictures only, a few per page, public once the page is, gone from storage when removed', async () => {
+test('photos: real pictures only, one per page, public once the page is, gone from storage when removed', async () => {
   const { userId, code } = await publishedPage();
   await rejectsWith(ctx.profilePages.addPhoto(userId, Buffer.from('<!doctype html><script>')), 'PHOTO_TYPE');
   await rejectsWith(ctx.profilePages.addPhoto(userId, Buffer.concat([Buffer.from('\0\0\0\x18ftypisom', 'latin1'), Buffer.alloc(64)])), 'PHOTO_TYPE');
   let page = await ctx.profilePages.addPhoto(userId, jpeg(10));
-  page = await ctx.profilePages.addPhoto(userId, jpeg(20));
-  page = await ctx.profilePages.addPhoto(userId, jpeg(30));
-  await rejectsWith(ctx.profilePages.addPhoto(userId, jpeg(40)), 'PHOTO_LIMIT');
-  assert.equal(page.photos.length, 3);
+  await rejectsWith(ctx.profilePages.addPhoto(userId, jpeg(20)), 'PHOTO_LIMIT');
+  assert.equal(page.photos.length, 1);
 
   const first = page.photos[0];
   assert.ok((await ctx.profilePages.photo(code, first.id)).bytes.equals(jpeg(10)));
@@ -79,9 +77,11 @@ test('photos: real pictures only, a few per page, public once the page is, gone 
   assert.equal(await ctx.mediaStorage.read(key), null);
   await rejectsWith(ctx.profilePages.photo(code, first.id), 'PHOTO_NOT_FOUND');
 
+  // With the one photo removed, another can take its place.
+  page = await ctx.profilePages.addPhoto(userId, jpeg(20));
   await ctx.profilePages.update(userId, { published: false });
-  await rejectsWith(ctx.profilePages.photo(code, page.photos[1].id), 'PHOTO_NOT_FOUND');
-  assert.ok(await ctx.profilePages.photo(code, page.photos[1].id, userId), 'the owner still sees it');
+  await rejectsWith(ctx.profilePages.photo(code, page.photos[0].id), 'PHOTO_NOT_FOUND');
+  assert.ok(await ctx.profilePages.photo(code, page.photos[0].id, userId), 'the owner still sees it');
 });
 
 test('the passenger sees the vehicle photos of the driver who has the order, through their link only', async () => {

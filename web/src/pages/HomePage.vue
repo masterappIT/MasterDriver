@@ -144,10 +144,6 @@ onBeforeUnmount(() => clearInterval(clock));
       </div>
     </section>
 
-    <div class="home__actions">
-      <RouterLink to="/app/new?paste=1" class="button secondary">{{ t('貼群文字') }}</RouterLink>
-      <RouterLink to="/app/profile-page" class="button secondary">{{ t('分享名片') }}</RouterLink>
-    </div>
     <p v-if="fee?.enabled && !fee.exempt" class="hint home__fee">
       {{ t(`每出一張單扣 ${money(fee.feePerOrder)} 點數，取消會退回。目前餘額 ${money(balance)}。`) }}
     </p>
@@ -165,6 +161,8 @@ onBeforeUnmount(() => clearInterval(clock));
       </RouterLink>
       <p v-if="loaded && myTrips.length === 0" class="home__empty">{{ t('今天和明天沒有行程。在群裡看到單，點連結就能搶。') }}</p>
     </section>
+    <!-- Sharing the 名片頁 is an occasional thing: one quiet line, not a button above the trips. -->
+    <RouterLink to="/app/profile-page" class="home__share">{{ t('分享名片，讓客人直接約你') }}</RouterLink>
 
     <RouterLink v-if="sentTotal" to="/app/orders?tab=dispatched" class="card home__summary">
       <span class="home__label">{{ t('我出的單') }}</span>
@@ -265,18 +263,14 @@ onBeforeUnmount(() => clearInterval(clock));
   color: var(--color-gold-ink);
   font-size: var(--font-label);
 }
-.home__actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-sm);
-  margin-bottom: var(--space-lg);
-}
-.home__actions .button {
-  padding-inline: var(--space-sm);
-  white-space: nowrap;
+.home__share {
+  display: block;
+  margin: calc(var(--space-sm) * -1) var(--space-xs) var(--space-lg);
+  font-size: var(--font-label);
+  font-weight: 600;
 }
 .home__fee {
-  margin: calc(var(--space-sm) * -1) 0 var(--space-lg);
+  margin: 0 0 var(--space-lg);
 }
 .home__trip {
   display: flex;
