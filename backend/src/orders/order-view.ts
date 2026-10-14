@@ -232,6 +232,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     // Before claiming, a driver can look at who put the order out: their 名片頁, when it is public.
     dispatcherPageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,
     claimedAt: order.claimedAt?.toISOString() ?? null,
+    cancelledAt: order.cancelledAt?.toISOString() ?? null,
     passengerConfirmedAt: order.passengerConfirmedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
     viewer,
