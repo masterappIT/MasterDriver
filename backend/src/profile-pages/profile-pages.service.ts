@@ -7,6 +7,7 @@ import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
 import { NotificationsService } from '../notifications/notifications.service';
 import { telemetry } from '../observability/telemetry';
+import { phonesOf } from '../orders/order-view';
 import { PrismaService } from '../prisma.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import { sniffMedia } from '../support/media-file';
@@ -20,7 +21,13 @@ const OPEN: BookingStatus[] = ['PENDING', 'QUOTED', 'ACCEPTED'];
 
 const pageInclude = {
   photos: { orderBy: { createdAt: 'asc' } },
-  user: { select: { profile: { select: { name: true, vehicleType: true, seats: true, color: true, plateType: true } } } },
+  user: {
+    select: {
+      countryCode: true,
+      phone: true,
+      profile: { select: { name: true, vehicleType: true, seats: true, color: true, plateType: true, hkMacauPhone: true, mainlandPhone: true } },
+    },
+  },
 } satisfies Prisma.ProfilePageInclude;
 type PageRow = Prisma.ProfilePageGetPayload<{ include: typeof pageInclude }>;
 type BookingRow = Prisma.BookingRequestGetPayload<{ include: { order: { select: { id: true; confirmCode: true } } } }>;
@@ -307,6 +314,8 @@ export class ProfilePagesService {
       routes: page.routes,
       languages: page.languages,
       regions: page.regions,
+      // The driver's numbers on both sides of the border, so a passenger can call from either.
+      phones: phonesOf(page.user),
       wechatId: page.wechatId || null,
       whatsapp: page.whatsapp || null,
       photos: page.photos.map((photo) => ({ id: photo.id, url: `/api/public/profiles/${page.code}/photos/${photo.id}` })),

@@ -13,9 +13,10 @@ const orders = ref<OrderSummary[]>([]);
 const error = ref('');
 const loaded = ref(false);
 
-/** Which orders to show; in progress first, since that is what the driver acts on. */
-type Phase = 'live' | 'done' | 'cancelled' | 'unpaid' | 'unsettled';
+/** Which orders to show. The page opens on those in progress, since that is what the driver acts on. */
+type Phase = 'all' | 'live' | 'done' | 'cancelled' | 'unpaid' | 'unsettled';
 const PHASES: { value: Phase; label: string; statuses: string[]; dispatchedOnly?: boolean }[] = [
+  { value: 'all', label: '全部', statuses: ['OPEN', 'ASSIGNED', 'COMPLETED', 'CANCELLED'] },
   { value: 'live', label: '進行中', statuses: ['OPEN', 'ASSIGNED'] },
   { value: 'done', label: '已完成', statuses: ['COMPLETED'] },
   { value: 'cancelled', label: '已取消', statuses: ['CANCELLED'] },

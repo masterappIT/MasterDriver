@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
-import AppIcon from '../components/AppIcon.vue';
 import ContactLines from '../components/ContactLines.vue';
 import PlateTag from '../components/PlateTag.vue';
 import TripGroupJoin, { type TripGroup } from '../components/TripGroupJoin.vue';
@@ -74,11 +73,19 @@ const confirmCode = String(route.params.confirmCode);
 const trip = ref<PassengerView | null>(null);
 const error = ref('');
 const busy = ref(false);
+const ended = ref<HTMLElement | null>(null);
 
 async function load() {
   try {
+    const before = trip.value?.status;
     trip.value = await api<PassengerView>('GET', `/c/${confirmCode}`);
     error.value = '';
+    // The trip ended while the page was open: bring the passenger to the notice that says so.
+    if (before && before !== 'COMPLETED' && trip.value.status === 'COMPLETED') {
+      await nextTick();
+      ended.value?.scrollIntoView({ block: 'start' });
+      window.scrollTo(0, 0);
+    }
   } catch (e) {
     // A failed refresh keeps what is on screen; only a first load that fails is an error.
     if (!trip.value) error.value = errorText(e);
@@ -132,7 +139,11 @@ onBeforeUnmount(() => {
       <h1 class="confirm-page__title">{{ trip.dispatcherName ? t(`${trip.dispatcherName} 為你安排的行程`) : t('你的行程') }}</h1>
 
       <div v-if="trip.status === 'CANCELLED'" class="notice error">{{ t('這個行程已取消，如有疑問請聯絡為你安排的司機。') }}</div>
-      <p v-if="trip.passengerConfirmedAt" class="notice confirm-page__done">{{ t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`) }}</p>
+      <div v-if="trip.status === 'COMPLETED'" ref="ended" class="confirm-page__ended">
+        <strong>{{ t('行程已完成') }}</strong>
+        <span>{{ t('多謝乘搭。遺留物品或其他問題，可以聯絡司機或為你安排的人。') }}</span>
+      </div>
+      <p v-else-if="trip.passengerConfirmedAt" class="notice confirm-page__done">{{ t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`) }}</p>
 
       <template v-if="trip.legs && trip.legs.length > 1">
         <section class="card">
@@ -160,8 +171,7 @@ onBeforeUnmount(() => {
               <div v-if="leg.driver.photos.length" class="confirm-page__photos">
                 <img v-for="photo in leg.driver.photos" :key="photo" :src="photo" :alt="t('司機的車')" loading="lazy" />
               </div>
-              <a class="button secondary block" :href="`tel:${leg.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
-              <ContactLines :phones="leg.driver.phones.slice(1)" />
+              <ContactLines :phones="leg.driver.phones" />
             </div>
             <p v-else class="muted">{{ t('司機安排中，安排好後這裡會顯示司機和車牌。') }}</p>
           </section>
@@ -188,8 +198,7 @@ onBeforeUnmount(() => {
             <div v-if="trip.driver.photos.length" class="confirm-page__photos">
               <img v-for="photo in trip.driver.photos" :key="photo" :src="photo" :alt="t('司機的車')" loading="lazy" />
             </div>
-            <a class="button secondary block" :href="`tel:${trip.driver.phone.replace(/\s/g, '')}`">{{ t('致電司機') }}</a>
-            <ContactLines :phones="trip.driver.phones.slice(1)" />
+            <ContactLines :phones="trip.driver.phones" />
           </div>
         </section>
         <section v-else-if="trip.status === 'OPEN'" class="card muted">{{ t('司機安排中，安排好後這裡會顯示司機和車牌。') }}</section>
@@ -198,12 +207,8 @@ onBeforeUnmount(() => {
       <!-- Who arranged the trip: the one to ask about changes, the price or anything else. -->
       <section v-if="trip.dispatcher" class="card">
         <p class="confirm-page__label">{{ t('行程有問題或要更改，聯絡為你安排的人') }}</p>
-        <div class="confirm-page__arranger">
-          <strong>{{ trip.dispatcher.name ? t(trip.dispatcher.name) : t('安排行程的人') }}</strong>
-          <span class="muted">{{ trip.dispatcher.phone }}</span>
-        </div>
-        <a class="button secondary block" :href="`tel:${trip.dispatcher.phone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電') }}</a>
-        <ContactLines class="confirm-page__arranger-more" :phones="trip.dispatcher.phones.slice(1)" :wechat-id="trip.dispatcher.wechatId" :whatsapp="trip.dispatcher.whatsapp" />
+        <strong class="confirm-page__arranger">{{ trip.dispatcher.name ? t(trip.dispatcher.name) : t('安排行程的人') }}</strong>
+        <ContactLines :phones="trip.dispatcher.phones" :wechat-id="trip.dispatcher.wechatId" :whatsapp="trip.dispatcher.whatsapp" />
       </section>
 
       <section v-if="trip.tripGroup && trip.status !== 'CANCELLED'" class="card">
@@ -284,15 +289,23 @@ onBeforeUnmount(() => {
   color: var(--color-gold-ink);
   font-size: var(--font-label);
 }
-.confirm-page__arranger {
+.confirm-page__ended {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-md);
-  margin-bottom: var(--space-md);
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-lg);
+  border-radius: var(--radius-card);
+  background: var(--status-confirmed-tint);
 }
-.confirm-page__arranger-more {
-  margin-top: var(--space-md);
+.confirm-page__ended strong {
+  color: var(--status-confirmed);
+  font-size: 22px;
+}
+.confirm-page__arranger {
+  display: block;
+  margin-bottom: var(--space-sm);
+  font-size: 18px;
 }
 .confirm-page__time {
   margin-bottom: var(--space-lg);

@@ -4,8 +4,8 @@ import { api, apiFetch, errorText } from '../api';
 import { copyText } from '../device';
 import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
+import PhotoCrop from '../components/PhotoCrop.vue';
 import { t } from '../i18n';
-import { imageForSupport } from '../support';
 import { toast } from '../toast';
 
 interface MyPage {
@@ -35,6 +35,8 @@ const page = ref<MyPage | null>(null);
 const error = ref('');
 const busy = ref(false);
 const picker = ref<HTMLInputElement | null>(null);
+/** The photo just picked, while the driver places it in the frame. */
+const cropping = ref<File | null>(null);
 const form = reactive({ intro: '', routes: '', regions: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
 
 /**
@@ -99,15 +101,25 @@ async function save(published?: boolean) {
   }
 }
 
-async function picked(event: Event) {
+/** A picked photo is placed in the 4:3 frame first; what is uploaded is the framed part. */
+function picked(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   input.value = '';
   if (!file) return;
   error.value = '';
+  cropping.value = file;
+}
+
+function cropFailed() {
+  cropping.value = null;
+  error.value = t('這張圖片打不開，請換一張 JPG 或 PNG 照片。');
+}
+
+async function upload(image: Blob) {
+  cropping.value = null;
   busy.value = true;
   try {
-    const image = await imageForSupport(file);
     if (image.size > PHOTO_MAX_BYTES) throw new Error('圖片太大，上限 5 MB');
     const response = await apiFetch('POST', '/me/profile-page/photos', { headers: { 'content-type': image.type || 'image/jpeg' }, body: image });
     const updated = (await response.json()) as MyPage;
@@ -168,7 +180,7 @@ onMounted(async () => {
           <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
         </div>
         <p v-if="!page.hasDriverProfile" class="my-page__notice">{{ t('公開之前，請先在「我的」填寫司機資料（姓名、車型）。') }}</p>
-        <p class="hint my-page__from">{{ t('姓名、車型取自司機資料，完成單數由系統計算。') }}</p>
+        <p class="hint my-page__from">{{ t('姓名、車型、電話取自司機資料，公開後名片頁會顯示你的港澳和內地號碼。完成單數由系統計算。') }}</p>
       </section>
 
       <details class="card my-page__fold" :open="contentOpen" @toggle="contentOpen = ($event.target as HTMLDetailsElement).open">
@@ -250,6 +262,7 @@ onMounted(async () => {
           </button>
         </div>
         <input ref="picker" class="my-page__picker" type="file" accept="image/*" @change="picked" />
+        <PhotoCrop v-if="cropping" :file="cropping" @done="upload" @cancel="cropping = null" @failed="cropFailed" />
         <p class="hint">{{ t('只放自己車輛的照片，不要拍到他人車牌。你接單後，乘客在確認頁也看得到，方便認車。') }}</p>
       </details>
 

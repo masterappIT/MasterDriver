@@ -5,7 +5,7 @@ import { formatPassengerPhone, isValidPassengerPhone, type CountryCode } from '@
 import { api, errorText } from '../api';
 import BrandMark from '../components/BrandMark.vue';
 import { copyText } from '../device';
-import { fromLocalInput, plateKind, toLocalInput } from '../format';
+import { fromLocalInput, phonePlace, plateKind, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
 import PhoneField from '../components/PhoneField.vue';
 import { t } from '../i18n';
@@ -22,6 +22,8 @@ interface Page {
   routes: string[];
   languages: string[];
   regions: string[];
+  /** The driver's numbers: the one they sign in with, then their 港澳 and 內地 numbers. */
+  phones: string[];
   wechatId: string | null;
   whatsapp: string | null;
   photos: { id: string; url: string }[];
@@ -152,8 +154,12 @@ onBeforeUnmount(() => watcher?.disconnect());
         </ul>
       </section>
 
-      <section v-if="page.wechatId || page.whatsapp" class="card">
+      <section v-if="page.phones.length || page.wechatId || page.whatsapp" class="card">
         <span class="section-label">{{ t('直接聯絡') }}</span>
+        <div v-for="phone in page.phones" :key="phone" class="profile__contact">
+          <span><small>{{ t(phonePlace(phone)) }}</small>{{ phone }}</span>
+          <a class="chip" :href="`tel:${phone.replace(/\s/g, '')}`">{{ t('致電') }}</a>
+        </div>
         <div v-if="page.wechatId" class="profile__contact">
           <span><small>{{ t('微信') }}</small>{{ page.wechatId }}</span>
           <button class="chip" type="button" @click="copyWechat(page.wechatId)">{{ t('複製') }}</button>
@@ -275,7 +281,8 @@ onBeforeUnmount(() => watcher?.disconnect());
 }
 .profile__photo {
   flex: 0 0 86%;
-  height: 220px;
+  /* The frame the driver placed the photo in when uploading it. */
+  aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: var(--radius-card);
   scroll-snap-align: start;

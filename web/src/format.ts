@@ -35,9 +35,9 @@ export function toLocalInput(date: Date): string {
 
 export const fromLocalInput = (value: string) => `${value}:00+08:00`;
 
-/** "4人｜3件行李｜7座", as in the group text; no luggage is left unsaid. */
+/** "4人｜3件行李｜7座", as in the group text; no luggage is said too, as "0件行李". */
 export function loadLine(passengers: number, luggage: number, vehicleType?: string | null): string {
-  return [`${passengers}人`, luggage > 0 ? `${luggage}件行李` : null, vehicleType].filter(Boolean).join('｜');
+  return [`${passengers}人`, `${luggage}件行李`, vehicleType].filter(Boolean).join('｜');
 }
 
 const PLATE_KINDS = { SINGLE: '單牌', DUAL: '兩地牌', TRIPLE: '三地牌' } as const;
@@ -64,3 +64,8 @@ export const STATUS_LABEL: Record<string, string> = {
 
 export const statusText = (status: string, confirmed = false) =>
   t(status === 'ASSIGNED' && confirmed ? '乘客已確認' : (STATUS_LABEL[status] ?? status));
+
+const PHONE_PLACES: Record<string, string> = { '+852': '香港號碼', '+853': '澳門號碼', '+86': '內地號碼' };
+
+/** Which side of the border a stored number ("+852 91234567") is for, shown above it. */
+export const phonePlace = (phone: string) => PHONE_PLACES[phone.split(' ')[0]] ?? '電話';

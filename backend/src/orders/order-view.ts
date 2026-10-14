@@ -77,7 +77,7 @@ function pageContactOf(page: ContactPage) {
  * Every number someone can be reached on: the one they sign in with first, then the 港澳 and
  * 內地 numbers from their details, each once.
  */
-function phonesOf(person: { countryCode: string; phone: string; profile: { hkMacauPhone: string | null; mainlandPhone: string | null } | null }) {
+export function phonesOf(person: { countryCode: string; phone: string; profile: { hkMacauPhone: string | null; mainlandPhone: string | null } | null }) {
   const signIn = `${person.countryCode} ${person.phone}`;
   return [...new Set([signIn, person.profile?.hkMacauPhone, person.profile?.mainlandPhone].filter((phone): phone is string => Boolean(phone)))];
 }

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { copyText, inWeChat, whatsappChat } from '../device';
+import { phonePlace } from '../format';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
@@ -10,8 +11,6 @@ import { toast } from '../toast';
  */
 defineProps<{ phones?: string[]; wechatId?: string | null; whatsapp?: string | null }>();
 
-const PLACES: Record<string, string> = { '+852': '香港號碼', '+853': '澳門號碼', '+86': '內地號碼' };
-const placeOf = (phone: string) => PLACES[phone.split(' ')[0]] ?? '電話';
 
 async function copy(text: string, done: string) {
   toast((await copyText(text)) ? done : '複製失敗，請長按文字自行複製');
@@ -21,7 +20,7 @@ async function copy(text: string, done: string) {
 <template>
   <div v-if="phones?.length || wechatId || whatsapp" class="contact-lines">
     <div v-for="phone in phones ?? []" :key="phone" class="contact-lines__line">
-      <span><small>{{ t(placeOf(phone)) }}</small>{{ phone }}</span>
+      <span><small>{{ t(phonePlace(phone)) }}</small>{{ phone }}</span>
       <a class="chip" :href="`tel:${phone.replace(/\s/g, '')}`">{{ t('致電') }}</a>
     </div>
     <div v-if="wechatId" class="contact-lines__line">
