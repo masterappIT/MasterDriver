@@ -2,13 +2,14 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import TabBar from './components/TabBar.vue';
-import { session } from './api';
+import { network, session } from './api';
 import { unlockOnFirstTouch } from './alert-sound';
 import { t } from './i18n';
 import { closeBanner, describe, inbox, markRead, startNotifications, stopNotifications } from './notifications';
 import { loadSite, site } from './site';
 import { toastState } from './toast';
 import { COPYRIGHT } from './copyright';
+import { reportLoad } from './load-report';
 
 const route = useRoute();
 const router = useRouter();
@@ -29,6 +30,18 @@ watch(
   },
   { immediate: true },
 );
+
+// A read gave up on the network: the line below offers 重新載入, and the server hears of it once.
+watch(
+  () => network.unstable,
+  (unstable) => {
+    if (unstable) reportLoad('network-failed', route.matched);
+  },
+);
+
+function reload() {
+  window.location.reload();
+}
 
 const banner = computed(() => (inbox.banner ? describe(inbox.banner) : null));
 
@@ -56,6 +69,10 @@ async function openBanner() {
     </button>
     <button type="button" class="notice-banner__close" :aria-label="t('關閉')" @click="closeBanner">{{ t('關閉') }}</button>
   </div>
+  <div v-if="network.unstable" class="network-bar" role="alert">
+    <span>{{ t('網路不穩，部分內容沒有載入') }}</span>
+    <button type="button" @click="reload">{{ t('重新載入') }}</button>
+  </div>
   <div v-if="toastState.visible" class="toast" role="status">{{ toastState.text }}</div>
 </template>
 
@@ -73,6 +90,35 @@ async function openBanner() {
 .copyright--app {
   margin-top: calc(-1 * (var(--tab-height) + var(--tab-offset) + var(--space-xl) + var(--safe-bottom)));
   padding-bottom: calc(var(--tab-height) + var(--tab-offset) + var(--space-lg) + var(--safe-bottom));
+}
+/* Over the top of the page, under the notification line when both show. */
+.network-bar {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: 50%;
+  z-index: 40;
+  transform: translateX(-50%);
+  width: min(100vw, var(--max-width));
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-size: var(--font-label);
+}
+.network-bar button {
+  flex: none;
+  min-height: 36px;
+  padding: 0 var(--space-lg);
+  border: 1px solid currentColor;
+  border-radius: 18px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .announcement {
   background: var(--color-gold-tint);

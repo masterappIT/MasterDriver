@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
-import { loadSession, session } from './api';
+import { ensureSession, session } from './api';
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -7,18 +7,20 @@ declare module 'vue-router' {
     app?: boolean;
     /** Pages that end with the copyright line: those seen from outside, the ways in, and 我的. */
     copyright?: boolean;
+    /** Opens without waiting to find out who is signed in; that is found out alongside. */
+    sessionLater?: boolean;
   }
 }
 
 const routes: RouteRecordRaw[] = [
   // The platform's public home page; signed-in users go straight to the driver app (see the guard below).
   { path: '/', component: () => import('./pages/LandingPage.vue') },
-  { path: '/legal/:kind(terms|privacy)', component: () => import('./pages/LegalPage.vue'), meta: { copyright: true } },
+  { path: '/legal/:kind(terms|privacy)', component: () => import('./pages/LegalPage.vue'), meta: { copyright: true, sessionLater: true } },
   // Opened from group links: kept as their own small chunks so they load first.
-  { path: '/o/:code', component: () => import('./pages/ClaimPage.vue'), meta: { copyright: true } },
+  { path: '/o/:code', component: () => import('./pages/ClaimPage.vue'), meta: { copyright: true, sessionLater: true } },
   { path: '/c/:confirmCode', component: () => import('./pages/ConfirmPage.vue'), meta: { copyright: true } },
   // 名片頁 and the passenger's booking link: public, no account.
-  { path: '/p/:code', component: () => import('./pages/ProfilePublicPage.vue'), meta: { copyright: true } },
+  { path: '/p/:code', component: () => import('./pages/ProfilePublicPage.vue'), meta: { copyright: true, sessionLater: true } },
   { path: '/b/:code', component: () => import('./pages/BookingStatusPage.vue'), meta: { copyright: true } },
   { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { copyright: true } },
   // 客服: for signed-in users and for guests, so it sits outside the signed-in app.
@@ -51,7 +53,12 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   // The passenger page never needs the driver's session.
   if (to.path.startsWith('/c/') || to.path.startsWith('/b/')) return true;
-  if (!session.checked) await loadSession();
+  // The pages opened from a group or by passengers show at once, even while the server wakes up.
+  if (to.meta.sessionLater) {
+    void ensureSession();
+    return true;
+  }
+  await ensureSession();
   if (to.meta.app && !session.user) return { path: '/login', query: { next: to.fullPath } };
   if ((to.path === '/login' || to.path === '/') && session.user) return '/app';
   return true;

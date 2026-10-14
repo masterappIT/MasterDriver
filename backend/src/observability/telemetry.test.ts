@@ -14,6 +14,7 @@ test('requests are sorted into the parts of MasterDriver by their route', () => 
   assert.equal(categoryOf('/api/health/ready'), 'health');
   assert.equal(observed('/api/notifications/stream'), false);
   assert.equal(observed('/api/admin/observability/stream'), false);
+  assert.equal(observed('/api/public/load-report'), false);
   assert.equal(observed('/api/orders'), true);
 });
 

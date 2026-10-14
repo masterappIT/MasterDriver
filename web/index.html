@@ -7,9 +7,126 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#3568e8" />
     <title>MasterDriver 跨境師傅幫</title>
+    <!-- The loading screen: shown before any code arrives, so a slow connection never shows a blank page. -->
+    <style>
+      body {
+        margin: 0;
+        background: #edf2f7;
+      }
+      .boot {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        min-height: 100vh;
+        padding: 0 24px;
+        box-sizing: border-box;
+        color: #142033;
+        font-family: -apple-system, 'PingFang TC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif;
+        text-align: center;
+      }
+      .boot p {
+        margin: 0;
+      }
+      .boot__brand {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .boot__spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid #d3dce8;
+        border-top-color: #1f5fd6;
+        border-radius: 50%;
+        animation: boot-spin 0.9s linear infinite;
+      }
+      .boot__text {
+        color: #8f9db0;
+        font-size: 15px;
+      }
+      .boot__slow {
+        display: none;
+        font-size: 15px;
+      }
+      .boot-slow .boot__slow,
+      .boot-failed .boot__slow {
+        display: block;
+      }
+      .boot__slow button {
+        margin-top: 12px;
+        min-height: 44px;
+        padding: 0 28px;
+        border: 0;
+        border-radius: 22px;
+        background: #1f5fd6;
+        color: #fff;
+        font: inherit;
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot__spinner {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <div class="boot" data-boot>
+        <p class="boot__brand">MasterDriver <span data-t="跨境師傅幫">跨境師傅幫</span></p>
+        <span class="boot__spinner" aria-hidden="true"></span>
+        <p class="boot__text" role="status" data-t="載入中…">載入中…</p>
+        <div class="boot__slow">
+          <p data-t="網路較慢，還沒載入完成。">網路較慢，還沒載入完成。</p>
+          <button type="button" onclick="location.reload()" data-t="重新載入">重新載入</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Plain old JavaScript: it runs before the app's code, in every browser WeChat has used.
+      (function () {
+        try {
+          if (localStorage.getItem('md-language') === 'zh-Hans') {
+            var simplified = {
+              '跨境師傅幫': '跨境师傅帮',
+              '載入中…': '载入中…',
+              '網路較慢，還沒載入完成。': '网络较慢，还没载入完成。',
+              '重新載入': '重新载入',
+            };
+            var nodes = document.querySelectorAll('[data-t]');
+            for (var i = 0; i < nodes.length; i++) {
+              var text = simplified[nodes[i].getAttribute('data-t')];
+              if (text) nodes[i].textContent = text;
+            }
+            document.documentElement.lang = 'zh-Hans';
+          }
+        } catch (e) {}
+        // Still here after 10 seconds: offer 重新載入 and tell the server (see src/load-report.ts).
+        setTimeout(function () {
+          if (!document.querySelector('[data-boot]')) return;
+          document.documentElement.className += ' boot-slow';
+          try {
+            sessionStorage.setItem('md-load-stalled', '1');
+          } catch (e) {}
+          try {
+            // Only the first part of the address (/o, /p, /app), never a code.
+            var first = location.pathname.split('/')[1];
+            fetch('/api/public/load-report', {
+              method: 'POST',
+              credentials: 'omit',
+              keepalive: true,
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ outcome: 'stalled', page: '/' + (first || ''), ms: Math.round(performance.now()) }),
+            })['catch'](function () {});
+          } catch (e) {}
+        }, 10000);
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

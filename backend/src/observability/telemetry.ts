@@ -60,8 +60,12 @@ export function sourceOf(path: string): TelemetrySource {
 
 export const categoryOf = (path: string): 'application' | 'health' => (path.startsWith('/api/health') ? 'health' : 'application');
 
-/** Long-lived streams are counted as connections, not requests; the monitor does not watch itself. */
-export const observed = (path: string) => path !== '/api/admin/observability/stream' && path !== '/api/notifications/stream';
+/**
+ * Long-lived streams are counted as connections, not requests; the monitor does not watch itself;
+ * the phones' load reports are about other requests, not visits of their own.
+ */
+export const observed = (path: string) =>
+  path !== '/api/admin/observability/stream' && path !== '/api/notifications/stream' && path !== '/api/public/load-report';
 
 /**
  * Where the page was opened. WhatsApp often opens links in the phone's own browser, so a

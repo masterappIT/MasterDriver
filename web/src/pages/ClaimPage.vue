@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, errorText, session } from '../api';
+import { api, ensureSession, errorText, session } from '../api';
 import AdBanner from '../components/AdBanner.vue';
 import AppIcon from '../components/AppIcon.vue';
 import BrandHeader from '../components/BrandHeader.vue';
@@ -100,6 +100,10 @@ function poll() {
 }
 
 async function claim() {
+  // The page opens before the sign-in check is back (router.ts); a tap waits for it.
+  busy.value = true;
+  await ensureSession();
+  busy.value = false;
   if (!session.user) {
     sheet.value = 'signIn';
     return;

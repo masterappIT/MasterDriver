@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { Prisma } from '../../generated/prisma';
 import { PrismaService } from '../prisma.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
+import { createReportLimiter, type LoadReport } from './load-report';
 import { createPlaceResolver, lookUpLocalPlace, type Area, type Place } from './region';
 import { categoryOf, clientOf, hongKongDay, observed, queryOperation, sourceOf, telemetry, type Client, type TelemetrySource } from './telemetry';
 
@@ -102,6 +103,23 @@ export class ObservabilityService implements OnModuleInit, OnModuleDestroy {
     PrismaService.onQuery = undefined;
     await this.flush();
     await this.prisma.observabilityInstance.deleteMany({ where: { id: this.instanceId } }).catch(() => undefined);
+  }
+
+  // ------------------------------------------------------------- phones' load reports
+
+  private readonly allowReport = createReportLimiter();
+  private readonly loadLogger = new Logger('LoadReport');
+
+  /**
+   * How opening a page went on a phone: one log line with the area and browser added, never the
+   * address itself. Find them in Cloud Logging with textPayload:"client-load".
+   */
+  async reportClientLoad(request: Request, report: LoadReport) {
+    if (!this.allowReport(request.ip ?? '')) return;
+    const place = await this.resolvePlace(request.ip);
+    this.loadLogger.log(
+      JSON.stringify({ event: 'client-load', ...report, region: place.region, area: place.area, client: clientOf(request.headers['user-agent']) }),
+    );
   }
 
   // ------------------------------------------------------------- recording

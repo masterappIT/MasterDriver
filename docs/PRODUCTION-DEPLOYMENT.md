@@ -107,6 +107,17 @@ flowchart TB
 | `GET /api/health` | 同 `ready`（舊路徑） |
 | `GET /healthz` | `web`、`admin` 的 nginx 容器 |
 
+### 手機端的載入回報
+
+連線卡住、沒到達伺服器的請求不會出現在伺服器的紀錄裡，所以用戶端網頁會自己回報打開頁面的結果（`POST /api/public/load-report`，2026-10-14 起）。每筆在 API 的日誌記一行 `client-load`，內容是結果（`ready` 顯示成功、`stalled` 載入畫面超過 10 秒、`network-failed` 讀取三次都失敗）、頁面種類（如 `/o/:code`，不含任何代碼）、花了多少毫秒、瀏覽器回報的網路類型，以及伺服器依 IP 查出的地區與是否在微信內；`afterStall: true` 表示同一分頁之前卡住過。不記 IP 與用戶。每個位址每分鐘最多 20 筆。
+
+```bash
+gcloud logging read 'resource.labels.service_name="masterdriver-api" AND textPayload:"client-load"' \
+  --project master-driver-511510 --freshness 7d --limit 200 --format='value(timestamp,textPayload)'
+```
+
+`stalled` 那一筆是卡住當下送出的，網路不通時可能送不到；之後重新載入成功時的 `ready` 會帶 `afterStall: true`，兩者一起看。
+
 ### 資料庫變更的規則
 
 API 與 migration 分開執行，新舊版本會短暫同時存在，所以 migration 必須向後相容：先加新結構、部署相容的程式，下一版才移除舊結構。正式環境不做自動還原（down migration）。

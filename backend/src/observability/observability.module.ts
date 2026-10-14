@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { AdminModule } from '../admin/admin.module';
+import { LoadReportController } from './load-report.controller';
 import { ObservabilityController } from './observability.controller';
 import { ObservabilityService } from './observability.service';
 
@@ -7,7 +8,7 @@ import { ObservabilityService } from './observability.service';
 @Global()
 @Module({
   imports: [AdminModule],
-  controllers: [ObservabilityController],
+  controllers: [ObservabilityController, LoadReportController],
   providers: [ObservabilityService],
   exports: [ObservabilityService],
 })

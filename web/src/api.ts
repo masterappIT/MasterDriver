@@ -104,6 +104,7 @@ const ERROR_TEXT: Record<string, string> = {
   PASSENGER_NAME_REQUIRED: '請填乘客稱呼，例如 王小姐',
   HK_MACAU_PHONE_REQUIRED: '請填港澳號碼',
   MAINLAND_PHONE_REQUIRED: '請填內地號碼',
+  NETWORK_UNSTABLE: '網路不穩，沒有載入成功，請稍後重新載入',
 };
 
 const INVALID_PHONE = 'INVALID_PHONE';
@@ -133,9 +134,79 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Whether the connection is failing: set when a read gave up on the network, cleared by the next
+ * answer. App.vue then shows a line with 重新載入, so a page never just waits forever.
+ */
+export const network = reactive({ unstable: false });
+
+/**
+ * Reads (GET) wait at most this long for an answer, and are tried again on a failed connection,
+ * a timeout or a 502–504 from the front end (a waking server). From mainland China a connection
+ * to the server can stall without failing; a fresh one usually goes through. Anything that changes
+ * data is sent once and never repeated here, so nothing is done twice.
+ */
+export const READ_TIMEOUT_MS = 10_000;
+export const READ_ATTEMPTS = 3;
+const RETRY_AFTER_MS = [1_000, 2_000];
+
+export const isRetryableStatus = (status: number) => status === 502 || status === 503 || status === 504;
+
+/** An answer read in full: a stall while the body arrives counts against the same time limit. */
+interface Answer {
+  status: number;
+  text: string;
+}
+
+async function readOnce(url: string, init: RequestInit): Promise<Answer> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), READ_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...init, signal: controller.signal });
+    return { status: response.status, text: await response.text() };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function readWithRetry(url: string, init: RequestInit): Promise<Answer> {
+  for (let attempt = 1; ; attempt += 1) {
+    const last = attempt >= READ_ATTEMPTS;
+    try {
+      const answer = await readOnce(url, init);
+      if (last || !isRetryableStatus(answer.status)) return answer;
+    } catch (error) {
+      if (last) {
+        network.unstable = true;
+        throw new ApiError(0, 'NETWORK_UNSTABLE', { reason: error instanceof Error ? error.name : 'unknown' });
+      }
+    }
+    await new Promise((done) => setTimeout(done, RETRY_AFTER_MS[attempt - 1] ?? 2_000));
+  }
+}
+
+/** Reads of the same address while one is still out share it, so a page polling a slow server does not pile them up. */
+const reading = new Map<string, Promise<Answer>>();
+
+function read(url: string, init: RequestInit, token: string | null): Promise<Answer> {
+  const key = `${token ?? ''} ${url}`;
+  let pending = reading.get(key);
+  if (!pending) {
+    pending = readWithRetry(url, init).finally(() => reading.delete(key));
+    reading.set(key, pending);
+  }
+  return pending;
+}
+
+async function sendOnce(url: string, init: RequestInit): Promise<Answer> {
+  const response = await fetch(url, init);
+  return { status: response.status, text: await response.text() };
+}
+
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const token = storedToken();
-  const response = await fetch(`/api${path}`, {
+  const url = `/api${path}`;
+  const init: RequestInit = {
     method,
     credentials: 'same-origin',
     headers: {
@@ -143,12 +214,20 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (response.status === 204) return undefined as T;
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (response.status === 401 && token) rememberToken(null);
-    throw new ApiError(response.status, data.code ?? 'UNKNOWN', data);
+  };
+  const answer = method === 'GET' ? await read(url, init, token) : await sendOnce(url, init);
+  network.unstable = false;
+  if (answer.status === 204) return undefined as T;
+  // Each caller gets its own copy, even of a shared read.
+  let data: Record<string, unknown> & { code?: string } = {};
+  try {
+    data = answer.text ? JSON.parse(answer.text) : {};
+  } catch {
+    // Not JSON: an error page from the front end.
+  }
+  if (answer.status < 200 || answer.status >= 300) {
+    if (answer.status === 401 && token) rememberToken(null);
+    throw new ApiError(answer.status, data.code ?? 'UNKNOWN', data);
   }
   return data as T;
 }
@@ -174,6 +253,17 @@ export async function apiFetch(method: string, path: string, init: { headers?: R
 
 /** Message for any error, in the chosen language. */
 export const errorText = (error: unknown) => t(error instanceof Error ? error.message : String(error));
+
+let checking: Promise<void> | null = null;
+
+/** Finds out once who is signed in; calls made while it is being found out share it. */
+export function ensureSession(): Promise<void> {
+  if (session.checked) return Promise.resolve();
+  checking ??= loadSession().finally(() => {
+    checking = null;
+  });
+  return checking;
+}
 
 export async function loadSession() {
   try {
