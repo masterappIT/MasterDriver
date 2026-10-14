@@ -4,12 +4,11 @@ import { useRoute, useRouter } from 'vue-router';
 import { formatPassengerPhone, isValidPassengerPhone, type CountryCode } from '@masterdriver/shared/phone';
 import { api, errorText } from '../api';
 import BrandMark from '../components/BrandMark.vue';
-import { copyText } from '../device';
-import { fromLocalInput, phonePlace, plateKind, toLocalInput } from '../format';
+import ContactLines from '../components/ContactLines.vue';
+import { fromLocalInput, plateKind, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
 import PhoneField from '../components/PhoneField.vue';
 import { t } from '../i18n';
-import { toast } from '../toast';
 
 interface Page {
   code: string;
@@ -19,9 +18,7 @@ interface Page {
   color: string | null;
   plateType?: 'SINGLE' | 'DUAL' | 'TRIPLE' | null;
   intro: string;
-  routes: string[];
   languages: string[];
-  regions: string[];
   /** The driver's numbers: the one they sign in with, then their 港澳 and 內地 numbers. */
   phones: string[];
   wechatId: string | null;
@@ -96,11 +93,6 @@ async function submit() {
 }
 
 /** The bottom button: bring the form up and put the cursor in its first field. */
-/** A WeChat ID is added by searching it, so the passenger needs it copied. */
-async function copyWechat(id: string) {
-  toast((await copyText(id)) ? '已複製微信號，到微信搜尋加好友' : '複製失敗，請長按微信號自行複製');
-}
-
 function goToForm() {
   formEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   formEl.value?.querySelector('input')?.focus({ preventScroll: true });
@@ -141,33 +133,14 @@ onBeforeUnmount(() => watcher?.disconnect());
         <p class="profile__car">{{ t(vehicleLine(page)) }}</p>
         <p v-if="page.completedTrips > 0" class="profile__trips">{{ t(`已在師傅幫完成 ${page.completedTrips} 張單`) }}</p>
         <p v-if="page.intro" class="profile__intro">{{ t(page.intro) }}</p>
-        <p v-if="page.regions.length || page.languages.length" class="profile__facts">
-          <span v-if="page.regions.length">{{ t(`服務${page.regions.join('、')}`) }}</span>
-          <span v-if="page.languages.length">{{ t(`會說${page.languages.join('、')}`) }}</span>
+        <p v-if="page.languages.length" class="profile__facts">
+          <span>{{ t(`會說${page.languages.join('、')}`) }}</span>
         </p>
-      </section>
-
-      <section v-if="page.routes.length" class="card">
-        <span class="section-label">{{ t('常走路線') }}</span>
-        <ul class="profile__routes">
-          <li v-for="item in page.routes" :key="item">{{ t(item) }}</li>
-        </ul>
       </section>
 
       <section v-if="page.phones.length || page.wechatId || page.whatsapp" class="card">
         <span class="section-label">{{ t('直接聯絡') }}</span>
-        <div v-for="phone in page.phones" :key="phone" class="profile__contact">
-          <span><small>{{ t(phonePlace(phone)) }}</small>{{ phone }}</span>
-          <a class="chip" :href="`tel:${phone.replace(/\s/g, '')}`">{{ t('致電') }}</a>
-        </div>
-        <div v-if="page.wechatId" class="profile__contact">
-          <span><small>{{ t('微信') }}</small>{{ page.wechatId }}</span>
-          <button class="chip" type="button" @click="copyWechat(page.wechatId)">{{ t('複製') }}</button>
-        </div>
-        <div v-if="page.whatsapp" class="profile__contact">
-          <span><small>WhatsApp</small>{{ page.whatsapp }}</span>
-          <a class="chip" :href="`https://wa.me/${page.whatsapp.replace(/[^0-9]/g, '')}`" target="_blank" rel="noopener">{{ t('打開') }}</a>
-        </div>
+        <ContactLines :phones="page.phones" :wechat-id="page.wechatId" :whatsapp="page.whatsapp" />
       </section>
 
       <form v-if="page.published" ref="formEl" class="card profile__form" @submit.prevent="submit">
@@ -281,8 +254,7 @@ onBeforeUnmount(() => watcher?.disconnect());
 }
 .profile__photo {
   flex: 0 0 86%;
-  /* The frame the driver placed the photo in when uploading it. */
-  aspect-ratio: 4 / 3;
+  height: 220px;
   object-fit: cover;
   border-radius: var(--radius-card);
   scroll-snap-align: start;
@@ -290,41 +262,6 @@ onBeforeUnmount(() => watcher?.disconnect());
 }
 .profile__photo:only-child {
   flex-basis: 100%;
-}
-.profile__routes {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.profile__routes li {
-  padding: var(--space-sm) 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.profile__routes li + li {
-  border-top: 1px solid var(--color-divider);
-}
-.profile__contact {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding: var(--space-sm) 0;
-}
-.profile__contact + .profile__contact {
-  border-top: 1px solid var(--color-divider);
-}
-.profile__contact > span {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.profile__contact small {
-  color: var(--color-text-secondary);
-  font-size: var(--font-caption);
-  font-weight: 400;
 }
 .profile__form-hint {
   margin: 0 0 var(--space-lg);

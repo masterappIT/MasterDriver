@@ -117,6 +117,7 @@ test('once the trip is over the passenger keeps the driver and car but not the d
   assert.equal(after.driver.name, during.driver.name);
   // The person who arranged the trip stays reachable.
   assert.ok(after.dispatcher && after.dispatcher.phones.length > 0);
+  assert.equal(after.tripGroup, null);
 });
 
 test('a trip its dispatcher drove gives the dispatcher contact once it is over', () => {

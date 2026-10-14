@@ -59,8 +59,10 @@ const stored = (value: string | null | undefined) => {
   const [code, number] = (value ?? '').split(' ');
   return { code: code ?? '', number: number ?? '' };
 };
-const hkMacau = stored(current?.hkMacauPhone ?? (signIn && signIn.countryCode !== '+86' ? `${signIn.countryCode} ${signIn.phone}` : null));
-const mainland = stored(current?.mainlandPhone ?? (signIn?.countryCode === '+86' ? `+86 ${signIn.phone}` : null));
+/** The side of the number the driver signs in with is that number and cannot be typed over. */
+const signInSide = signIn ? (signIn.countryCode === '+86' ? 'mainland' : 'hkMacau') : null;
+const hkMacau = stored(signIn && signInSide === 'hkMacau' ? `${signIn.countryCode} ${signIn.phone}` : current?.hkMacauPhone);
+const mainland = stored(signIn && signInSide === 'mainland' ? `+86 ${signIn.phone}` : current?.mainlandPhone);
 const phones = reactive({
   hkMacauCode: hkMacau.code === '+853' ? '+853' : '+852',
   hkMacau: hkMacau.number,
@@ -178,23 +180,23 @@ async function save() {
       <label class="field profile-form__half">{{ t('車色') }}<input v-model="form.color" class="input" maxlength="20" :placeholder="t('例如：白色')" /></label>
     </div>
     <label class="field">
-      {{ t('港澳號碼（選填）') }}
+      {{ t('港澳號碼') }}
       <span class="profile-form__plate">
-        <select v-model="phones.hkMacauCode" class="input profile-form__code" :aria-label="t('港澳號碼區號')">
+        <select v-model="phones.hkMacauCode" class="input profile-form__code" :aria-label="t('港澳號碼區號')" :disabled="signInSide === 'hkMacau'">
           <option value="+852">+852</option>
           <option value="+853">+853</option>
         </select>
-        <input v-model="phones.hkMacau" class="input" type="tel" inputmode="numeric" maxlength="11" :placeholder="t('8 位手機號碼')" />
+        <input v-model="phones.hkMacau" class="input" type="tel" inputmode="numeric" maxlength="11" :placeholder="t('8 位手機號碼')" :readonly="signInSide === 'hkMacau'" required />
       </span>
     </label>
     <label class="field">
-      {{ t('內地號碼（選填）') }}
+      {{ t('內地號碼') }}
       <span class="profile-form__plate">
         <span class="profile-form__fixed">+86</span>
-        <input v-model="phones.mainland" class="input" type="tel" inputmode="numeric" maxlength="13" :placeholder="t('11 位手機號碼')" />
+        <input v-model="phones.mainland" class="input" type="tel" inputmode="numeric" maxlength="13" :placeholder="t('11 位手機號碼')" :readonly="signInSide === 'mainland'" required />
       </span>
     </label>
-    <p class="hint">{{ t('過關後換號碼也找得到你。接了單後，出單者和乘客看得到這兩個號碼；號碼不會發驗證碼。') }}</p>
+    <p class="hint">{{ t('兩個號碼都要填，過關後換號碼也找得到你。其中一個固定是你的登入號碼，不能改；另一邊的號碼由你填。接了單後，出單者和乘客看得到這兩個號碼，公開的名片頁也會顯示；號碼不會發驗證碼。') }}</p>
 
     <label class="profile-form__switch">
       <span>

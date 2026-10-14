@@ -74,12 +74,14 @@ function pageContactOf(page: ContactPage) {
 }
 
 /**
- * Every number someone can be reached on: the one they sign in with first, then the 港澳 and
- * 內地 numbers from their details, each once.
+ * The numbers someone can be reached on, two at most, one for each side of the border: the one
+ * they sign in with, then the number from their details for the other side (內地 for someone
+ * who signs in with a 港澳 number, 港澳 otherwise).
  */
 export function phonesOf(person: { countryCode: string; phone: string; profile: { hkMacauPhone: string | null; mainlandPhone: string | null } | null }) {
   const signIn = `${person.countryCode} ${person.phone}`;
-  return [...new Set([signIn, person.profile?.hkMacauPhone, person.profile?.mainlandPhone].filter((phone): phone is string => Boolean(phone)))];
+  const otherSide = person.countryCode === '+86' ? person.profile?.hkMacauPhone : person.profile?.mainlandPhone;
+  return otherSide && otherSide !== signIn ? [signIn, otherSide] : [signIn];
 }
 
 function driverOf(order: Pick<OrderWithPeople, 'claimedBy'>) {
@@ -298,8 +300,9 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
     : single.passengerConfirmedAt;
   // With one leg left (the others cancelled) the page shows that leg like a single order.
   const lead = shown ? shown[0] : single;
+  const status = allLegs ? tripStatus(allLegs) : order.status;
   return {
-    status: allLegs ? tripStatus(allLegs) : order.status,
+    status,
     pickupAt: lead.pickupAt,
     origin: lead.origin,
     destination: shown ? shown[shown.length - 1].destination : single.destination,
@@ -324,8 +327,9 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
             ...pageContactOf(order.dispatcher.profilePage),
           },
     passengerConfirmedAt: confirmed,
-    // 行程群: the group the dispatcher made for this trip, when there is one.
-    tripGroup: tripGroupOf(order, `/api/c/${order.confirmCode}/trip-group/qr`, false, now),
+    // 行程群: the group the dispatcher made for this trip, when there is one. Not once the trip
+    // is over: the driver is in it, and the passenger no longer gets ways to reach the driver.
+    tripGroup: status === 'COMPLETED' ? null : tripGroupOf(order, `/api/c/${order.confirmCode}/trip-group/qr`, false, now),
     driver: lead.driver,
     legs: shown,
   };

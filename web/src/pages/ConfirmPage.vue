@@ -141,11 +141,14 @@ onBeforeUnmount(() => {
       <div v-if="trip.status === 'CANCELLED'" class="notice error">{{ t('這個行程已取消，如有疑問請聯絡為你安排的司機。') }}</div>
       <div v-if="trip.status === 'COMPLETED'" ref="ended" class="confirm-page__ended">
         <strong>{{ t('行程已完成') }}</strong>
+        <span class="confirm-page__ended-trip">{{ t(`${pickup(trip.pickupAt)}　${trip.origin} 至 ${trip.destination}`) }}</span>
         <span>{{ t('多謝乘搭。遺留物品或其他問題，請聯絡為你安排的人。') }}</span>
       </div>
       <p v-else-if="trip.passengerConfirmedAt" class="notice confirm-page__done">{{ t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`) }}</p>
 
-      <template v-if="trip.legs && trip.legs.length > 1">
+      <!-- A finished trip shows only that it is over and who arranged it. -->
+      <template v-if="trip.status === 'COMPLETED'" />
+      <template v-else-if="trip.legs && trip.legs.length > 1">
         <section class="card">
           <div class="confirm-page__time">{{ pickup(trip.pickupAt) }}</div>
           <RoutePoints :origin="trip.origin" :destination="trip.destination" />
@@ -217,7 +220,7 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- 收款: the dispatcher's own ways to be paid; the money goes straight to them. -->
-      <section v-if="trip.payment" class="card confirm-page__pay">
+      <section v-if="trip.payment && trip.status !== 'COMPLETED'" class="card confirm-page__pay">
         <span class="confirm-page__label">{{ trip.payment.payee ? t(`付款給 ${trip.payment.payee}`) : t('付款方式') }}</span>
         <strong v-if="trip.payment.amount" class="confirm-page__pay-amount">{{ money(trip.payment.amount) }}</strong>
         <p v-if="trip.payment.paid" class="confirm-page__paid">{{ t('已確認收到你的付款') }}</p>
@@ -235,7 +238,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <p class="confirm-page__note">
+      <p v-if="trip.status !== 'COMPLETED'" class="confirm-page__note">
         {{ trip.payment ? t('車費直接付給為你安排的司機，平台不經手。付款後請告訴對方。') : t('車費由你和司機直接約定和支付，平台不收款。') }}
       </p>
 
@@ -297,6 +300,9 @@ onBeforeUnmount(() => {
   padding: var(--space-lg);
   border-radius: var(--radius-card);
   background: var(--status-confirmed-tint);
+}
+.confirm-page__ended-trip {
+  font-weight: 600;
 }
 .confirm-page__ended strong {
   color: var(--status-confirmed);

@@ -4,6 +4,7 @@ import { api, apiFetch, errorText } from '../api';
 import { copyText } from '../device';
 import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
+import GroupText from '../components/GroupText.vue';
 import PhotoCrop from '../components/PhotoCrop.vue';
 import { t } from '../i18n';
 import { toast } from '../toast';
@@ -11,6 +12,8 @@ import { toast } from '../toast';
 interface MyPage {
   code: string;
   url: string;
+  /** A few lines about the driver and the link, to paste where the page is shared. */
+  shareText: string;
   published: boolean;
   /** 下架 by the platform after a complaint; it cannot be published until restored. */
   blocked: { at: string; reason: string } | null;
@@ -37,7 +40,7 @@ const busy = ref(false);
 const picker = ref<HTMLInputElement | null>(null);
 /** The photo just picked, while the driver places it in the frame. */
 const cropping = ref<File | null>(null);
-const form = reactive({ intro: '', routes: '', regions: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
+const form = reactive({ intro: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
 
 /**
  * The page opens on sharing: the content and the photos are folded into one line each, and open
@@ -50,8 +53,6 @@ const contentSummary = computed(() => {
   if (!shown) return '';
   const parts = [
     shown.intro ? '介紹' : '',
-    shown.routes.length ? `${shown.routes.length} 條路線` : '',
-    shown.regions.length ? `${shown.regions.length} 個地區` : '',
     shown.languages.length ? `${shown.languages.length} 種語言` : '',
     shown.wechatId ? '微信號' : '',
     shown.whatsapp ? 'WhatsApp' : '',
@@ -68,8 +69,6 @@ function toggleLanguage(language: string) {
 function fill(loaded: MyPage) {
   page.value = loaded;
   form.intro = loaded.intro;
-  form.routes = loaded.routes.join('\n');
-  form.regions = loaded.regions.join('、');
   form.languages = loaded.languages.filter((language) => COMMON_LANGUAGES.includes(language));
   form.otherLanguages = loaded.languages.filter((language) => !COMMON_LANGUAGES.includes(language)).join('、');
   form.wechatId = loaded.wechatId ?? '';
@@ -84,8 +83,9 @@ async function save(published?: boolean) {
     fill(
       await api<MyPage>('PUT', '/me/profile-page', {
         intro: form.intro,
-        routes: lines(form.routes),
-        regions: lines(form.regions),
+        // 常走路線 and 服務地區 are no longer asked for or shown; what was saved is left as it is.
+        routes: page.value?.routes ?? [],
+        regions: page.value?.regions ?? [],
         languages: [...form.languages, ...lines(form.otherLanguages)],
         wechatId: form.wechatId,
         whatsapp: form.whatsapp,
@@ -141,6 +141,12 @@ async function removePhoto(id: string) {
   }
 }
 
+/** The link with a few lines saying whose page it is, or the link alone. */
+async function copyShare() {
+  if (!page.value) return;
+  toast((await copyText(t(page.value.shareText))) ? '已複製名片文字和連結，到群裡或聊天長按貼上' : '複製失敗，請長按文字自行複製');
+}
+
 async function copyLink() {
   if (!page.value) return;
   toast((await copyText(page.value.url)) ? '已複製名片頁連結' : '複製失敗，請長按連結自行複製');
@@ -174,11 +180,12 @@ onMounted(async () => {
           {{ t(`平台收到投訴後下架了你的名片頁，原因：${page.blocked.reason}。修改內容後請聯絡客服恢復，恢復前不能公開。`) }}
           <RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink>
         </div>
-        <p class="my-page__url">{{ page.url }}</p>
+        <GroupText :text="page.shareText" :link-note="t('藍色是你的名片頁連結，會和文字一起複製')" />
         <div class="my-page__actions">
-          <button class="button" type="button" @click="copyLink">{{ t('複製連結') }}</button>
+          <button class="button" type="button" @click="copyShare">{{ t('複製名片') }}</button>
           <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
         </div>
+        <button class="my-page__link-only" type="button" @click="copyLink">{{ t('只複製連結') }}</button>
         <p v-if="!page.hasDriverProfile" class="my-page__notice">{{ t('公開之前，請先在「我的」填寫司機資料（姓名、車型）。') }}</p>
         <p class="hint my-page__from">{{ t('姓名、車型、電話取自司機資料，公開後名片頁會顯示你的港澳和內地號碼。完成單數由系統計算。') }}</p>
       </section>
@@ -195,14 +202,6 @@ onMounted(async () => {
         <label class="line-field">
           <span>{{ t('介紹自己') }}</span>
           <textarea v-model="form.intro" class="line-input" maxlength="500" :placeholder="t('例如：十年跨境接送經驗，準時、車廂整潔')" />
-        </label>
-        <label class="line-field">
-          <span>{{ t('常走路線，一行一條，最多 8 條') }}</span>
-          <textarea v-model="form.routes" class="line-input" :placeholder="t('香港機場 往返 深圳灣口岸\n香港市區 往返 澳門')" />
-        </label>
-        <label class="line-field">
-          <span>{{ t('服務地區') }}</span>
-          <input v-model="form.regions" class="line-input" :placeholder="t('香港、深圳、澳門、珠海')" />
         </label>
         <div class="line-field">
           <span>{{ t('會說的語言') }}</span>
@@ -299,15 +298,23 @@ onMounted(async () => {
   background: var(--status-confirmed-tint);
   color: var(--status-confirmed);
 }
-.my-page__url {
-  margin: 0 0 var(--space-md);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
 .my-page__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-sm);
+}
+.my-page__link-only {
+  display: block;
+  margin: var(--space-sm) auto 0;
+  min-height: 44px;
+  padding: 0 var(--space-lg);
+  border: none;
+  background: none;
+  color: var(--color-primary);
+  font: inherit;
+  font-size: var(--font-label);
+  font-weight: 600;
+  cursor: pointer;
 }
 .my-page__notice {
   margin: var(--space-md) 0 0;

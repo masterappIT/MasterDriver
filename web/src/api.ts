@@ -101,6 +101,8 @@ const ERROR_TEXT: Record<string, string> = {
   SUPPORT_GUEST_LIMIT: '暫時無法開始新的訪客對話，請登入後再聯絡客服',
   TRANSFER_PLACE_LOCKED: '上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段',
   VEHICLE_TYPE_REQUIRED: '請填車型，例如 7座',
+  HK_MACAU_PHONE_REQUIRED: '請填港澳號碼',
+  MAINLAND_PHONE_REQUIRED: '請填內地號碼',
 };
 
 const INVALID_PHONE = 'INVALID_PHONE';

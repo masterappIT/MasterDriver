@@ -20,7 +20,7 @@ function toMyPage() {
 
 /** Where drivers put the link, as short chips under step 2. */
 const PLACES = ['微信朋友圈', '傳給熟客', 'WhatsApp', '小紅書主頁簡介', '司機群'];
-const TIPS = ['放車輛照片，客人比較放心', '常走路線寫清楚', '收到預約盡快報價'];
+const TIPS = ['放車輛照片，客人比較放心', '介紹自己寫清楚', '收到預約盡快報價'];
 </script>
 
 <template>
@@ -57,7 +57,7 @@ const TIPS = ['放車輛照片，客人比較放心', '常走路線寫清楚', '
           <span class="guide__number">1</span>
           <div>
             <strong>{{ t('做好名片頁') }}</strong>
-            <p>{{ t('放照片、路線，按公開') }}</p>
+            <p>{{ t('放照片、介紹自己，按公開') }}</p>
           </div>
         </div>
       </li>

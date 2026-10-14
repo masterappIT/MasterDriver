@@ -9,6 +9,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { telemetry } from '../observability/telemetry';
 import { phonesOf } from '../orders/order-view';
 import { PrismaService } from '../prisma.service';
+import { profileShareText } from './profile-share-text';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import { sniffMedia } from '../support/media-file';
 
@@ -324,13 +325,17 @@ export class ProfilePagesService {
   }
 
   private async ownerView(page: PageRow) {
+    const view = await this.view(page);
+    const url = `${this.config.publicBaseUrl}/p/${page.code}`;
     return {
-      ...(await this.view(page)),
+      ...view,
       published: page.published,
       /** 下架 by the platform after a complaint, with the reason the owner is shown. */
       blocked: page.blockedAt ? { at: page.blockedAt.toISOString(), reason: page.blockedReason ?? '' } : null,
       hasDriverProfile: Boolean(page.user.profile),
-      url: `${this.config.publicBaseUrl}/p/${page.code}`,
+      url,
+      /** What the driver pastes to share the page: a few lines about them, then the link. */
+      shareText: profileShareText(view, url),
       photoLimit: PROFILE_PHOTO_MAX,
       photosAvailable: this.storage.available,
     };

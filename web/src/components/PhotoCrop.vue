@@ -4,14 +4,23 @@ import { t } from '../i18n';
 import BottomSheet from './BottomSheet.vue';
 
 /**
- * A picked photo, placed by the driver inside the 4:3 frame every vehicle photo is shown in:
- * dragged into position and made larger with two fingers or the slider. What is inside the
- * frame is what gets uploaded, so the passenger sees the same picture.
+ * A picked photo, placed by the driver inside a 4:3 frame: dragged into position and made
+ * larger with two fingers or the slider. What is inside the frame is what gets uploaded.
+ *
+ * Vehicle photos are shown in 4:3 frames (the passenger's page, the thumbnails) and in a flatter
+ * one (a single photo on the 名片頁: full width, 220px high), which cuts the top and bottom off
+ * a 4:3 picture. Two lines mark the band that flattest frame keeps, so a car placed between
+ * them shows whole everywhere.
  */
 const props = defineProps<{ file: File }>();
 const emit = defineEmits<{ done: [image: Blob]; cancel: []; failed: [] }>();
 
 const MAX_ZOOM = 4;
+/**
+ * The share of a 4:3 picture's height cut from the top and from the bottom by the flattest frame:
+ * 398 x 220 on the widest page (430px less its padding), which keeps 220 of 298.5 rows.
+ */
+const CUT = '13%';
 const OUTPUT_WIDTH = 1600;
 
 const frame = ref<HTMLDivElement | null>(null);
@@ -125,7 +134,7 @@ onBeforeUnmount(() => URL.revokeObjectURL(source));
 
 <template>
   <BottomSheet :title="t('調整照片')" @close="emit('cancel')">
-    <p class="hint photo-crop__hint">{{ t('拖動照片調整位置，用兩指或下面的滑桿放大。框內就是乘客看到的樣子。') }}</p>
+    <p class="hint photo-crop__hint">{{ t('拖動照片調整位置，用兩指或下面的滑桿放大。把整輛車放在兩條線之間，各個頁面都會看到整輛車。') }}</p>
     <div
       ref="frame"
       class="photo-crop__frame"
@@ -135,6 +144,8 @@ onBeforeUnmount(() => URL.revokeObjectURL(source));
       @pointercancel="up"
     >
       <img ref="picture" :src="source" :style="placed" :alt="t('車輛照片')" draggable="false" @load="loaded" @error="emit('failed')" />
+      <span class="photo-crop__cut photo-crop__cut--top" :style="{ height: CUT }" />
+      <span class="photo-crop__cut photo-crop__cut--bottom" :style="{ height: CUT }" />
     </div>
     <label class="photo-crop__zoom">
       <span>{{ t('放大') }}</span>
@@ -172,6 +183,22 @@ onBeforeUnmount(() => URL.revokeObjectURL(source));
   transform-origin: 0 0;
   pointer-events: none;
   -webkit-touch-callout: none;
+}
+/* Outside the lines: kept in the 4:3 frames, cut off in the flattest one. */
+.photo-crop__cut {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: rgba(20, 32, 51, 0.35);
+  pointer-events: none;
+}
+.photo-crop__cut--top {
+  top: 0;
+  border-bottom: 1.5px dashed var(--color-on-primary);
+}
+.photo-crop__cut--bottom {
+  bottom: 0;
+  border-top: 1.5px dashed var(--color-on-primary);
 }
 .photo-crop__zoom {
   display: flex;

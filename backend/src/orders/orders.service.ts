@@ -407,6 +407,15 @@ export class OrdersService {
       const revealAt = contactRevealAt(order);
       if (order.status === 'COMPLETED' || (revealAt && now < revealAt)) return null;
     }
+    // The passenger's page stops offering the group once the whole trip is over.
+    if ('confirmCode' in by) {
+      const trip = order.journeyId ?? order.id;
+      const legs = await this.prisma.order.findMany({
+        where: { OR: [{ id: trip }, { journeyId: trip }], status: { not: 'CANCELLED' } },
+        select: { status: true },
+      });
+      if (legs.length > 0 && legs.every((leg) => leg.status === 'COMPLETED')) return null;
+    }
     const group = await this.prisma.tripGroup.findUnique({ where: { orderId: order.journeyId ?? order.id } });
     if (!group?.qrImage || !group.qrMime || (group.expiresAt && group.expiresAt <= now)) return null;
     return { mime: group.qrMime, bytes: Buffer.from(group.qrImage) };
