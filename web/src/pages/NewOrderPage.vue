@@ -279,6 +279,7 @@ async function loadBooking() {
       destination: string;
       passengers: number;
       luggage: number;
+      transfer: boolean;
       passengerName: string | null;
       passengerContact: string;
       notes: string | null;
@@ -290,6 +291,8 @@ async function loadBooking() {
       destination: booking.destination,
       passengers: String(booking.passengers),
       luggage: String(booking.luggage),
+      // The passenger asked for 接駁: the form opens on it, the 接駁位置 left for the driver.
+      transfer: booking.transfer,
       passengerName: booking.passengerName ?? '',
       notes: booking.notes ?? '',
       ...(booking.quote
@@ -362,7 +365,10 @@ onMounted(async () => {
     </PageBack>
     <div v-if="error" class="notice error">{{ error }}</div>
 
-    <div v-if="fromBooking" class="notice">
+    <div v-if="fromBooking && form.transfer" class="notice">
+      {{ t('已帶入名片頁預約的資料，乘客要接駁（中途換車）。填接駁位置和每段的出單價後出單。') }}
+    </div>
+    <div v-else-if="fromBooking" class="notice">
       {{ form.passengerPrice ? t('已帶入名片頁預約的資料和你的報價（作為乘客價）。填出單價後出單，貼到群裡派給其他司機。') : t('已帶入名片頁預約的資料。填出單價後出單，貼到群裡派給其他司機。') }}
     </div>
 

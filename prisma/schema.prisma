@@ -1006,6 +1006,8 @@ model BookingRequest {
   destination      String
   passengers       Int
   luggage          Int           @default(0)
+  /// 接駁 (中途換車) rather than 直達, as the passenger asked; the driver sets the 接駁位置 when making the order.
+  transfer         Boolean       @default(false)
   passengerName    String?
   /// A phone with its country code since 2026-10-14; older requests may hold any text.
   passengerContact String

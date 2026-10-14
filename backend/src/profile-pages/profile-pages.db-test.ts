@@ -182,6 +182,36 @@ test("這單我自己做 from a booking: one order, the driver's own, and the pa
   assert.ok(page.driver, 'the passenger sees the driver at once');
 });
 
+test('a 接駁 booking: both sides see it, and the driver makes a 接駁 order from it', async () => {
+  const { userId, code } = await publishedPage();
+  const direct = await ctx.profilePages.createBooking(code, request(), '4.4.4.4');
+  const sent = await ctx.profilePages.createBooking(code, { ...request(), destination: '廣州', transfer: true }, '4.4.4.4');
+  assert.equal((await ctx.profilePages.passengerBooking(direct.code)).transfer, false, '直達 unless the passenger asks');
+  assert.equal((await ctx.profilePages.passengerBooking(sent.code)).transfer, true);
+  const listed = (await ctx.profilePages.bookings(userId)).find((booking) => booking.code === sent.code)!;
+  assert.equal(listed.transfer, true);
+  await ctx.profilePages.quote(userId, listed.id, { amount: 1500, currency: 'HKD' });
+  await ctx.profilePages.passengerAccept(sent.code);
+
+  const order = await ctx.orders.create(userId, {
+    ...sampleOrder,
+    pickupAt: listed.pickupAt,
+    origin: listed.origin,
+    destination: listed.destination,
+    passengerContact: listed.passengerContact,
+    passengerPrice: { amount: 1500, currency: 'HKD' },
+    showPassengerPrice: true,
+    transfer: { place: '深圳灣口岸', pickupAt: listed.pickupAt, driverPrice: { amount: 600, currency: 'CNY' }, requiredPlates: [], selfDriveLeg: 1 },
+    bookingId: listed.id,
+  });
+  assert.equal(order.journey?.legCount, 2);
+  assert.equal((await ctx.profilePages.booking(userId, listed.id)).orderId, order.id);
+  const after = await ctx.profilePages.passengerBooking(sent.code);
+  assert.equal(after.status, 'ORDERED');
+  assert.ok(after.confirmUrl && order.links.passengerConfirm.endsWith(after.confirmUrl));
+  assert.equal((await ctx.orders.getForPassenger(after.confirmUrl.split('/c/')[1])).price?.amount, 1500, 'one price for the whole trip');
+});
+
 test("a booking is its own page owner's: nobody else reads, answers or makes an order from it", async () => {
   const { userId, code } = await publishedPage();
   const stranger = await createDriver(ctx);

@@ -57,6 +57,7 @@ onBeforeUnmount(() => {
       <div class="bookings__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
       <div class="bookings__meta">
         {{ t(`${booking.passengerName ?? '乘客'}｜${loadLine(booking.passengers, booking.luggage)}`) }}
+        <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span>
         <span>{{ t(`${shortTime(booking.createdAt)} 送出`) }}</span>
       </div>
     </RouterLink>

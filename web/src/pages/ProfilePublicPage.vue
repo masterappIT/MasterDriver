@@ -48,6 +48,8 @@ const form = reactive({
   destination: '',
   passengers: '1',
   luggage: '0',
+  /** 接駁 (中途換車) rather than 直達; the driver decides where the cars change. */
+  transfer: false,
   passengerName: '',
   // A phone is required so the driver can always reach the passenger and make the trip an order.
   passengerCountry: '+852' as CountryCode,
@@ -78,6 +80,7 @@ async function submit() {
       destination: form.destination,
       passengers: Number(form.passengers),
       luggage: Number(form.luggage),
+      transfer: form.transfer,
       passengerName: form.passengerName,
       passengerContact: formatPassengerPhone(form.passengerCountry, form.passengerPhone),
       passengerWechat: form.passengerWechat,
@@ -151,6 +154,11 @@ onBeforeUnmount(() => watcher?.disconnect());
           <span>{{ t('日期時間（香港時間）') }}</span>
           <input v-model="form.pickupAt" class="line-input" type="datetime-local" required />
         </label>
+        <div class="segment segment--block profile__mode" role="group" :aria-label="t('直達或接駁')">
+          <button type="button" :aria-pressed="!form.transfer" @click="form.transfer = false">{{ t('直達') }}</button>
+          <button type="button" :aria-pressed="form.transfer" @click="form.transfer = true">{{ t('接駁（中途換車）') }}</button>
+        </div>
+        <p v-if="form.transfer" class="hint profile__mode-hint">{{ t('中途換一次車，由兩位司機接送，你只付一個價錢。在哪裡換車由司機安排。') }}</p>
         <ol class="route-inputs profile__route">
           <li class="route-inputs__stop route-inputs__stop--origin">
             <input v-model="form.origin" class="line-input" maxlength="120" :aria-label="t('出發地')" :placeholder="t('從哪裡出發，例如：香港國際機場')" required />
@@ -265,6 +273,12 @@ onBeforeUnmount(() => watcher?.disconnect());
 }
 .profile__form-hint {
   margin: 0 0 var(--space-lg);
+}
+.profile__mode {
+  margin-bottom: var(--space-lg);
+}
+.profile__mode-hint {
+  margin: calc(var(--space-sm) * -1) 0 var(--space-lg);
 }
 .profile__route {
   margin-bottom: var(--space-lg);

@@ -98,7 +98,7 @@ onBeforeUnmount(() => {
         <span class="booking__status" :class="`booking__status--${passengerTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].passenger) }}</span>
         <strong class="booking__time">{{ pickup(booking.pickupAt) }}</strong>
         <div class="booking__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
-        <p class="booking__load">{{ t(loadLine(booking.passengers, booking.luggage)) }}</p>
+        <p class="booking__load">{{ t(loadLine(booking.passengers, booking.luggage)) }} <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span></p>
         <p v-if="booking.notes" class="booking__note">{{ t(booking.notes) }}</p>
         <p v-if="booking.driverName" class="hint booking__driver">{{ t(`預約 ${booking.driverName} 的車`) }}</p>
       </section>

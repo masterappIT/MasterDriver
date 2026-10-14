@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
         <span class="booking-detail__status" :class="`booking-detail__status--${bookingTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].driver) }}</span>
         <strong class="booking-detail__time">{{ pickup(booking.pickupAt) }}</strong>
         <div class="booking-detail__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
-        <p class="booking-detail__load">{{ t(loadLine(booking.passengers, booking.luggage)) }}</p>
+        <p class="booking-detail__load">{{ t(loadLine(booking.passengers, booking.luggage)) }} <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span></p>
         <p v-if="booking.notes" class="booking-detail__note">{{ t(booking.notes) }}</p>
         <p class="hint">
           {{ t(`${shortTime(booking.createdAt)} 從名片頁送出`) }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>
@@ -223,11 +223,20 @@ onBeforeUnmount(() => {
           <label for="booking-added-phone" class="section-label">{{ t('乘客沒有留電話，成單前請補上') }}</label>
           <PhoneField id="booking-added-phone" v-model:country="added.country" v-model:phone="added.phone" />
         </div>
-        <button class="button block large booking-detail__order" type="button" :disabled="busy" @click="driveMyself">{{ t('這單我自己做') }}</button>
-        <button class="button secondary block booking-detail__order" type="button" :disabled="busy" @click="dispatchToOthers">{{ t('派給其他司機') }}</button>
-        <p class="hint booking-detail__tip">
-          {{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}
-        </p>
+        <!-- 接駁: where the cars change and the other leg's price are the driver's to set, so it always goes through the form. -->
+        <template v-if="booking.transfer">
+          <button class="button block large booking-detail__order" type="button" :disabled="busy" @click="dispatchToOthers">{{ t('接駁成單') }}</button>
+          <p class="hint booking-detail__tip">
+            {{ t('乘客要接駁（中途換車）。帶入出單表格，填接駁位置和每段的出單價；你可以自己做其中一段，另一段貼到群裡。') }}
+          </p>
+        </template>
+        <template v-else>
+          <button class="button block large booking-detail__order" type="button" :disabled="busy" @click="driveMyself">{{ t('這單我自己做') }}</button>
+          <button class="button secondary block booking-detail__order" type="button" :disabled="busy" @click="dispatchToOthers">{{ t('派給其他司機') }}</button>
+          <p class="hint booking-detail__tip">
+            {{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}
+          </p>
+        </template>
         <button class="booking-detail__decline" type="button" :disabled="busy" @click="decline">{{ t('婉拒這個預約') }}</button>
       </template>
       <RouterLink v-else-if="booking.orderId" class="button block" :to="`/app/orders/${booking.orderId}`">{{ t('查看這張單') }}</RouterLink>

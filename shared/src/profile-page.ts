@@ -36,6 +36,8 @@ export const bookingCreateSchema = z.object({
   destination: line(120),
   passengers: z.number().int().min(1).max(60),
   luggage: z.number().int().min(0).max(60).default(0),
+  /** 接駁 (中途換車) rather than 直達; the passenger never names the 接駁位置, the driver does. */
+  transfer: z.boolean().default(false),
   /** How to address the passenger; asked for since 2026-10-14, so older requests may have none. */
   passengerName: line(40),
   /** A phone with its country code, as on an order (2026-10-14; older requests may hold any text). */
