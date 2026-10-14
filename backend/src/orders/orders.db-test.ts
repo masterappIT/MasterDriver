@@ -437,6 +437,8 @@ test('the 接單池 and the dispatcher\'s list show a 接駁 order once, while e
 
   assert.deepEqual(await pooled(), [order.code]);
   assert.deepEqual(await pooled('廣州'), [order.code], 'found by the second leg\'s destination');
+  const own = await ctx.orders.pool(dispatcher, {}, before);
+  assert.deepEqual(own.map((entry) => [entry.code, entry.mine, entry.id]), [[order.code, true, order.id]], 'one entry, the dispatcher\'s own');
   await ctx.orders.claim(first.code, b);
   assert.deepEqual(await pooled(), [order.code], 'the second leg is still open');
   await ctx.orders.claim(second.code, c);
@@ -640,8 +642,13 @@ test('接單池 lists only orders their dispatcher ticked, to drivers with detai
     assert.equal(hidden in pool[0], false, hidden);
   }
 
-  // Their own orders are in 我的單, not in the pool they claim from.
-  assert.deepEqual(await ctx.orders.pool(dispatcher, {}, BEFORE_PICKUP), []);
+  assert.equal(pool[0].mine, false);
+  // Their own order is listed for them too, as others see it, marked theirs and opening their own page.
+  const own = await ctx.orders.pool(dispatcher, {}, BEFORE_PICKUP);
+  assert.deepEqual(own.map((order) => [order.code, order.mine, order.id]), [[listed.code, true, listed.id]]);
+  for (const hidden of ['passengerName', 'passengerContact', 'passengerPrice', 'links']) {
+    assert.equal(hidden in own[0], false, hidden);
+  }
 
   const newcomer = await ctx.prisma.user.create({ data: { countryCode: '+86', phone: '13800000001' } });
   await rejectsWith(ctx.orders.pool(newcomer.id, {}, BEFORE_PICKUP), 'PROFILE_REQUIRED');

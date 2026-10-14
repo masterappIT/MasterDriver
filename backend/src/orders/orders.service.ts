@@ -188,6 +188,8 @@ export class OrdersService {
    * 接單池: orders their dispatchers chose to list, still open and not yet due.
    * Only for signed-in drivers who have filled in their details, the same as
    * claiming. Each order is shown as on its claim page, so no passenger details.
+   * The dispatcher's own orders are listed too, as everyone sees them, marked
+   * `mine` with the id that opens their own page (they cannot claim them).
    */
   async pool(userId: string, query: PoolQuery, now = new Date()) {
     await this.requireProfile(this.prisma, userId);
@@ -206,7 +208,6 @@ export class OrdersService {
       where: {
         inPool: true,
         scope: 'PUBLIC',
-        dispatcherId: { not: userId },
         // A 接駁 order is one entry, by its first leg, while either leg is still open and due.
         OR: [
           { journeyId: null, ...due, ...(query.q ? place(query.q) : {}) },
@@ -218,7 +219,10 @@ export class OrdersService {
       take: LIST_LIMIT,
       include: orderInclude,
     });
-    return orders.map((order) => toOrderView(order, 'other', this.config.publicBaseUrl, now, userId));
+    return orders.map((order) => ({
+      ...toOrderView(order, 'other', this.config.publicBaseUrl, now, userId),
+      ...(order.dispatcherId === userId ? { mine: true, id: order.id } : { mine: false }),
+    }));
   }
 
   /** An order the user dispatched or claimed, with the texts to share. */

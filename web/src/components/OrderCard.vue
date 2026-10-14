@@ -27,10 +27,14 @@ export interface OrderSummary {
   settledAt?: string | null;
   /** 接駁: the order this leg belongs to. */
   journey?: Journey | null;
+  /** 接單池: the viewer put this order out; it opens their own page and cannot be claimed. */
+  mine?: boolean;
 }
 
-/** `pool`: an order in the 接單池, which opens its claim page instead of the order's own page. */
+/** `pool`: an order in the 接單池, which opens its claim page instead of the order's own page (unless it is the viewer's own). */
 const props = defineProps<{ order: OrderSummary; role: 'dispatched' | 'claimed' | 'pool' }>();
+/** 接單池: one of the viewer's own orders, seen as other drivers see it. */
+const mineInPool = computed(() => props.role === 'pool' && Boolean(props.order.mine));
 
 /** "4人｜3件行李｜7座", the same line as in the group text. */
 const load = computed(() => loadLine(props.order.passengers, props.order.luggage, props.order.vehicleType));
@@ -44,14 +48,14 @@ const status = computed(() => whole.value?.status ?? props.order.status);
 function legState(leg: Journey['legs'][number]) {
   if (leg.status === 'CANCELLED') return '已取消';
   if (leg.status === 'COMPLETED') return '已完成';
-  if (leg.selfDrive) return props.role === 'dispatched' ? '你自己開' : '出單者自己開';
-  if (leg.status === 'OPEN') return props.role === 'pool' ? '可搶' : '等司機搶';
+  if (leg.selfDrive) return props.role === 'dispatched' || mineInPool.value ? '你自己開' : '出單者自己開';
+  if (leg.status === 'OPEN') return props.role === 'pool' && !mineInPool.value ? '可搶' : '等司機搶';
   return leg.driver?.name ? `${leg.driver.name} 接了` : '已有司機';
 }
 </script>
 
 <template>
-  <RouterLink :to="role === 'pool' ? `/o/${order.code}` : `/app/orders/${order.id}`" class="card order-card">
+  <RouterLink :to="role === 'pool' && !mineInPool ? `/o/${order.code}` : `/app/orders/${order.id}`" class="card order-card">
     <div class="order-card__top">
       <strong class="order-card__time">{{ pickup(order.pickupAt) }}</strong>
       <span v-if="role === 'pool' && order.driverPrice && !whole" class="order-card__price">{{ money(order.driverPrice) }}</span>
@@ -61,6 +65,7 @@ function legState(leg: Journey['legs'][number]) {
     <div class="order-card__meta">
       <span>{{ t(load) }}</span>
       <span v-if="!whole && order.requiredPlates?.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
+      <span v-if="mineInPool" class="leg-tag">{{ t('你出的') }}</span>
       <span v-if="whole" class="leg-tag">{{ t('接駁（中途換車）') }}</span>
       <span v-else-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
       <span v-if="role === 'dispatched' && status === 'COMPLETED' && !order.paidAt" class="gold-tag">{{ t('未收款') }}</span>
@@ -79,6 +84,7 @@ function legState(leg: Journey['legs'][number]) {
         {{ order.selfDrive && order.status === 'ASSIGNED' ? t('你自己做') : order.driver?.name ? t(`${order.driver.name} 接了`) : t('等司機搶') }}
         <span v-if="order.driverPrice" class="order-card__foot-price">{{ money(order.driverPrice) }}</span>
       </template>
+      <template v-else-if="mineInPool">{{ t('你出的單，其他司機看到的就是這樣') }}</template>
       <template v-else>
         {{ order.dispatcherName ? t(`${order.dispatcherName} 出的單`) : t('出單者沒有留名') }}
         <span v-if="role === 'claimed' && order.driverPrice" class="order-card__foot-price">{{ money(order.driverPrice) }}</span>

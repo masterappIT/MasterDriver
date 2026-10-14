@@ -88,7 +88,8 @@ onMounted(async () => {
   void refreshUnread();
   if (session.profile) {
     void api<OrderSummary[]>('GET', '/orders/pool')
-      .then((orders) => (pool.value = orders))
+      // Only what this driver can claim: their own orders in the pool are not news to them.
+      .then((orders) => (pool.value = orders.filter((order) => !order.mine)))
       .catch(() => (pool.value = null));
   }
   try {
