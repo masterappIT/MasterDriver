@@ -152,12 +152,12 @@ async function logout() {
       <span v-if="!route.meta.ownHeading" class="eyebrow admin-shell__eyebrow">{{ section }}</span>
       <!-- 客服 keeps its inbox while switching conversations; a list keeps itself while its filters change in the address. -->
       <RouterView :key="route.path.startsWith('/support') ? '/support' : route.path" />
-      <footer class="admin-shell__copyright">{{ COPYRIGHT }}</footer>
     </main>
   </div>
   <template v-else>
     <RouterView />
-    <footer class="admin-shell__copyright admin-shell__copyright--public">{{ COPYRIGHT }}</footer>
+    <!-- Only the sign-in page carries the copyright line; the pages behind it are staff tools. -->
+    <footer class="admin-shell__copyright">{{ COPYRIGHT }}</footer>
   </template>
   <FeedbackLayer />
 </template>
@@ -319,25 +319,15 @@ async function logout() {
   padding: 36px 40px 48px;
 }
 
-.admin-shell__copyright {
-  margin-top: 40px;
-  padding-top: var(--space-lg);
-  border-top: 1px solid var(--color-divider);
-  color: var(--color-text-muted);
-  font-size: var(--font-caption);
-  text-align: center;
-}
-
 /* On the sign-in page, over the dark panel at the bottom of the window. */
-.admin-shell__copyright--public {
+.admin-shell__copyright {
   position: fixed;
   right: 0;
   bottom: 16px;
   left: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
   color: rgba(255, 255, 255, 0.55);
+  font-size: var(--font-caption);
+  text-align: center;
 }
 
 .admin-shell__eyebrow {

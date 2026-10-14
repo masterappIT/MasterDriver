@@ -45,8 +45,8 @@ async function openBanner() {
 <template>
   <div v-if="announcement && route.meta.app" class="announcement">{{ t(announcement) }}</div>
   <RouterView :key="route.fullPath" />
-  <!-- The home page ends with its own copyright line. -->
-  <footer v-if="route.path !== '/'" class="copyright" :class="{ 'copyright--app': route.meta.app && route.path !== '/app/new' }">{{ t(COPYRIGHT) }}</footer>
+  <!-- Only where the route asks for it (see router.ts); the home page ends with its own line. -->
+  <footer v-if="route.meta.copyright" class="copyright" :class="{ 'copyright--app': route.meta.app }">{{ t(COPYRIGHT) }}</footer>
   <TabBar v-if="route.meta.app && route.path !== '/app/new'" />
   <div v-if="banner" class="notice-banner" role="status">
     <button type="button" class="notice-banner__body" @click="openBanner">
@@ -60,7 +60,7 @@ async function openBanner() {
 </template>
 
 <style scoped>
-/* Every page ends with it. Pages of the tool keep room at the bottom for the tab bar; the line
+/* Pages of the tool (only 我的 has the line) keep room at the bottom for the tab bar; the line
    moves up into that room so it sits under the content, not behind the bar. */
 .copyright {
   max-width: var(--max-width);

@@ -5,20 +5,22 @@ declare module 'vue-router' {
   interface RouteMeta {
     /** Pages inside the signed-in driver app, with the tab bar. */
     app?: boolean;
+    /** Pages that end with the copyright line: those seen from outside, the ways in, and 我的. */
+    copyright?: boolean;
   }
 }
 
 const routes: RouteRecordRaw[] = [
   // The platform's public home page; signed-in users go straight to the driver app (see the guard below).
   { path: '/', component: () => import('./pages/LandingPage.vue') },
-  { path: '/legal/:kind(terms|privacy)', component: () => import('./pages/LegalPage.vue') },
+  { path: '/legal/:kind(terms|privacy)', component: () => import('./pages/LegalPage.vue'), meta: { copyright: true } },
   // Opened from group links: kept as their own small chunks so they load first.
-  { path: '/o/:code', component: () => import('./pages/ClaimPage.vue') },
-  { path: '/c/:confirmCode', component: () => import('./pages/ConfirmPage.vue') },
+  { path: '/o/:code', component: () => import('./pages/ClaimPage.vue'), meta: { copyright: true } },
+  { path: '/c/:confirmCode', component: () => import('./pages/ConfirmPage.vue'), meta: { copyright: true } },
   // 名片頁 and the passenger's booking link: public, no account.
-  { path: '/p/:code', component: () => import('./pages/ProfilePublicPage.vue') },
-  { path: '/b/:code', component: () => import('./pages/BookingStatusPage.vue') },
-  { path: '/login', component: () => import('./pages/LoginPage.vue') },
+  { path: '/p/:code', component: () => import('./pages/ProfilePublicPage.vue'), meta: { copyright: true } },
+  { path: '/b/:code', component: () => import('./pages/BookingStatusPage.vue'), meta: { copyright: true } },
+  { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { copyright: true } },
   // 客服: for signed-in users and for guests, so it sits outside the signed-in app.
   { path: '/support', component: () => import('./pages/SupportPage.vue') },
   { path: '/app', component: () => import('./pages/HomePage.vue'), meta: { app: true } },
@@ -27,7 +29,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/orders', component: () => import('./pages/OrdersPage.vue'), meta: { app: true } },
   { path: '/app/orders/:id/share', component: () => import('./pages/SharePage.vue'), meta: { app: true } },
   { path: '/app/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { app: true } },
-  { path: '/app/me', component: () => import('./pages/MePage.vue'), meta: { app: true } },
+  { path: '/app/me', component: () => import('./pages/MePage.vue'), meta: { app: true, copyright: true } },
   { path: '/app/notifications', component: () => import('./pages/NotificationsPage.vue'), meta: { app: true } },
   { path: '/app/notification-settings', component: () => import('./pages/NotificationSettingsPage.vue'), meta: { app: true } },
   { path: '/app/profile', component: () => import('./pages/ProfileEditPage.vue'), meta: { app: true } },
