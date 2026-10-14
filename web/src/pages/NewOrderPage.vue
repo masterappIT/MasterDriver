@@ -8,7 +8,6 @@ import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
 import { fromLocalInput, pickup, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
-import { PLATE_NAMES, type PlateRegion } from '../journey';
 import AppIcon from '../components/AppIcon.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import { pickedPassenger, type BookPassenger } from '../passenger-pick';
@@ -83,15 +82,13 @@ const form = reactive({
   contactRevealMinutes: 60 as number | null,
   /**
    * 直達 (false) or 接駁 (true): one order from 出發地 to 目的地 in two legs, each its own driver's,
-   * changing cars at the 接駁位置. The time, driver price and plates above are then the first leg's.
+   * changing cars at the 接駁位置. The time and driver price above are then the first leg's.
    */
   transfer: false,
-  requiredPlates: [] as PlateRegion[],
   transferPlace: '',
   secondPickupAt: toLocalInput(new Date(inAnHour.getTime() + 60 * 60 * 1000)),
   secondCurrency: 'CNY',
   secondDriverPrice: '',
-  secondPlates: [] as PlateRegion[],
   /** 這單我自己做 (直達); with 接駁 the dispatcher may drive one leg, never both. */
   selfDrive: false,
   selfDriveLeg: null as 1 | 2 | null,
@@ -205,12 +202,6 @@ function copyLast() {
   passengerCurrencyChosen.value = Boolean(last.passengerPrice);
 }
 
-function togglePlate(plates: PlateRegion[], region: PlateRegion) {
-  const at = plates.indexOf(region);
-  if (at >= 0) plates.splice(at, 1);
-  else plates.push(region);
-}
-
 function fillPlace(place: string) {
   if (!form.origin) form.origin = place;
   else if (!form.destination) form.destination = place;
@@ -254,11 +245,9 @@ async function submit() {
             place: form.transferPlace,
             pickupAt: fromLocalInput(form.secondPickupAt),
             driverPrice: price(form.secondDriverPrice, form.secondCurrency),
-            requiredPlates: form.secondPlates,
             selfDriveLeg: form.selfDriveLeg,
           }
         : undefined,
-      requiredPlates: form.transfer ? form.requiredPlates : [],
       selfDrive: !form.transfer && form.selfDrive,
       inPool: !(!form.transfer && form.selfDrive) && form.inPool,
       showPaymentMethods: form.showPaymentMethods,
@@ -457,26 +446,6 @@ onMounted(async () => {
           <span>{{ t('車型') }}</span>
           <input v-model.trim="form.vehicleType" class="line-input" maxlength="30" :placeholder="t('7座')" required />
         </label>
-      </div>
-      <div v-if="form.transfer" class="line-field">
-        <span>{{ t('每段要甚麼車牌（選填）') }}</span>
-        <div v-for="(plates, index) in [form.requiredPlates, form.secondPlates]" :key="index" class="new-order__leg-plates">
-          <span class="hint">{{ t(`第 ${index + 1} 段`) }}</span>
-          <div class="chips new-order__plates">
-            <button
-              v-for="(name, region) in PLATE_NAMES"
-              :key="region"
-              class="chip"
-              :class="{ 'chip--on': plates.includes(region) }"
-              type="button"
-              :aria-pressed="plates.includes(region)"
-              @click="togglePlate(plates, region)"
-            >
-              {{ t(name) }}
-            </button>
-          </div>
-        </div>
-        <span class="hint">{{ t('只在群文字和搶單頁標明，平台不審核車牌，任何司機都可以搶。') }}</span>
       </div>
       <label class="line-field new-order__last">
         <span>{{ t('備註') }}</span>
@@ -684,9 +653,6 @@ onMounted(async () => {
 .new-order__second-time {
   margin-top: var(--space-md);
 }
-.new-order__leg-plates + .new-order__leg-plates {
-  margin-top: var(--space-xs);
-}
 .new-order__leg-label {
   flex: none;
   align-self: center;
@@ -731,9 +697,6 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 1fr 1fr 1.4fr;
   gap: var(--space-md);
-}
-.new-order__plates {
-  margin: var(--space-sm) 0 var(--space-xs);
 }
 .new-order__last {
   margin-bottom: 0;

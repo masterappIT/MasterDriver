@@ -49,7 +49,7 @@ npm run dev:web
 - 介面文字只寫繁體；簡體由沿用 Master Travel 的 OpenCC 對照表轉出，只有選用簡體時才下載。+86 帳號預設簡體，可在「我的」切換。
 - 只用系統字型、不依賴 Google 服務；在微信內不顯示「分享到 WhatsApp」（微信會攔截跳轉），改用複製。
 - 搶單頁在單仍是「待搶」時每 5 秒更新一次狀態，讓各群打開同一條連結都能看到「已被接走」。
-- 接駁單（2026-10-15 起）：出單頁選「接駁」時送 `transfer: { place, pickupAt, driverPrice, requiredPlates, selfDriveLeg }`，同一筆交易建立兩段：第 1 段起點 → 接駁位置（頂層的時間、出單價、車牌、乘客價都在這段），第 2 段接駁位置 → 終點。兩段的 `journeyId` 指向第 1 段，`legIndex` 為 1、2。群文字只有一條，連結是第 1 段的 `code`；`GET /api/o/:code` 的 `journey.legs` 帶各段的 `code`、狀態、出單價、車牌、`mine`（目前使用者接的那段）與 `selfDrive`，前端各段的「搶第 N 段」用該段的 `code` 搶。搶單與取消都先鎖第 1 段的資料列：同一人不能接兩段（`ONE_LEG_PER_DRIVER`），取消任一段即取消整張單、服務費退一次。乘客只用第 1 段的確認連結，回應有 `transfer: true`，`legs` 只含段號、狀態與司機，不含地點。第 2 段不能改乘客價（`TRIP_PRICE_ON_FIRST_LEG`）。
+- 接駁單（2026-10-15 起）：出單頁選「接駁」時送 `transfer: { place, pickupAt, driverPrice, selfDriveLeg }`（API 仍接受 `requiredPlates`，出單頁不再送），同一筆交易建立兩段：第 1 段起點 → 接駁位置（頂層的時間、出單價、車牌、乘客價都在這段），第 2 段接駁位置 → 終點。兩段的 `journeyId` 指向第 1 段，`legIndex` 為 1、2。群文字只有一條，連結是第 1 段的 `code`；`GET /api/o/:code` 的 `journey.legs` 帶各段的 `code`、狀態、出單價、車牌、`mine`（目前使用者接的那段）與 `selfDrive`，前端各段的「搶第 N 段」用該段的 `code` 搶。搶單與取消都先鎖第 1 段的資料列：同一人不能接兩段（`ONE_LEG_PER_DRIVER`），取消任一段即取消整張單、服務費退一次。乘客只用第 1 段的確認連結，回應有 `transfer: true`，`legs` 只含段號、狀態與司機，不含地點。第 2 段不能改乘客價（`TRIP_PRICE_ON_FIRST_LEG`）。
 
 ## 平台後台
 
