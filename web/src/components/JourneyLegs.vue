@@ -6,8 +6,8 @@ import PlateTag from './PlateTag.vue';
 import StatusBadge from './StatusBadge.vue';
 
 /**
- * 接駁: every leg of the trip in order, with the 接駁位置 between them. The
- * dispatcher can open each leg; drivers see the other legs' drivers.
+ * 接駁: both legs of the order, with the 接駁位置 between them. The dispatcher
+ * opens a leg to manage its driver; each leg's driver sees the other's.
  */
 defineProps<{ legs: JourneyLeg[]; current: number }>();
 </script>
@@ -27,6 +27,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
           <StatusBadge :status="leg.status" />
         </div>
         <div class="journey-legs__time">{{ pickup(leg.pickupAt) }}</div>
+        <div v-if="leg.selfDrive" class="hint">{{ t('出單者自己開') }}</div>
         <div>{{ t(`${leg.origin} 至 ${leg.destination}`) }}</div>
         <div v-if="leg.driver && leg.legIndex !== current" class="journey-legs__driver">
           <span>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</span>

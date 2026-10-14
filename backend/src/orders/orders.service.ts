@@ -1,6 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
-  MAX_JOURNEY_LEGS,
   type ContactRevealUpdate,
   type CreateOrderInput,
   type OrderPaymentUpdate,
@@ -25,7 +24,7 @@ import { telemetry } from '../observability/telemetry';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { PrismaService } from '../prisma.service';
 import { contactRevealAt, orderInclude, legsOf, passengerPriceOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
-import { claimedShareText, dispatchShareText, passengerShareText } from './share-text';
+import { claimedShareText, dispatchShareText, passengerShareText, transferShareText } from './share-text';
 
 const ORDER_CODE_LENGTH = 10;
 const CONFIRM_CODE_LENGTH = 12;
@@ -59,59 +58,83 @@ export class OrdersService {
         // credits nothing is created and no quota is used.
         const order = await this.prisma.$transaction(async (tx) => {
           const pickupAt = new Date(input.pickupAt);
-          const leg = input.afterOrderId ? await this.nextLeg(tx, userId, input.afterOrderId, pickupAt, input.origin) : null;
-          if (input.selfDrive) await this.requireProfile(tx, userId);
-          // 接駁: a trip uses the quota and pays the service fee once, with its first leg.
-          if (!leg) await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
-          const fee = leg ? 0 : await this.commission.feeFor(tx, userId, now);
+          // 接駁: one order in two legs, each taken by its own driver.
+          const second = input.transfer ? { ...input.transfer, pickupAt: new Date(input.transfer.pickupAt) } : null;
+          if (second && second.pickupAt < pickupAt) {
+            throw apiError(HttpStatus.BAD_REQUEST, 'LEG_BEFORE_PREVIOUS', 'The second leg cannot start before the first');
+          }
+          if (input.selfDrive || second?.selfDriveLeg) await this.requireProfile(tx, userId);
+          // A 接駁 order uses the quota and pays the service fee once, like any order.
+          await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
+          const fee = await this.commission.feeFor(tx, userId, now);
           const defaults =
             input.contactRevealMinutes === undefined || input.inPool === undefined
               ? await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { contactRevealMinutes: true, poolByDefault: true } })
               : null;
           const preference = input.contactRevealMinutes === undefined ? defaults!.contactRevealMinutes : input.contactRevealMinutes;
+          // 這單我自己做 is never offered to others, so it stays out of the 接單池 too. A 接駁
+          // order always has a leg for others to take.
+          const inPool = !input.selfDrive && (input.inPool ?? defaults!.poolByDefault);
+          // What both legs of a 接駁 order share: the passenger and the load.
+          const common = {
+            dispatcherId: userId,
+            passengers: input.passengers,
+            luggage: input.luggage,
+            vehicleType: input.vehicleType,
+            notes: input.notes,
+            rawText: input.rawText,
+            passengerName: input.passengerName,
+            passengerContact: input.passengerContact,
+            contactRevealMinutes: preference,
+            inPool,
+            showPaymentMethods: input.showPaymentMethods,
+          };
+          // 這單我自己做, or 這段我自己做: taken by the dispatcher at once, never offered for claiming.
+          const selfDriven = { status: 'ASSIGNED' as const, claimedById: userId, claimedAt: now };
           const placed = await tx.order.create({
             data: {
+              ...common,
               code: randomCode(ORDER_CODE_LENGTH),
               confirmCode: randomCode(CONFIRM_CODE_LENGTH),
-              dispatcherId: userId,
               pickupAt,
               origin: input.origin,
-              destination: input.destination,
+              // The first leg of a 接駁 order ends at the 接駁位置.
+              destination: second ? second.place : input.destination,
               waypoints: input.waypoints,
-              passengers: input.passengers,
-              luggage: input.luggage,
-              vehicleType: input.vehicleType,
               driverPriceMinor: toMinor(input.driverPrice),
               driverCurrency: input.driverPrice?.currency ?? 'HKD',
+              // The passenger pays one price for the whole trip; it is kept on the first leg.
               passengerPriceMinor: toMinor(input.passengerPrice),
               passengerCurrency: input.passengerPrice?.currency ?? input.driverPrice?.currency ?? 'HKD',
               showPassengerPrice: input.showPassengerPrice,
               commissionMinor: fee > 0 ? fee : null,
-              notes: input.notes,
-              rawText: input.rawText,
-              passengerName: input.passengerName,
-              passengerContact: input.passengerContact,
-              contactRevealMinutes: preference,
               requiredPlates: input.requiredPlates,
-              // 這單我自己做 is never offered to others, so it stays out of the 接單池 too.
-              inPool: !input.selfDrive && (input.inPool ?? defaults!.poolByDefault),
-              // 收款 belongs to the whole trip: a new leg follows the trip's first leg.
-              showPaymentMethods: leg ? leg.showPaymentMethods : input.showPaymentMethods,
-              paidAt: leg ? leg.paidAt : null,
-              ...(leg ? { journeyId: leg.journeyId, legIndex: leg.legIndex } : {}),
-              // 這單我自己做: taken by the dispatcher at once, never offered for claiming.
-              ...(input.selfDrive ? { status: 'ASSIGNED' as const, claimedById: userId, claimedAt: now } : {}),
+              ...(input.selfDrive || second?.selfDriveLeg === 1 ? selfDriven : {}),
             },
             include: orderInclude,
           });
-          // 接駁 chosen when dispatching: the order is leg 1 of a new trip from the start.
-          const created =
-            !leg && input.transfer
-              ? await tx.order.update({ where: { id: placed.id }, data: { journeyId: placed.id, legIndex: 1 }, include: orderInclude })
-              : placed;
-          if (fee > 0) await this.credits.charge(tx, userId, created.id, fee);
-          if (input.bookingId) await this.takeBooking(tx, userId, input.bookingId, created.id);
-          return created;
+          if (fee > 0) await this.credits.charge(tx, userId, placed.id, fee);
+          if (input.bookingId) await this.takeBooking(tx, userId, input.bookingId, placed.id);
+          if (!second) return placed;
+          await tx.order.update({ where: { id: placed.id }, data: { journeyId: placed.id, legIndex: 1 } });
+          await tx.order.create({
+            data: {
+              ...common,
+              code: randomCode(ORDER_CODE_LENGTH),
+              confirmCode: randomCode(CONFIRM_CODE_LENGTH),
+              pickupAt: second.pickupAt,
+              origin: second.place,
+              destination: input.destination,
+              driverPriceMinor: toMinor(second.driverPrice),
+              driverCurrency: second.driverPrice?.currency ?? 'HKD',
+              passengerCurrency: placed.passengerCurrency,
+              requiredPlates: second.requiredPlates,
+              journeyId: placed.id,
+              legIndex: 2,
+              ...(second.selfDriveLeg === 2 ? selfDriven : {}),
+            },
+          });
+          return tx.order.findUniqueOrThrow({ where: { id: placed.id }, include: orderInclude });
         });
         telemetry.domain('order.create');
         // The order was read before the booking was tied to it; say so here rather than read it again.
@@ -152,12 +175,13 @@ export class OrdersService {
 
   async list(userId: string, query: OrderListQuery) {
     const orders = await this.prisma.order.findMany({
-      where: query.role === 'dispatched' ? { dispatcherId: userId } : { claimedById: userId },
+      // A 接駁 order is listed once for its dispatcher, by its first leg; a driver sees the leg they took.
+      where: query.role === 'dispatched' ? { dispatcherId: userId, OR: [{ journeyId: null }, { legIndex: 1 }] } : { claimedById: userId },
       orderBy: { pickupAt: 'desc' },
       take: LIST_LIMIT,
       include: orderInclude,
     });
-    return orders.map((order) => toOrderView(order, viewerOf(order, userId), this.config.publicBaseUrl));
+    return orders.map((order) => toOrderView(order, viewerOf(order, userId), this.config.publicBaseUrl, new Date(), userId));
   }
 
   /**
@@ -168,25 +192,33 @@ export class OrdersService {
   async pool(userId: string, query: PoolQuery, now = new Date()) {
     await this.requireProfile(this.prisma, userId);
     const dayStart = query.date ? new Date(`${query.date}T00:00:00+08:00`) : null;
+    const due: Prisma.OrderWhereInput = {
+      status: 'OPEN',
+      pickupAt: {
+        gte: dayStart && dayStart > now ? dayStart : now,
+        ...(dayStart ? { lt: new Date(dayStart.getTime() + DAY_MS) } : {}),
+      },
+    };
+    const place = (q: string): Prisma.OrderWhereInput => ({
+      OR: [{ origin: { contains: q, mode: 'insensitive' } }, { destination: { contains: q, mode: 'insensitive' } }],
+    });
     const orders = await this.prisma.order.findMany({
       where: {
         inPool: true,
-        status: 'OPEN',
         scope: 'PUBLIC',
         dispatcherId: { not: userId },
-        pickupAt: {
-          gte: dayStart && dayStart > now ? dayStart : now,
-          ...(dayStart ? { lt: new Date(dayStart.getTime() + DAY_MS) } : {}),
-        },
-        ...(query.q
-          ? { OR: [{ origin: { contains: query.q, mode: 'insensitive' } }, { destination: { contains: query.q, mode: 'insensitive' } }] }
-          : {}),
+        // A 接駁 order is one entry, by its first leg, while either leg is still open and due.
+        OR: [
+          { journeyId: null, ...due, ...(query.q ? place(query.q) : {}) },
+          // The search finds either leg's places; a taken first leg still leaves the second open.
+          { legIndex: 1, AND: [{ journeyLegs: { some: due } }, ...(query.q ? [{ journeyLegs: { some: place(query.q) } }] : [])] },
+        ],
       },
       orderBy: { pickupAt: 'asc' },
       take: LIST_LIMIT,
       include: orderInclude,
     });
-    return orders.map((order) => toOrderView(order, 'other', this.config.publicBaseUrl, now));
+    return orders.map((order) => toOrderView(order, 'other', this.config.publicBaseUrl, now, userId));
   }
 
   /** An order the user dispatched or claimed, with the texts to share. */
@@ -217,7 +249,7 @@ export class OrdersService {
   async claim(code: string, userId: string, now = new Date()) {
     const order = await this.prisma.order.findUnique({
       where: { code },
-      select: { id: true, dispatcherId: true, claimedById: true, status: true, scope: true },
+      select: { id: true, dispatcherId: true, claimedById: true, status: true, scope: true, journeyId: true },
     });
     if (!order) throw this.notFound();
     if (order.dispatcherId === userId) {
@@ -228,11 +260,20 @@ export class OrdersService {
 
     await this.requireProfile(this.prisma, userId);
 
-    const updated = await this.prisma.order.updateMany({
-      where: { id: order.id, status: 'OPEN', claimedById: null },
-      data: { status: 'ASSIGNED', claimedById: userId, claimedAt: now },
+    const result: ClaimResult = await this.prisma.$transaction(async (tx) => {
+      // 接駁: each leg is a different driver's. Under the order's lock, so two taps on the two
+      // legs at once cannot both go through.
+      if (order.journeyId) {
+        await this.lockJourney(tx, order.journeyId);
+        const other = await tx.order.count({ where: { journeyId: order.journeyId, id: { not: order.id }, claimedById: userId } });
+        if (other > 0) throw apiError(HttpStatus.CONFLICT, 'ONE_LEG_PER_DRIVER', 'One driver takes one leg of a 接駁 order');
+      }
+      const updated = await tx.order.updateMany({
+        where: { id: order.id, status: 'OPEN', claimedById: null },
+        data: { status: 'ASSIGNED', claimedById: userId, claimedAt: now },
+      });
+      return updated.count === 1 ? 'WON' : 'LOST';
     });
-    const result: ClaimResult = updated.count === 1 ? 'WON' : 'LOST';
     await this.prisma.orderClaim.create({ data: { orderId: order.id, driverId: userId, result } });
     telemetry.domain('order.claim', result === 'WON' ? 'success' : 'lost');
     if (result === 'WON') await this.tell(order.id, 'ORDER_CLAIMED', 'dispatcher');
@@ -240,21 +281,32 @@ export class OrdersService {
   }
 
   /**
-   * Cancelling returns the service fee, in the same transaction. A trip with
-   * 接駁 paid once, on its first leg, so its fee returns only when the last of
-   * its legs is cancelled; the other legs are never cancelled automatically.
+   * Cancelling returns the service fee, in the same transaction. A 接駁 order is cancelled whole:
+   * every leg not yet over, from either leg's page, with its one fee returned once. To replace
+   * one leg's driver the dispatcher uses 改派 instead.
    */
   async cancel(userId: string, id: string, now = new Date()) {
-    const view = await this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', async (tx) => {
-      const { journeyId } = await tx.order.findUniqueOrThrow({ where: { id }, select: { journeyId: true } });
-      if (!journeyId) return this.credits.refundOrder(tx, id);
+    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { journeyId: true } });
+    const journeyId = order?.journeyId;
+    if (!journeyId) {
+      const view = await this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', (tx) =>
+        this.credits.refundOrder(tx, id),
+      );
+      await this.tell(id, 'ORDER_CANCELLED', 'driver');
+      telemetry.domain('order.cancel');
+      return view;
+    }
+    const cancelled = await this.prisma.$transaction(async (tx) => {
       await this.lockJourney(tx, journeyId);
-      const live = await tx.order.count({ where: { journeyId, status: { not: 'CANCELLED' } } });
-      if (live === 0) await this.credits.refundOrder(tx, journeyId);
+      const legs = await tx.order.findMany({ where: { journeyId, status: { in: ['OPEN', 'ASSIGNED'] } }, select: { id: true } });
+      if (legs.length === 0) throw this.invalidStatus();
+      await tx.order.updateMany({ where: { id: { in: legs.map((leg) => leg.id) } }, data: { status: 'CANCELLED', cancelledAt: now } });
+      await this.credits.refundOrder(tx, journeyId);
+      return legs;
     });
-    await this.tell(id, 'ORDER_CANCELLED', 'driver');
+    for (const leg of cancelled) await this.tell(leg.id, 'ORDER_CANCELLED', 'driver');
     telemetry.domain('order.cancel');
-    return view;
+    return this.getForParticipant(userId, id);
   }
 
   /** 代為取消 by the platform's staff: the dispatcher's own cancel, and the dispatcher is told. */
@@ -291,9 +343,13 @@ export class OrdersService {
    * driver price is locked once a driver has claimed at that price.
    */
   async updatePrices(userId: string, id: string, input: UpdateOrderPricesInput) {
-    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true } });
+    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true, legIndex: true } });
     if (!order) throw this.notFound();
     if (order.status === 'CANCELLED' || order.status === 'COMPLETED') throw this.invalidStatus();
+    // 接駁: the passenger pays one price for the whole order, kept on its first leg.
+    if ((order.legIndex ?? 1) > 1 && (input.passengerPrice !== undefined || input.showPassengerPrice !== undefined)) {
+      throw apiError(HttpStatus.CONFLICT, 'TRIP_PRICE_ON_FIRST_LEG', 'The passenger price of a 接駁 order is set on its first leg');
+    }
     if (input.driverPrice !== undefined && order.status !== 'OPEN') {
       throw apiError(HttpStatus.CONFLICT, 'DRIVER_PRICE_LOCKED', 'The driver price cannot change after the order is claimed');
     }
@@ -437,12 +493,13 @@ export class OrdersService {
     if (!order.showPaymentMethods) return null;
     const methods = await this.paymentMethods.forPassenger(order.dispatcherId, confirmCode);
     if (methods.length === 0) return null;
+    // A 接駁 order keeps its one passenger price on the first leg; the other leg has none.
     const legs = legsOf(order)?.filter((leg) => leg.status !== 'CANCELLED') ?? [order];
-    const prices = legs.map(passengerPriceOf);
-    const sameCurrency = prices.every((price) => price && price.currency === prices[0]?.currency);
+    const prices = legs.map(passengerPriceOf).filter((price) => price !== null);
+    const sameCurrency = prices.every((price) => price.currency === prices[0].currency);
     const amount =
       prices.length > 0 && sameCurrency
-        ? { amount: Math.round(prices.reduce((sum, price) => sum + price!.amount * 100, 0)) / 100, currency: prices[0]!.currency }
+        ? { amount: Math.round(prices.reduce((sum, price) => sum + price.amount * 100, 0)) / 100, currency: prices[0].currency }
         : null;
     return {
       payee: order.dispatcher.profile?.name ?? null,
@@ -485,53 +542,8 @@ export class OrdersService {
   }
 
   /**
-   * Where a new leg goes: after the last leg of the trip that `afterOrderId`
-   * belongs to, which must be that leg. An order on its own becomes leg 1 of a
-   * new trip. Runs under the trip's lock, like cancelling a leg.
-   *
-   * The new leg starts at the 接駁位置, where the previous leg ends: a different
-   * `origin` moves the previous leg's destination there, unless another driver
-   * has already claimed that leg as it was.
-   */
-  private async nextLeg(tx: Prisma.TransactionClient, userId: string, afterOrderId: string, pickupAt: Date, origin: string) {
-    const previous = await tx.order.findFirst({ where: { id: afterOrderId, dispatcherId: userId }, select: { journeyId: true } });
-    if (!previous) throw this.notFound();
-    const journeyId = previous.journeyId ?? afterOrderId;
-    await this.lockJourney(tx, journeyId);
-    await tx.order.updateMany({ where: { id: journeyId, journeyId: null }, data: { journeyId, legIndex: 1 } });
-    const legs = await tx.order.findMany({
-      where: { journeyId },
-      orderBy: { legIndex: 'asc' },
-      select: { id: true, legIndex: true, status: true, pickupAt: true, destination: true },
-    });
-    const last = legs[legs.length - 1];
-    if (last.id !== afterOrderId) {
-      throw apiError(HttpStatus.CONFLICT, 'NOT_LAST_LEG', 'A leg can only follow the last leg of the trip');
-    }
-    if (last.status === 'CANCELLED') throw this.invalidStatus();
-    if (legs.length >= MAX_JOURNEY_LEGS) {
-      throw apiError(HttpStatus.CONFLICT, 'JOURNEY_LEG_LIMIT', `A trip has at most ${MAX_JOURNEY_LEGS} legs`);
-    }
-    if (pickupAt < last.pickupAt) {
-      throw apiError(HttpStatus.BAD_REQUEST, 'LEG_BEFORE_PREVIOUS', 'A leg cannot start before the previous leg');
-    }
-    if (origin !== last.destination) {
-      // The condition also closes the race with a claim landing in between.
-      const moved = await tx.order.updateMany({
-        where: { id: last.id, OR: [{ status: 'OPEN' }, { status: 'ASSIGNED', claimedById: userId }] },
-        data: { destination: origin },
-      });
-      if (moved.count === 0) {
-        throw apiError(HttpStatus.CONFLICT, 'TRANSFER_PLACE_LOCKED', 'The previous leg is claimed; its destination cannot change');
-      }
-    }
-    const head = await tx.order.findUniqueOrThrow({ where: { id: journeyId }, select: { showPaymentMethods: true, paidAt: true } });
-    return { journeyId, legIndex: (last.legIndex ?? 1) + 1, showPaymentMethods: head.showPaymentMethods, paidAt: head.paidAt };
-  }
-
-  /**
-   * Adding and cancelling legs of one trip take turns on the first leg's row,
-   * so a refund decision never misses a leg added or cancelled at the same time.
+   * Claiming and cancelling the legs of one 接駁 order take turns on the first leg's row, so one
+   * driver never ends up with both legs and a cancel never misses a leg claimed at that moment.
    */
   private async lockJourney(tx: Prisma.TransactionClient, journeyId: string) {
     await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${journeyId} FOR UPDATE`;
@@ -588,7 +600,7 @@ export class OrdersService {
   }
 
   private view(order: OrderWithPeople, userId?: string) {
-    return toOrderView(order, viewerOf(order, userId), this.config.publicBaseUrl);
+    return toOrderView(order, viewerOf(order, userId), this.config.publicBaseUrl, new Date(), userId);
   }
 
   private withShareTexts(order: OrderWithPeople) {
@@ -596,14 +608,21 @@ export class OrdersService {
     const driver = order.claimedBy?.profile;
     const legs = legsOf(order);
     const liveLegs = legs?.filter((leg) => leg.status !== 'CANCELLED');
-    // The passenger gets one link for the whole trip: the first leg's.
-    const tripConfirm = order.journeyHead ? linksOf(order.journeyHead, this.config.publicBaseUrl).passengerConfirm : links.passengerConfirm;
+    // A 接駁 order goes out as one: one group text and one link, the first leg's, for drivers and
+    // for the passenger alike.
+    const head = order.journeyHead ? linksOf(order.journeyHead, this.config.publicBaseUrl) : links;
     return {
-      ...toOrderView(order, 'dispatcher', this.config.publicBaseUrl),
+      ...toOrderView(order, 'dispatcher', this.config.publicBaseUrl, new Date(), order.dispatcherId),
       share: {
-        dispatch: dispatchShareText({ ...order, legCount: legs?.length }, links.dispatch),
+        dispatch:
+          legs && legs.length > 1
+            ? transferShareText(
+                legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId })),
+                head.dispatch,
+              )
+            : dispatchShareText(order, links.dispatch),
         claimed: driver ? claimedShareText(order, driver) : null,
-        passenger: passengerShareText(order, tripConfirm, liveLegs),
+        passenger: passengerShareText(order, head.passengerConfirm, liveLegs),
       },
     };
   }

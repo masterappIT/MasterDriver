@@ -91,8 +91,9 @@ test('the 升級 entry shows only past 30 trips in 30 days: a 接駁 trip counts
 
   await ctx.orders.cancel(dispatcher, orders[0].id);
   assert.equal((await ctx.site.upgradeOffer(dispatcher)).upgradeUrl, null, '30 left is not more than 30');
-  await ctx.orders.create(dispatcher, { ...sampleOrder, pickupAt: '2026-10-15T16:00:00+08:00', origin: sampleOrder.destination, destination: '澳門', afterOrderId: orders[1].id });
-  assert.equal((await ctx.site.upgradeOffer(dispatcher)).upgradeUrl, null, 'a second leg is the same trip');
+  await ctx.orders.cancel(dispatcher, orders[1].id);
+  await ctx.orders.create(dispatcher, { ...sampleOrder, transfer: { place: '港珠澳大橋', pickupAt: '2026-10-15T16:00:00+08:00', requiredPlates: [], selfDriveLeg: null } });
+  assert.equal((await ctx.site.upgradeOffer(dispatcher)).upgradeUrl, null, 'a 接駁 order is one trip, not two');
   assert.equal((await ctx.site.upgradeOffer(await createDriver(ctx))).upgradeUrl, null);
 });
 

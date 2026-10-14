@@ -109,12 +109,19 @@ const priceSchema = z.object({
   currency: z.enum(CURRENCIES),
 });
 
-/** 接駁: a trip has at most this many legs, each its own order. */
-export const MAX_JOURNEY_LEGS = 4;
+/** 接駁: a trip has two legs, each its own order, meeting at one 接駁位置. */
+export const MAX_JOURNEY_LEGS = 2;
 
 /** Where a car is registered; an order may ask for one or more of these plates. */
 export const PLATE_REGIONS = ['HK', 'MACAU', 'MAINLAND'] as const;
 export type PlateRegion = (typeof PLATE_REGIONS)[number];
+
+/** The plates an order asks for, in a fixed order; only stated to drivers, never enforced. */
+const requiredPlatesSchema = z
+  .array(z.enum(PLATE_REGIONS))
+  .max(PLATE_REGIONS.length)
+  .default([])
+  .transform((plates) => PLATE_REGIONS.filter((plate) => plates.includes(plate)));
 
 /** Up to 24 hours before pickup, or null for "as soon as the order is claimed". */
 export const contactReveal = z.number().int().min(0).max(1440).nullable();
@@ -146,30 +153,34 @@ export const createOrderSchema = z.object({
   /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */
   contactRevealMinutes: contactReveal.optional(),
   /**
-   * 接駁: add this order as the next leg after the last leg of the dispatcher's
-   * trip. Its origin is the 接駁位置, which is also the previous leg's destination.
+   * 接駁 instead of 直達: one order in two legs, each taken by its own driver. The trip runs from
+   * `origin` to `destination` and changes cars at `transfer.place`; the fields above (time,
+   * driver price, plates) are the first leg's, `transfer` holds the second leg's. The passenger
+   * price is for the whole trip.
    */
-  afterOrderId: z.string().trim().min(1).max(40).optional(),
-  /**
-   * 接駁 instead of 直達: this order is the first leg of a trip and ends at the
-   * 接駁位置, where the next leg's car takes over. Ignored with afterOrderId.
-   */
-  transfer: z.boolean().default(false),
-  /** Plates the car needs, e.g. ['MACAU']; only stated to drivers, never enforced. */
-  requiredPlates: z
-    .array(z.enum(PLATE_REGIONS))
-    .max(PLATE_REGIONS.length)
-    .default([])
-    .transform((plates) => PLATE_REGIONS.filter((plate) => plates.includes(plate))),
+  transfer: z
+    .object({
+      /** 接駁位置: set by the dispatcher; the first leg ends and the second starts here. */
+      place: text(120),
+      /** The second leg's pickup time; not before the first leg's (checked by the API). */
+      pickupAt: z.string().datetime({ offset: true }),
+      driverPrice: priceSchema.optional(),
+      requiredPlates: requiredPlatesSchema,
+      /** 這段我自己做: the dispatcher drives one of the two legs (never both). */
+      selfDriveLeg: z.union([z.literal(1), z.literal(2)]).nullable().default(null),
+    })
+    .optional(),
+  /** Plates the car needs, e.g. ['MACAU']; only stated to drivers, never enforced. With 接駁, the first leg's. */
+  requiredPlates: requiredPlatesSchema,
   /** 名片頁: the booking request this order is made from; it must be the dispatcher's own and still open. */
   bookingId: z.string().trim().min(1).max(40).optional(),
-  /** 這單我自己做: the dispatcher drives this order, so it is not offered for claiming. */
+  /** 這單我自己做: the dispatcher drives this order, so it is not offered for claiming. 直達 only; 接駁 uses transfer.selfDriveLeg. */
   selfDrive: z.boolean().default(false),
   /** 接單池: also list the order for every signed-in driver. Defaults to the dispatcher's preference. */
   inPool: z.boolean().optional(),
   /** 收款方式: show the dispatcher's own ways to be paid on the passenger's confirmation page. */
   showPaymentMethods: z.boolean().default(false),
-});
+}).refine((value) => !(value.transfer && value.selfDrive), { message: 'SELF_DRIVE_ONE_LEG', path: ['selfDrive'] });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 /**

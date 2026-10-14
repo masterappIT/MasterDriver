@@ -112,12 +112,11 @@ test('a first leg ends at the transfer place, also before the next leg is added'
   assert.equal(plateRequirement([]), null);
 });
 
-test('the passenger message for a trip covers every leg and adds up prices shown in one currency', () => {
-  const hk = { ...order, destination: '港珠澳大橋香港口岸', showPassengerPrice: true, passengerPriceMinor: 60000 };
-  const macau = { ...order, origin: '港珠澳大橋澳門口岸', destination: '澳門威尼斯人', showPassengerPrice: true, passengerPriceMinor: 40000 };
-  const text = passengerShareText(hk, 'https://x.test/c/xyz', [hk, macau]);
-  assert.ok(text.includes('深圳灣口岸 → 澳門威尼斯人（2 段接駁）'));
+test('the passenger message for a 接駁 order says the car changes on the way, not where, with its one price', () => {
+  const first = { ...order, destination: '港珠澳大橋香港口岸', showPassengerPrice: true, passengerPriceMinor: 100000 };
+  const second = { ...order, origin: '港珠澳大橋香港口岸', destination: '澳門威尼斯人', showPassengerPrice: false, passengerPriceMinor: null };
+  const text = passengerShareText(first, 'https://x.test/c/xyz', [first, second]);
+  assert.ok(text.includes('深圳灣口岸 → 澳門威尼斯人（接駁，中途換車）'));
   assert.ok(text.includes('費用 HK$1,000'));
-  const mixed = passengerShareText(hk, 'https://x.test/c/xyz', [hk, { ...macau, passengerCurrency: 'MOP' }]);
-  assert.ok(!mixed.includes('費用'));
+  assert.ok(!text.includes('港珠澳大橋香港口岸'));
 });

@@ -49,7 +49,7 @@ npm run dev:web
 - 介面文字只寫繁體；簡體由沿用 Master Travel 的 OpenCC 對照表轉出，只有選用簡體時才下載。+86 帳號預設簡體，可在「我的」切換。
 - 只用系統字型、不依賴 Google 服務；在微信內不顯示「分享到 WhatsApp」（微信會攔截跳轉），改用複製。
 - 搶單頁在單仍是「待搶」時每 5 秒更新一次狀態，讓各群打開同一條連結都能看到「已被接走」。
-- 接駁單：發單頁選「接駁」（`transfer: true`）的單發出時就是行程第 1 段，目的地是接駁位置。單詳情按「加接駁段」打開 `/app/new?after=<上一段 id>`，帶入接駁位置（上一段的目的地）與乘客資料；改了接駁位置會同步改上一段的目的地，上一段已被其他司機接走時回 `TRANSFER_PLACE_LOCKED`。接駁的單可選填 `requiredPlates`（`HK`、`MACAU`、`MAINLAND`），只顯示、不限制誰能搶。各段的 `journeyId` 指向第一段（第一段指向自己），`legIndex` 從 1 起，最多 4 段。新增段與取消段都先鎖住第一段的資料列，所以服務費只在全部段都取消時退回一次。乘客只用第一段的確認連結。
+- 接駁單（2026-10-15 起）：出單頁選「接駁」時送 `transfer: { place, pickupAt, driverPrice, requiredPlates, selfDriveLeg }`，同一筆交易建立兩段：第 1 段起點 → 接駁位置（頂層的時間、出單價、車牌、乘客價都在這段），第 2 段接駁位置 → 終點。兩段的 `journeyId` 指向第 1 段，`legIndex` 為 1、2。群文字只有一條，連結是第 1 段的 `code`；`GET /api/o/:code` 的 `journey.legs` 帶各段的 `code`、狀態、出單價、車牌、`mine`（目前使用者接的那段）與 `selfDrive`，前端各段的「搶第 N 段」用該段的 `code` 搶。搶單與取消都先鎖第 1 段的資料列：同一人不能接兩段（`ONE_LEG_PER_DRIVER`），取消任一段即取消整張單、服務費退一次。乘客只用第 1 段的確認連結，回應有 `transfer: true`，`legs` 只含段號、狀態與司機，不含地點。第 2 段不能改乘客價（`TRIP_PRICE_ON_FIRST_LEG`）。
 
 ## 平台後台
 
@@ -112,7 +112,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `POST /api/auth/logout` | 要 | 登出 |
 | `GET /api/me` | 要 | 目前用戶與司機資料 |
 | `GET/PUT /api/me/profile` | 要 | 司機資料（第一次搶單前要填）。`vehicleOwnership`（`HK`、`MACAU`、`MAINLAND`）與 `plateType`（`SINGLE`、`DUAL`、`TRIPLE`）決定要填哪些車牌和格式，規則在 `shared/src/vehicle-plate.ts`；車牌存成固定格式（澳門 `AA-00-00`，內地 `粵Z·…港`、`粵Z·…澳` 或 `粵A·…`），該類型沒有的車牌不保存；`vehicleType` 是自由文字，必填 |
-| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer: true`：接駁單的第 1 段；`afterOrderId`：加接駁段（接在行程最後一段後面，出發地即接駁位置，不再扣額度和服務費）；`requiredPlates`：需要的車牌（只標明）；`selfDrive: true`：這單我自己做（直接算自己接，要先有司機資料）；`inPool`：同時放到接單池（不傳時用「我的」的預設值；`selfDrive` 的單一律不進池） |
+| `POST /api/orders` | 要 | 發單；回傳連結與可直接貼上的分享文字。`transfer`：接駁單的第 2 段與接駁位置（見上方「接駁單」，一次建立兩段，`transfer.selfDriveLeg` 為出單者自己做的那段）；`requiredPlates`：需要的車牌（只標明，接駁單時為第 1 段的）；`selfDrive: true`：直達單這單我自己做（直接算自己接，要先有司機資料；不能和 `transfer` 同用）；`inPool`：同時放到接單池（不傳時用「我的」的預設值；`selfDrive` 的單一律不進池） |
 | `GET /api/orders?role=dispatched\|claimed` | 要 | 我的派單／我的接單 |
 | `GET /api/orders/pool?date=YYYY-MM-DD&q=地點` | 要 | 接單池：發單者勾選放進來、待搶且未到出發時間的單，不含自己發的；與搶單頁相同的資訊，不含乘客資料；最多 50 張。沒有司機資料時回 `PROFILE_REQUIRED` |
 | `GET /api/orders/:id` | 要 | 單的詳情（發單者或接單司機） |
@@ -147,7 +147,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET /api/public/profiles/:code` | 可選 | 名片頁；未公開時只有本人看得到 |
 | `POST /api/public/profiles/:code/bookings` | — | 乘客送出預約，回傳預約連結 |
 | `GET /api/public/bookings/:code`、`POST …/accept`、`…/cancel` | — | 乘客的預約連結：狀態與報價、同意報價、取消 |
-| `GET /api/c/:confirmCode` | — | 乘客確認頁（不含出單價；乘客價只在發單者選擇顯示時出現）；接駁行程另有 `legs` 列出未取消的各段與司機；出單者選擇顯示收款方式時另有 `payment`（收款人、金額、是否已收款、收款方式） |
+| `GET /api/c/:confirmCode` | — | 乘客確認頁（不含出單價；乘客價只在發單者選擇顯示時出現）；接駁單有 `transfer: true`，`legs` 列出未取消的兩段的段號、狀態與司機，不含接駁位置；出單者選擇顯示收款方式時另有 `payment`（收款人、金額、是否已收款、收款方式） |
 | `GET /api/c/:confirmCode/trip-group/qr`、`GET /api/c/:confirmCode/driver-photos/:id` | — | 乘客看的行程群二維碼（未取消、未過期）與接送司機的車輛照片（只限現在接這張單或其接駁段的司機） |
 | `GET /api/c/:confirmCode/payment-methods/:id/qr` | — | 乘客看的收款碼圖片：只限該單顯示收款方式、未取消，且收款方式屬於出單者 |
 | `POST /api/c/:confirmCode/confirm` | — | 乘客按確認；接駁行程一次確認全部未取消的段 |
@@ -176,6 +176,6 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
 | `npm run verify:admin` | 後台型別檢查與建置 |
 | `npm run verify:web` | 網頁測試（繁簡轉換）、型別檢查與建置 |
-| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁段（服務費與額度只算一次、同時取消只退一次、乘客一次確認全部、各段司機互看、接駁位置兩段共用）、客服（對話權限、訊息去重、檔案類型與大小、訪客限制、過期清理）、名片頁與預約（公開與否、照片、報價到成單、歸屬、上限）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
+| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁單（一次建立兩段、服務費與額度只算一次、同一人不能接兩段、取消整張單只退一次、乘客只看到一個價格且看不到接駁位置、接單池與列表一筆）、客服（對話權限、訊息去重、檔案類型與大小、訪客限制、過期清理）、名片頁與預約（公開與否、照片、報價到成單、歸屬、上限）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。

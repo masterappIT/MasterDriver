@@ -17,7 +17,7 @@ import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GroupText from '../components/GroupText.vue';
 import { t } from '../i18n';
-import { MAX_JOURNEY_LEGS, legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
+import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
 import type { PlateType } from '@masterdriver/shared/vehicle-plate';
 
@@ -105,7 +105,10 @@ const selfDriven = computed(() => Boolean(order.value?.selfDrive) && order.value
  * 這單我自己做: the dispatcher drives it, so the page keeps what driving needs (trip, passenger,
  * price and payment, 標記完成); the settings fold into 其他設定 and the dispatching parts go.
  */
-const ownTrip = computed(() => isDispatcher.value && Boolean(order.value?.selfDrive));
+// 接駁 with 這段我自己做 still has another driver on the other leg, so it keeps the full view.
+const ownTrip = computed(() => isDispatcher.value && Boolean(order.value?.selfDrive) && !order.value?.journey);
+/** 接駁: the passenger's one price for the whole order is kept on, and changed from, the first leg. */
+const tripPriceHere = computed(() => !order.value?.journey || order.value.journey.legIndex === 1);
 /** A driver is set and the passenger has not confirmed: remind the dispatcher to send the link. */
 /** Someone else has the order: the group now needs 已派出, not the order again. */
 const taken = computed(() => order.value?.status === 'ASSIGNED' && !selfDriven.value && Boolean(order.value.share?.claimed));
@@ -113,20 +116,9 @@ const remindPassenger = computed(
   () => isDispatcher.value && order.value?.status === 'ASSIGNED' && !order.value.passengerConfirmedAt && !order.value.fromBooking,
 );
 
-/** 接駁: a leg can be added after the last leg of a trip, up to the limit. */
-const canAddLeg = computed(() => {
-  const o = order.value;
-  if (!o || !isDispatcher.value || !live.value) return false;
-  return !o.journey || (o.journey.legIndex === o.journey.legCount && o.journey.legCount < MAX_JOURNEY_LEGS);
-});
-/** Other legs still on: cancelling this one does not cancel them. */
-const otherLiveLegs = computed(() =>
-  (order.value?.journey?.legs ?? []).filter(
-    (leg) => leg.legIndex !== order.value?.journey?.legIndex && (leg.status === 'OPEN' || leg.status === 'ASSIGNED'),
-  ),
-);
+/** 接駁 is cancelled whole; one leg's driver is replaced with 改派 instead. */
 const cancelQuestion = computed(() =>
-  otherLiveLegs.value.length > 0 ? '確定取消這一段？接駁的其他段不會自動取消，需要的話請逐段取消。' : '確定取消這張單？',
+  order.value?.journey ? '確定取消整張接駁單？兩段都會取消。只想換其中一段的司機，請用「改派」。' : '確定取消這張單？',
 );
 
 async function load() {
@@ -146,8 +138,14 @@ const cancelNote = computed(() => {
   const o = order.value;
   if (!o) return null;
   const lines = [
-    o.serviceFee ? (o.journey ? '平台服務費整個接駁行程只收一次，全部段都取消才退回。' : '平台服務費會退回。') : null,
-    o.status === 'ASSIGNED' && !selfDriven.value ? '已接單的司機打開連結會看到已取消，請另外通知他。' : null,
+    o.serviceFee ? '平台服務費會退回。' : null,
+    o.journey
+      ? o.journey.legs.some((leg) => leg.status === 'ASSIGNED' && !leg.selfDrive)
+        ? '已接單的司機會收到取消通知，打開連結會看到已取消，最好另外通知他們。'
+        : null
+      : o.status === 'ASSIGNED' && !selfDriven.value
+        ? '已接單的司機打開連結會看到已取消，請另外通知他。'
+        : null,
   ].filter(Boolean);
   return lines.length ? lines.join('') : null;
 });
@@ -321,7 +319,8 @@ async function patchPrices(body: Record<string, unknown>, done: string) {
 
 function savePrices() {
   const money = (value: string, currency: string) => (value ? { amount: Number(value), currency } : null);
-  const body: Record<string, unknown> = { passengerPrice: money(prices.passenger, prices.passengerCurrency) };
+  // 接駁: the second leg has no passenger price of its own.
+  const body: Record<string, unknown> = tripPriceHere.value ? { passengerPrice: money(prices.passenger, prices.passengerCurrency) } : {};
   // The driver price (and its currency) is fixed once a driver has taken the order.
   if (order.value?.status === 'OPEN') body.driverPrice = money(prices.driver, prices.currency);
   return patchPrices(body, '價格已更新');
@@ -417,29 +416,11 @@ watch(id, () => {
         <p v-if="order.notes" class="detail__note">{{ t(order.notes) }}</p>
       </section>
 
-      <div v-if="order.status === 'CANCELLED' && otherLiveLegs.length" class="notice" style="order: 4">
-        {{ t('這一段已取消，接駁的其他段仍在進行。需要的話，請在下面打開該段取消。') }}
-      </div>
-
-      <!-- 接駁: every leg of the trip -->
+      <!-- 接駁: both legs of the order; the dispatcher opens a leg to manage its driver. -->
       <section v-if="order.journey" class="card" style="order: 5">
-        <span class="section-label">{{ t(`整個接駁行程，共 ${order.journey.legCount} 段`) }}</span>
+        <span class="section-label">{{ isDispatcher ? t('整張接駁單（兩段），點一段管理它的司機') : t('整張接駁單（兩段）') }}</span>
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
-        <RouterLink v-if="canAddLeg" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
       </section>
-
-      <!-- 加接駁段 is seldom needed: one folded line, near the end. -->
-      <details v-else-if="canAddLeg && !ownTrip" class="card detail__fold" style="order: 16">
-        <summary>
-          <span class="detail__fold-text">
-            <strong>{{ t('加接駁段') }}</strong>
-            <span class="hint">{{ t('乘客中途換車時，下一段另外派') }}</span>
-          </span>
-          <AppIcon name="chevron" class="detail__fold-arrow" />
-        </summary>
-        <p class="hint">{{ t('乘客自行過關不算接駁，下一程請另外出單。') }}</p>
-        <RouterLink class="button secondary block" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
-      </details>
 
       <!-- The passenger: after the group text while waiting for a driver, after the driver once taken. -->
       <section class="card" style="order: 10">
@@ -479,7 +460,7 @@ watch(id, () => {
         <summary v-if="ownTrip">
           <span class="detail__fold-text">
             <strong>{{ t('其他設定') }}</strong>
-            <span class="hint">{{ t('確認頁顯示的內容、行程群、加接駁段') }}</span>
+            <span class="hint">{{ t('確認頁顯示的內容、行程群') }}</span>
           </span>
           <AppIcon name="chevron" class="detail__fold-arrow" />
         </summary>
@@ -505,7 +486,7 @@ watch(id, () => {
           <label class="detail__switch detail__divided">
             <span>
               {{ t('乘客確認頁顯示收款方式') }}
-              <small>{{ order.journey ? t('整個接駁行程一起顯示，乘客付一次') : t('顯示時會一併顯示價錢') }}</small>
+              <small>{{ order.journey ? t('整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示價錢') }}</small>
             </span>
             <input
               class="switch"
@@ -516,11 +497,8 @@ watch(id, () => {
             />
           </label>
           <p v-if="order.serviceFee" class="hint detail__divided">
-            {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整個接駁行程只收一次，全部段都取消才退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
+            {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整張接駁單只收一次，取消會退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
           </p>
-          <RouterLink v-if="canAddLeg && !order.journey" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`">
-            <AppIcon name="add" :size="18" />{{ t('加接駁段') }}
-          </RouterLink>
           <div class="detail__divided">
             <span class="section-label">{{ t('行程群（你和乘客）') }}</span>
             <p class="hint" :class="{ 'detail__group-expired': order.tripGroup?.expired }">{{ t(tripGroupSummary) }}</p>
@@ -616,14 +594,15 @@ watch(id, () => {
             <strong>{{ money(order.driverPrice) || t('未填') }}</strong>
           </div>
           <template v-if="isDispatcher">
-            <p class="detail__line">
+            <p v-if="tripPriceHere" class="detail__line">
               {{ t(`乘客價 ${money(order.passengerPrice) || '未填'}`) }}<template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
             </p>
+            <p v-else class="detail__line">{{ t('乘客價整張單一個，在第 1 段查看和修改') }}</p>
             <p v-if="order.serviceFee" class="hint detail__fee">
-              {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整個接駁行程只收一次，全部段都取消才退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
+              {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整張接駁單只收一次，取消會退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
             </p>
             <template v-if="live">
-              <label class="detail__switch detail__divided">
+              <label v-if="tripPriceHere" class="detail__switch detail__divided">
                 <span>{{ t('乘客確認頁顯示乘客價') }}</span>
                 <input
                   class="switch"
@@ -649,8 +628,8 @@ watch(id, () => {
               <input v-model="prices.driver" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :disabled="order.status !== 'OPEN'" />
             </div>
           </template>
-          <span class="section-label">{{ ownTrip ? t('價錢') : t('乘客價，只有你看得到') }}</span>
-          <div class="amount-line amount-line--quiet detail__gap-bottom">
+          <span v-if="tripPriceHere" class="section-label">{{ ownTrip ? t('價錢') : order.journey ? t('乘客價（整張單一個價），只有你看得到') : t('乘客價，只有你看得到') }}</span>
+          <div v-if="tripPriceHere" class="amount-line amount-line--quiet detail__gap-bottom">
             <select v-model="prices.passengerCurrency" :aria-label="t('乘客價幣種')">
               <option value="HKD">HK$</option>
               <option value="CNY">RMB¥</option>
@@ -680,7 +659,7 @@ watch(id, () => {
         <label v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__switch detail__divided">
           <span>
             {{ t('乘客確認頁顯示收款方式') }}
-            <small>{{ order.journey ? t('整個接駁行程一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
+            <small>{{ order.journey ? t('整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
           </span>
           <input
             class="switch"
@@ -752,8 +731,8 @@ watch(id, () => {
           >
             {{ selfDriven ? t('交給別的司機') : t('改派') }}
           </button>
-          <button class="detail__cancel" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? '取消這一段' : '取消這張單', cancelNote)">
-            {{ order.journey ? t('取消這一段') : t('取消這張單') }}
+          <button class="detail__cancel" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? '取消整張接駁單' : '取消這張單', cancelNote)">
+            {{ order.journey ? t('取消整張接駁單') : t('取消這張單') }}
           </button>
         </template>
       </section>

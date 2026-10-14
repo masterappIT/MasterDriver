@@ -64,6 +64,21 @@ test('the passenger contact is a phone with its country code, stored in one form
   }
 });
 
+test('a 接駁 order holds its second leg; the dispatcher may drive one leg, never with 這單我自己做', () => {
+  const order = { pickupAt: '2026-10-15T14:30:00+08:00', origin: '香港', destination: '廣州', passengers: 2, passengerContact: '+852 91234567' };
+  const second = { place: ' 深圳灣口岸 ', pickupAt: '2026-10-15T15:30:00+08:00', requiredPlates: ['MAINLAND', 'HK'] };
+  const parsed = createOrderSchema.parse({ ...order, transfer: second });
+  assert.equal(parsed.transfer?.place, '深圳灣口岸');
+  assert.deepEqual(parsed.transfer?.requiredPlates, ['HK', 'MAINLAND']);
+  assert.equal(parsed.transfer?.selfDriveLeg, null);
+  assert.equal(createOrderSchema.parse({ ...order, transfer: { ...second, selfDriveLeg: 2 } }).transfer?.selfDriveLeg, 2);
+  assert.equal(createOrderSchema.safeParse({ ...order, transfer: { ...second, selfDriveLeg: 3 } }).success, false);
+  assert.equal(createOrderSchema.safeParse({ ...order, transfer: { ...second, place: ' ' } }).success, false);
+  const both = createOrderSchema.safeParse({ ...order, selfDrive: true, transfer: second });
+  assert.equal(both.success, false);
+  if (!both.success) assert.equal(both.error.issues[0].message, 'SELF_DRIVE_ONE_LEG');
+});
+
 test('order input requires a time zone on the pickup time', () => {
   const result = createOrderSchema.safeParse({
     pickupAt: '2026-10-15T14:30:00',

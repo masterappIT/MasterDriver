@@ -8,7 +8,7 @@ import GroupText from '../components/GroupText.vue';
 import { copyText, inWeChat, whatsappLink } from '../device';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
-import { MAX_JOURNEY_LEGS, type Journey } from '../journey';
+import type { Journey } from '../journey';
 import { toast } from '../toast';
 
 interface Sent {
@@ -33,14 +33,10 @@ const id = String(route.params.id);
 const order = ref<Sent | null>(null);
 const error = ref('');
 
-const selfDriven = computed(() => Boolean(order.value?.selfDrive));
-const live = computed(() => order.value?.status === 'OPEN' || order.value?.status === 'ASSIGNED');
-/** 接駁: another leg can follow the last leg of a trip, up to the limit. */
-const canAddLeg = computed(() => {
-  const o = order.value;
-  if (!o || o.viewer !== 'dispatcher' || !live.value) return false;
-  return !o.journey || (o.journey.legIndex === o.journey.legCount && o.journey.legCount < MAX_JOURNEY_LEGS);
-});
+/** 這單我自己做 on a 直達 order: nothing to paste. A 接駁 order always has a leg for the group. */
+const selfDriven = computed(() => Boolean(order.value?.selfDrive && !order.value.journey));
+/** 接駁: someone holds each leg, the dispatcher or a driver. */
+const bothTaken = computed(() => Boolean(order.value?.journey?.legs.every((leg) => leg.status !== 'OPEN')));
 
 /**
  * The driver who takes the order reaches the dispatcher by phone, and by WeChat or WhatsApp when
@@ -96,7 +92,7 @@ onMounted(async () => {
 
       <ol class="share__steps" :aria-label="t('進度')">
         <li class="done">{{ t('已出單') }}</li>
-        <li :class="{ done: order.claimedAt }">{{ selfDriven ? t('你自己做') : t('有人接') }}</li>
+        <li :class="{ done: order.journey ? bothTaken : order.claimedAt }">{{ selfDriven ? t('你自己做') : order.journey ? t('兩段都有人接') : t('有人接') }}</li>
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
       </ol>
 
@@ -105,7 +101,7 @@ onMounted(async () => {
         <ol class="share__how">
           <li><span>1</span>{{ t('複製') }}</li>
           <li><span>2</span>{{ t('到群裡長按貼上') }}</li>
-          <li><span>3</span>{{ t('司機點連結搶單') }}</li>
+          <li><span>3</span>{{ order.journey ? t('司機點連結選段搶') : t('司機點連結搶單') }}</li>
         </ol>
         <GroupText :text="order.share.dispatch.wechat" :link-note="t('藍色是這張單的搶單連結，會和文字一起複製')" />
         <div class="share__buttons" :class="{ 'share__buttons--whatsapp-first': !inWeChat }">
@@ -124,7 +120,9 @@ onMounted(async () => {
 
       <section class="card">
         <h2 class="share__label">{{ t('傳給乘客確認') }}</h2>
-        <p class="share__passenger-hint">{{ t('乘客按連結確認行程；有司機接單後，乘客會看到司機和車牌。') }}</p>
+        <p class="share__passenger-hint">
+          {{ order.journey ? t('乘客按連結確認行程，只會知道是接駁、要換車，不會看到接駁位置；兩段有司機後，乘客會看到兩位司機和車牌。') : t('乘客按連結確認行程；有司機接單後，乘客會看到司機和車牌。') }}
+        </p>
         <GroupText :text="order.share.passenger" />
         <button class="button outline block" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
           <AppIcon name="copy" :size="18" />{{ t('複製給乘客') }}
@@ -136,10 +134,8 @@ onMounted(async () => {
       </p>
 
       <div class="share__next">
-        <RouterLink v-if="canAddLeg" class="button secondary" :to="`/app/new?after=${order.id}`"><AppIcon name="add" :size="18" />{{ t('加接駁段') }}</RouterLink>
         <RouterLink class="button secondary" :to="`/app/orders/${order.id}`">{{ t('查看這張單') }}</RouterLink>
       </div>
-      <p v-if="order.journey?.legCount === 1" class="hint share__hint">{{ t('這是接駁單的第 1 段，接著按「加接駁段」發下一段。') }}</p>
     </template>
 
     <BottomSheet v-if="askContact" :title="t('讓接單司機找得到你')" @close="closeAsk">

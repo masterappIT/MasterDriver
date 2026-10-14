@@ -31,34 +31,15 @@ const shown = computed(() => {
   const statuses = PHASES.find((item) => item.value === phase.value)?.statuses ?? [];
   return listed.value.filter(
     (order) =>
-      statuses.includes(order.status) &&
+      statuses.includes(statusOf(order)) &&
       (phase.value !== 'unpaid' || !order.paidAt) &&
       (phase.value !== 'unsettled' || (!order.settledAt && !order.selfDrive)),
   );
 });
 
-/** 接駁: the legs of one trip stay together, in leg order, where the trip's first listed leg appears. */
-const listed = computed(() => {
-  const trips = new Map<string, OrderSummary[]>();
-  const result: (OrderSummary | OrderSummary[])[] = [];
-  for (const order of orders.value) {
-    const trip = order.journey?.legs[0]?.id;
-    if (!trip) {
-      result.push(order);
-      continue;
-    }
-    const legs = trips.get(trip);
-    if (legs) legs.push(order);
-    else {
-      const group = [order];
-      trips.set(trip, group);
-      result.push(group);
-    }
-  }
-  return result.flatMap((entry) =>
-    Array.isArray(entry) ? [...entry].sort((a, b) => (a.journey?.legIndex ?? 0) - (b.journey?.legIndex ?? 0)) : [entry],
-  );
-});
+/** A 接駁 order in the dispatcher's list goes by the whole order's status; a driver's leg by its own. */
+const statusOf = (order: OrderSummary) => (tab.value === 'dispatched' ? (order.journey?.status ?? order.status) : order.status);
+const listed = computed(() => orders.value);
 
 async function load() {
   error.value = '';

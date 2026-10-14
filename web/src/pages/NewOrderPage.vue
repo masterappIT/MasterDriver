@@ -25,35 +25,15 @@ interface PastOrder {
   driverPrice: { amount: number; currency: string } | null;
   passengerPrice?: { amount: number; currency: string } | null;
   showPassengerPrice?: boolean;
-}
-
-interface PreviousLeg {
-  id: string;
-  status: string;
-  selfDrive?: boolean;
-  pickupAt: string;
-  origin: string;
-  destination: string;
-  passengers: number;
-  luggage: number;
-  passengerName: string | null;
-  passengerContact: string | null;
-  contactRevealMinutes?: number | null;
-  driverPrice: { amount: number; currency: string } | null;
-  journey: { legIndex: number } | null;
+  /** 接駁: the whole order's end, where its first leg ends at the 接駁位置. */
+  journey?: { destination: string } | null;
 }
 
 const route = useRoute();
 const router = useRouter();
-/** 加接駁段: this order follows the order in ?after= as the next leg of the trip. */
-const afterId = typeof route.query.after === 'string' ? route.query.after : '';
 /** 成單: this order is made from a booking request sent through the 名片頁. */
 const bookingId = typeof route.query.booking === 'string' ? route.query.booking : '';
 const fromBooking = ref(false);
-const previous = ref<PreviousLeg | null>(null);
-const legNumber = computed(() => (previous.value?.journey?.legIndex ?? 1) + 1);
-/** The 接駁位置 can still move while no other driver holds the previous leg. */
-const placeLocked = computed(() => Boolean(previous.value && previous.value.status !== 'OPEN' && !previous.value.selfDrive));
 const past = ref<PastOrder[]>([]);
 const busy = ref(false);
 const error = ref('');
@@ -64,7 +44,7 @@ function defaultCountry(): CountryCode {
   return (COUNTRY_CODES as readonly string[]).includes(own ?? '') ? (own as CountryCode) : '+852';
 }
 
-/** A contact brought over from an earlier leg or a booking that is not a phone, shown so it can be retyped. */
+/** A contact brought over from a booking or the 通訊錄 that is not a phone, shown so it can be retyped. */
 const carriedContact = ref('');
 
 /** Fills the phone fields from a contact written earlier, or keeps it aside when it is not a phone. */
@@ -101,10 +81,20 @@ const form = reactive({
   passengerCountry: defaultCountry(),
   passengerPhone: '',
   contactRevealMinutes: 60 as number | null,
-  /** 直達 (false) or 接駁 (true): with 接駁 this order ends at the 接駁位置. */
+  /**
+   * 直達 (false) or 接駁 (true): one order from 出發地 to 目的地 in two legs, each its own driver's,
+   * changing cars at the 接駁位置. The time, driver price and plates above are then the first leg's.
+   */
   transfer: false,
   requiredPlates: [] as PlateRegion[],
+  transferPlace: '',
+  secondPickupAt: toLocalInput(new Date(inAnHour.getTime() + 60 * 60 * 1000)),
+  secondCurrency: 'CNY',
+  secondDriverPrice: '',
+  secondPlates: [] as PlateRegion[],
+  /** 這單我自己做 (直達); with 接駁 the dispatcher may drive one leg, never both. */
   selfDrive: false,
+  selfDriveLeg: null as 1 | 2 | null,
   /** 接單池: also list the order for every signed-in driver, not only the groups the link is pasted in. */
   inPool: false,
   /** 收款方式: show the dispatcher's ways to be paid on the passenger's confirmation page. */
@@ -171,11 +161,28 @@ watch(
   },
 );
 
-/** The spread, only when both prices are in the same currency (the API counts it the same way). */
+/** The spread, only when every price is in the same currency (the API counts it the same way). */
 const margin = computed(() => {
-  if (!form.driverPrice || !form.passengerPrice || form.currency !== form.passengerCurrency) return null;
-  return Number(form.passengerPrice) - Number(form.driverPrice);
+  if (!form.passengerPrice) return null;
+  // 接駁: the passenger's one price against what both legs' drivers are paid; a leg the
+  // dispatcher drives pays nobody.
+  const paid = form.transfer
+    ? [
+        { price: form.driverPrice, currency: form.currency, self: form.selfDriveLeg === 1 },
+        { price: form.secondDriverPrice, currency: form.secondCurrency, self: form.selfDriveLeg === 2 },
+      ].filter((leg) => !leg.self)
+    : [{ price: form.driverPrice, currency: form.currency }];
+  if (paid.some((leg) => !leg.price || leg.currency !== form.passengerCurrency)) return null;
+  return Number(form.passengerPrice) - paid.reduce((sum, leg) => sum + Number(leg.price), 0);
 });
+
+/** The second leg starts at the 接駁位置, never before the first; moved along when it would. */
+watch(
+  () => form.pickupAt,
+  (first) => {
+    if (first && form.secondPickupAt < first) form.secondPickupAt = toLocalInput(new Date(new Date(fromLocalInput(first)).getTime() + 60 * 60 * 1000));
+  },
+);
 
 /** Repeats the last order's route and prices; the time and passenger are left for this trip. */
 function copyLast() {
@@ -183,7 +190,7 @@ function copyLast() {
   if (!last) return;
   Object.assign(form, {
     origin: last.origin,
-    destination: last.destination,
+    destination: last.journey?.destination ?? last.destination,
     waypoints: [...last.waypoints],
     passengers: String(last.passengers),
     luggage: String(last.luggage),
@@ -198,8 +205,10 @@ function copyLast() {
   passengerCurrencyChosen.value = Boolean(last.passengerPrice);
 }
 
-function togglePlate(region: PlateRegion) {
-  form.requiredPlates = form.requiredPlates.includes(region) ? form.requiredPlates.filter((item) => item !== region) : [...form.requiredPlates, region];
+function togglePlate(plates: PlateRegion[], region: PlateRegion) {
+  const at = plates.indexOf(region);
+  if (at >= 0) plates.splice(at, 1);
+  else plates.push(region);
 }
 
 function fillPlace(place: string) {
@@ -215,6 +224,10 @@ async function submit() {
   if (!isValidPassengerPhone(form.passengerCountry, form.passengerPhone)) {
     error.value = t(form.passengerCountry === '+86' ? '乘客電話請填 11 位內地手機號碼' : '乘客電話請填 8 位數字');
     document.getElementById('passenger-phone')?.focus();
+    return;
+  }
+  if (form.transfer && form.secondPickupAt < form.pickupAt) {
+    error.value = t('第 2 段的時間不能早於第 1 段');
     return;
   }
   busy.value = true;
@@ -235,14 +248,20 @@ async function submit() {
       passengerName: form.passengerName,
       passengerContact: formatPassengerPhone(form.passengerCountry, form.passengerPhone),
       contactRevealMinutes: form.contactRevealMinutes,
-      afterOrderId: afterId || undefined,
       bookingId: fromBooking.value ? bookingId : undefined,
-      transfer: !afterId && form.transfer,
-      requiredPlates: afterId || form.transfer ? form.requiredPlates : [],
-      selfDrive: form.selfDrive,
-      inPool: !form.selfDrive && form.inPool,
-      // A leg follows its trip's choice; the server takes it from the first leg.
-      showPaymentMethods: !afterId && form.showPaymentMethods,
+      transfer: form.transfer
+        ? {
+            place: form.transferPlace,
+            pickupAt: fromLocalInput(form.secondPickupAt),
+            driverPrice: price(form.secondDriverPrice, form.secondCurrency),
+            requiredPlates: form.secondPlates,
+            selfDriveLeg: form.selfDriveLeg,
+          }
+        : undefined,
+      requiredPlates: form.transfer ? form.requiredPlates : [],
+      selfDrive: !form.transfer && form.selfDrive,
+      inPool: !(!form.transfer && form.selfDrive) && form.inPool,
+      showPaymentMethods: form.showPaymentMethods,
     });
     // Straight to the texts to paste: getting the order into the groups is the point of dispatching.
     await router.replace(`/app/orders/${created.id}/share`);
@@ -250,26 +269,6 @@ async function submit() {
     error.value = errorText(e);
   } finally {
     busy.value = false;
-  }
-}
-
-/** The next leg carries the same passenger and starts where and after the previous leg ends. */
-async function loadPrevious() {
-  try {
-    const leg = await api<PreviousLeg>('GET', `/orders/${afterId}`);
-    previous.value = leg;
-    Object.assign(form, {
-      pickupAt: toLocalInput(new Date(new Date(leg.pickupAt).getTime() + 60 * 60 * 1000)),
-      origin: leg.destination,
-      passengers: String(leg.passengers),
-      luggage: String(leg.luggage),
-      passengerName: leg.passengerName ?? '',
-      contactRevealMinutes: leg.contactRevealMinutes ?? null,
-      currency: leg.driverPrice?.currency ?? form.currency,
-    });
-    carryContact(leg.passengerContact);
-  } catch (e) {
-    error.value = errorText(e);
   }
 }
 
@@ -313,8 +312,11 @@ async function loadBooking() {
 const moreSummary = computed(() =>
   [
     `乘客電話：${revealLabel(form.contactRevealMinutes)}`,
-    form.selfDrive ? '這單我自己做' : form.inPool ? '放進接單池' : '只給拿到連結的人',
-  ].join(' · '),
+    form.transfer && form.selfDriveLeg ? `第 ${form.selfDriveLeg} 段我自己做` : '',
+    !form.transfer && form.selfDrive ? '這單我自己做' : form.inPool ? '放進接單池' : '只給拿到連結的人',
+  ]
+    .filter(Boolean)
+    .join(' · '),
 );
 
 /** 客人通訊錄: pick a passenger of an earlier order instead of typing the name and phone again. */
@@ -349,8 +351,7 @@ onMounted(async () => {
     form.contactRevealMinutes = preferences.contactRevealMinutes;
     form.inPool = preferences.poolByDefault;
   }
-  if (afterId) await loadPrevious();
-  else if (bookingId) await loadBooking();
+  if (bookingId) await loadBooking();
   else if (pickedPassenger.value) usePassenger(pickedPassenger.value);
   pickedPassenger.value = null;
 });
@@ -358,23 +359,17 @@ onMounted(async () => {
 
 <template>
   <form class="page new-order" @submit.prevent="submit">
-    <PageBack :title="afterId ? t(`加接駁段（第 ${legNumber} 段）`) : t('出單')" :fallback="afterId ? `/app/orders/${afterId}` : bookingId ? `/app/bookings/${bookingId}` : '/app'" history>
-      <button v-if="past.length && !afterId" class="chip new-order__copy" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
+    <PageBack :title="t('出單')" :fallback="bookingId ? `/app/bookings/${bookingId}` : '/app'" history>
+      <button v-if="past.length" class="chip new-order__copy" type="button" @click="copyLast">{{ t('複製上一張') }}</button>
     </PageBack>
     <div v-if="error" class="notice error">{{ error }}</div>
-
-    <div v-if="previous" class="new-order__previous">
-      <span class="section-label">{{ t(`接在第 ${legNumber - 1} 段後面`) }}</span>
-      <strong>{{ pickup(previous.pickupAt) }}　{{ t(`${previous.origin} 至 ${previous.destination}`) }}</strong>
-      <p class="hint">{{ t('同一位乘客，已帶入接駁位置、人數、行李和乘客資料。這一段另外貼到群裡搶，平台服務費整個行程只收一次。') }}</p>
-    </div>
 
     <div v-if="fromBooking" class="notice">
       {{ form.passengerPrice ? t('已帶入名片頁預約的資料和你的報價（作為乘客價）。填出單價後出單，貼到群裡派給其他司機。') : t('已帶入名片頁預約的資料。填出單價後出單，貼到群裡派給其他司機。') }}
     </div>
 
     <!-- 一句話出單: written like a message in the group, so it looks like one. -->
-    <div v-if="!afterId && !fromBooking" class="quick-line">
+    <div v-if="!fromBooking" class="quick-line">
       <textarea
         ref="lineInput"
         v-model="line"
@@ -390,16 +385,16 @@ onMounted(async () => {
     </div>
 
     <section class="card">
-      <div v-if="!afterId" class="segment segment--block new-order__mode" role="group" :aria-label="t('直達或接駁')">
+      <div class="segment segment--block new-order__mode" role="group" :aria-label="t('直達或接駁')">
         <button type="button" :aria-pressed="!form.transfer" @click="form.transfer = false">{{ t('直達') }}</button>
         <button type="button" :aria-pressed="form.transfer" @click="form.transfer = true">{{ t('接駁（中途換車）') }}</button>
       </div>
-      <p v-if="form.transfer && !afterId" class="hint new-order__explain">
-        {{ t('這張單是第 1 段，目的地填接駁位置。出單後按「加接駁段」出下一段。乘客自行過關不算接駁。') }}
+      <p v-if="form.transfer" class="hint new-order__explain">
+        {{ t('一張單分兩段，在接駁位置換車，各由一位司機接。群裡貼一條訊息，司機選段搶；乘客只看到一個價格。乘客自行過關不算接駁。') }}
       </p>
 
       <label class="line-field">
-        <span>{{ t('出發時間（香港時間）') }}</span>
+        <span>{{ form.transfer ? t('第 1 段出發時間（香港時間）') : t('出發時間（香港時間）') }}</span>
         <input v-model="form.pickupAt" class="line-input new-order__time" type="datetime-local" required />
       </label>
 
@@ -410,13 +405,10 @@ onMounted(async () => {
             v-model="form.origin"
             class="line-input"
             maxlength="120"
-            :aria-label="afterId ? t('接駁位置（這一段的出發地）') : t('出發地')"
-            :placeholder="afterId ? t('接駁位置') : t('從哪裡出發，例如：深圳灣口岸')"
+            :aria-label="t('出發地')"
+            :placeholder="t('從哪裡出發，例如：深圳灣口岸')"
             required
           />
-          <span v-if="previous && form.origin.trim() !== previous.destination" class="hint">
-            {{ placeLocked ? t('上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段。') : t('上一段的目的地會一起改成這個接駁位置。') }}
-          </span>
         </li>
         <li v-for="(_, index) in form.waypoints" :key="index" class="route-inputs__stop route-inputs__stop--via">
           <div class="new-order__via">
@@ -426,17 +418,25 @@ onMounted(async () => {
             </button>
           </div>
         </li>
+        <!-- 接駁: where the first leg ends and the second begins, set by the dispatcher. -->
+        <li v-if="form.transfer" class="route-inputs__stop route-inputs__stop--transfer">
+          <input v-model="form.transferPlace" class="line-input" maxlength="120" :aria-label="t('接駁位置')" :placeholder="t('接駁位置（在哪裡換車），例如：深圳灣口岸')" required />
+        </li>
         <li class="route-inputs__stop route-inputs__stop--destination">
           <input
             v-model="form.destination"
             class="line-input"
             maxlength="120"
-            :aria-label="form.transfer && !afterId ? t('接駁位置（這一段的目的地）') : t('目的地')"
-            :placeholder="form.transfer && !afterId ? t('在哪裡換車（接駁位置）') : t('去哪裡，例如：香港國際機場')"
+            :aria-label="t('目的地')"
+            :placeholder="form.transfer ? t('最後去哪裡，例如：廣州') : t('去哪裡，例如：香港國際機場')"
             required
           />
         </li>
       </ol>
+      <label v-if="form.transfer" class="line-field new-order__second-time">
+        <span>{{ t('第 2 段出發時間（在接駁位置換車）') }}</span>
+        <input v-model="form.secondPickupAt" class="line-input new-order__time" type="datetime-local" :min="form.pickupAt" required />
+      </label>
       <div class="chips new-order__places">
         <button v-if="form.waypoints.length < 5" class="chip" type="button" @click="form.waypoints.push('')">{{ t('加途經點') }}</button>
         <button v-for="place in places" :key="place" class="chip" type="button" @click="fillPlace(place)">{{ t(place) }}</button>
@@ -458,20 +458,23 @@ onMounted(async () => {
           <input v-model.trim="form.vehicleType" class="line-input" maxlength="30" :placeholder="t('7座')" required />
         </label>
       </div>
-      <div v-if="afterId || form.transfer" class="line-field">
-        <span>{{ t('這一段要甚麼車牌（選填）') }}</span>
-        <div class="chips new-order__plates">
-          <button
-            v-for="(name, region) in PLATE_NAMES"
-            :key="region"
-            class="chip"
-            :class="{ 'chip--on': form.requiredPlates.includes(region) }"
-            type="button"
-            :aria-pressed="form.requiredPlates.includes(region)"
-            @click="togglePlate(region)"
-          >
-            {{ t(name) }}
-          </button>
+      <div v-if="form.transfer" class="line-field">
+        <span>{{ t('每段要甚麼車牌（選填）') }}</span>
+        <div v-for="(plates, index) in [form.requiredPlates, form.secondPlates]" :key="index" class="new-order__leg-plates">
+          <span class="hint">{{ t(`第 ${index + 1} 段`) }}</span>
+          <div class="chips new-order__plates">
+            <button
+              v-for="(name, region) in PLATE_NAMES"
+              :key="region"
+              class="chip"
+              :class="{ 'chip--on': plates.includes(region) }"
+              type="button"
+              :aria-pressed="plates.includes(region)"
+              @click="togglePlate(plates, region)"
+            >
+              {{ t(name) }}
+            </button>
+          </div>
         </div>
         <span class="hint">{{ t('只在群文字和搶單頁標明，平台不審核車牌，任何司機都可以搶。') }}</span>
       </div>
@@ -482,16 +485,34 @@ onMounted(async () => {
     </section>
 
     <section class="card">
-      <span class="section-label">{{ t('出單價，拿到連結的司機看得到') }}</span>
+      <span class="section-label">{{ form.transfer ? t('出單價，每段給接那一段的司機') : t('出單價，拿到連結的司機看得到') }}</span>
       <div class="amount-line">
-        <select v-model="form.currency" :aria-label="t('幣種')">
+        <span v-if="form.transfer" class="new-order__leg-label">{{ t('第 1 段') }}</span>
+        <select v-model="form.currency" :aria-label="form.transfer ? t('第 1 段幣種') : t('幣種')">
           <option value="CNY">RMB¥</option>
           <option value="HKD">HK$</option>
           <option value="MOP">MOP$</option>
         </select>
-        <input v-model="form.driverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :placeholder="t('出單價')" />
+        <input
+          v-model="form.driverPrice"
+          type="number"
+          min="0"
+          step="0.01"
+          inputmode="decimal"
+          :aria-label="form.transfer ? t('第 1 段出單價') : t('出單價')"
+          :placeholder="t('出單價')"
+        />
       </div>
-      <span class="section-label new-order__passenger-price">{{ t('乘客價，只有你看得到') }}</span>
+      <div v-if="form.transfer" class="amount-line new-order__second-price">
+        <span class="new-order__leg-label">{{ t('第 2 段') }}</span>
+        <select v-model="form.secondCurrency" :aria-label="t('第 2 段幣種')">
+          <option value="CNY">RMB¥</option>
+          <option value="HKD">HK$</option>
+          <option value="MOP">MOP$</option>
+        </select>
+        <input v-model="form.secondDriverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('第 2 段出單價')" :placeholder="t('出單價')" />
+      </div>
+      <span class="section-label new-order__passenger-price">{{ form.transfer ? t('乘客價（整趟一個價），只有你看得到') : t('乘客價，只有你看得到') }}</span>
       <div class="amount-line amount-line--quiet">
         <select v-model="form.passengerCurrency" :aria-label="t('乘客價幣種')" @change="passengerCurrencyChosen = true">
           <option value="CNY">RMB¥</option>
@@ -506,7 +527,7 @@ onMounted(async () => {
         <span>{{ t('乘客確認頁顯示乘客價') }}</span>
         <input v-model="form.showPassengerPrice" class="switch" type="checkbox" />
       </label>
-      <label v-if="!afterId" class="new-order__switch">
+      <label class="new-order__switch">
         <span>
           {{ t('乘客確認頁顯示收款方式') }}
           <small v-if="paymentMethodCount === 0">
@@ -548,7 +569,7 @@ onMounted(async () => {
     </section>
 
     <!-- Settings most orders leave at the driver's defaults; folded so the form shows only what must be filled. -->
-    <details class="card new-order__more" :open="fromBooking || form.selfDrive">
+    <details class="card new-order__more" :open="fromBooking || form.selfDrive || form.selfDriveLeg !== null">
       <summary>
         <span class="new-order__more-text">
           <strong>{{ t('更多設定') }}</strong>
@@ -563,7 +584,19 @@ onMounted(async () => {
         </span>
         <RevealSelect v-model="form.contactRevealMinutes" class="select--inline" />
       </label>
-      <label class="new-order__switch">
+      <!-- 接駁: the dispatcher may drive one of the two legs; the other always goes to the group. -->
+      <div v-if="form.transfer" class="line-field new-order__self-leg">
+        <span>
+          {{ t('自己做其中一段') }}
+          <small class="hint">{{ session.profile ? t('那一段直接算你接，另一段貼到群裡搶') : t('請先在「我的」填寫司機資料') }}</small>
+        </span>
+        <div class="segment" role="group" :aria-label="t('自己做其中一段')">
+          <button type="button" :aria-pressed="form.selfDriveLeg === null" @click="form.selfDriveLeg = null">{{ t('都給別人') }}</button>
+          <button type="button" :aria-pressed="form.selfDriveLeg === 1" @click="form.selfDriveLeg = 1">{{ t('第 1 段') }}</button>
+          <button type="button" :aria-pressed="form.selfDriveLeg === 2" @click="form.selfDriveLeg = 2">{{ t('第 2 段') }}</button>
+        </div>
+      </div>
+      <label v-if="!form.transfer" class="new-order__switch">
         <span>
           {{ t('這單我自己做') }}
           <small>
@@ -578,7 +611,7 @@ onMounted(async () => {
         </span>
         <input v-model="form.selfDrive" class="switch" type="checkbox" />
       </label>
-      <label v-if="!form.selfDrive" class="new-order__switch">
+      <label v-if="form.transfer || !form.selfDrive" class="new-order__switch">
         <span>
           {{ t('同時放到接單池') }}
           <small>{{ t('登入的司機都看得到並可以搶，乘客資料仍只給搶到的司機') }}</small>
@@ -588,7 +621,7 @@ onMounted(async () => {
     </details>
 
     <div class="action-bar">
-      <button class="button block large" type="submit" :disabled="busy || (afterId !== '' && !previous)">{{ afterId ? t('出單（接駁段）') : t('出單') }}</button>
+      <button class="button block large" type="submit" :disabled="busy">{{ t('出單') }}</button>
     </div>
 
     <BottomSheet v-if="pickingPassenger" :title="t('從通訊錄選乘客')" @close="pickingPassenger = false">
@@ -611,17 +644,6 @@ onMounted(async () => {
 }
 .new-order__copy {
   white-space: nowrap;
-}
-.new-order__previous {
-  display: flex;
-  flex-direction: column;
-  margin: 0 var(--space-xs) var(--space-lg);
-}
-.new-order__previous .section-label {
-  margin-bottom: 2px;
-}
-.new-order__previous .hint {
-  margin: var(--space-xs) 0 0;
 }
 /* 一句話出單 looks like a message bubble from the group. */
 .quick-line {
@@ -658,6 +680,27 @@ onMounted(async () => {
 }
 .new-order__mode {
   margin-bottom: var(--space-lg);
+}
+.new-order__second-time {
+  margin-top: var(--space-md);
+}
+.new-order__leg-plates + .new-order__leg-plates {
+  margin-top: var(--space-xs);
+}
+.new-order__leg-label {
+  flex: none;
+  align-self: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+}
+.new-order__second-price {
+  margin-top: var(--space-sm);
+}
+.new-order__self-leg {
+  margin-bottom: var(--space-md);
+}
+.new-order__self-leg small {
+  display: block;
 }
 .new-order__explain {
   margin: calc(var(--space-sm) * -1) 0 var(--space-lg);

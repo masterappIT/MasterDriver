@@ -437,6 +437,12 @@ input[type='checkbox'].switch:checked::after {
   width: 8px;
   height: 8px;
 }
+/* 接駁位置: a ring, where the first car hands over to the second. */
+.route-inputs__stop--transfer::before {
+  box-sizing: border-box;
+  border: 3px solid var(--color-primary);
+  background: var(--color-surface, #fff);
+}
 .route-inputs__stop .line-input {
   font-weight: 600;
 }

@@ -30,16 +30,11 @@ interface TripDriver {
   photos: string[];
 }
 
-/** 接駁: one leg of the trip, with its own driver. */
+/** 接駁: one leg of the trip and its driver. The passenger is not told where the cars meet. */
 interface TripLeg {
   legIndex: number;
   status: string;
-  pickupAt: string;
-  origin: string;
-  destination: string;
-  waypoints: string[];
-  vehicleType: string | null;
-  price: { amount: number; currency: string } | null;
+  passengerConfirmedAt: string | null;
   driver: TripDriver | null;
 }
 
@@ -61,7 +56,8 @@ interface PassengerView {
   /** 行程群: the group made for this trip, when the person who arranged it gave one. */
   tripGroup: TripGroup | null;
   driver: TripDriver | null;
-  /** Every leg that is not cancelled, when the trip changes cars on the way. */
+  /** 接駁: the car changes on the way; `legs` then holds both legs and their drivers. */
+  transfer?: boolean;
   legs: TripLeg[] | null;
   /** 收款: how to pay the dispatcher, when they chose to show it. */
   payment: PassengerPayment | null;
@@ -148,22 +144,18 @@ onBeforeUnmount(() => {
 
       <!-- A finished trip shows only that it is over and who arranged it. -->
       <template v-if="trip.status === 'COMPLETED'" />
+      <!-- 接駁: one trip and one price; the passenger only needs to know the car changes on the way. -->
       <template v-else-if="trip.legs && trip.legs.length > 1">
         <section class="card">
           <div class="confirm-page__time">{{ pickup(trip.pickupAt) }}</div>
-          <RoutePoints :origin="trip.origin" :destination="trip.destination" />
-          <p class="confirm-page__load">{{ t(`${loadLine(trip.passengers, trip.luggage)}｜中途換車，共 ${trip.legs.length} 段`) }}</p>
+          <RoutePoints :origin="trip.origin" :destination="trip.destination" :waypoints="trip.waypoints" />
+          <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
+          <p class="confirm-page__transfer">{{ t('接駁行程：中途會換車，由兩位司機接送。') }}</p>
+          <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(trip.price) }}</strong></div>
         </section>
         <template v-for="leg in trip.legs" :key="leg.legIndex">
-          <p v-if="leg.legIndex > 1" class="confirm-page__handoff">
-            {{ t(`在 ${leg.origin} 換車`) }}
-          </p>
           <section class="card">
-            <span class="leg-tag">{{ t(`第 ${leg.legIndex} 段`) }}</span>
-            <div class="confirm-page__leg-time">{{ pickup(leg.pickupAt) }}</div>
-            <div class="confirm-page__leg-route">{{ t(`${leg.origin} 至 ${leg.destination}`) }}</div>
-            <p v-if="leg.waypoints.length" class="muted">{{ t(`途經 ${leg.waypoints.join('、')}`) }}</p>
-            <div v-if="leg.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(leg.price) }}</strong></div>
+            <p class="confirm-page__label">{{ leg.legIndex === 1 ? t('第 1 段司機（先接你的車）') : t('第 2 段司機（換車後的車）') }}</p>
             <div v-if="leg.driver" class="confirm-page__driver">
               <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>
               <span class="muted">{{ [leg.driver.vehicleType, leg.driver.color, plateKind(leg.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
@@ -353,19 +345,10 @@ onBeforeUnmount(() => {
   margin: var(--space-sm) 0;
   font-size: 22px;
 }
-.confirm-page__handoff {
-  margin: 0 0 var(--space-md) var(--space-md);
-  color: var(--color-text-secondary);
+.confirm-page__transfer {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-primary);
   font-weight: 600;
-}
-.confirm-page__leg-time {
-  font-size: 20px;
-  font-weight: 700;
-  margin-top: var(--space-sm);
-}
-.confirm-page__leg-route {
-  font-weight: 600;
-  margin: var(--space-xs) 0 var(--space-sm);
 }
 .confirm-page__pay {
   display: flex;

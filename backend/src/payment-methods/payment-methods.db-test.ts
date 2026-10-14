@@ -68,27 +68,19 @@ test('the passenger sees how to pay only when the order shows it; QR images only
   assert.equal(await ctx.paymentMethods.passengerQr(shownCode, method.id), null);
 });
 
-test('已收款 is the dispatcher’s mark; a 接駁 trip is paid once, and a new leg follows the trip', async () => {
+test('已收款 is the dispatcher’s mark; a 接駁 order is paid once, for one amount', async () => {
   const dispatcher = await createDriver(ctx);
   await ctx.paymentMethods.create(dispatcher, fps);
   const first = await ctx.orders.create(dispatcher, {
     ...sampleOrder,
-    destination: '港珠澳大橋香港口岸',
-    transfer: true,
-    passengerPrice: { amount: 500, currency: 'HKD' },
-    showPaymentMethods: true,
-  });
-  const second = await ctx.orders.create(dispatcher, {
-    ...sampleOrder,
-    pickupAt: '2026-10-15T16:00:00+08:00',
-    origin: '港珠澳大橋香港口岸',
     destination: '澳門',
-    passengerPrice: { amount: 300, currency: 'HKD' },
-    afterOrderId: first.id,
+    passengerPrice: { amount: 800, currency: 'HKD' },
+    showPaymentMethods: true,
+    transfer: { place: '港珠澳大橋香港口岸', pickupAt: '2026-10-15T16:00:00+08:00', requiredPlates: ['MACAU'], selfDriveLeg: null },
   });
-  const leg = await ctx.prisma.order.findUniqueOrThrow({ where: { id: second.id } });
-  assert.equal(leg.showPaymentMethods, true, 'the new leg follows the trip');
-  assert.deepEqual((await ctx.orders.getForPassenger(await confirmOf(first.id))).payment?.amount, { amount: 800, currency: 'HKD' }, 'one amount for the trip');
+  const second = await ctx.prisma.order.findFirstOrThrow({ where: { journeyId: first.id, legIndex: 2 } });
+  assert.equal(second.showPaymentMethods, true, 'both legs follow the order');
+  assert.deepEqual((await ctx.orders.getForPassenger(await confirmOf(first.id))).payment?.amount, { amount: 800, currency: 'HKD' }, 'one amount for the order');
 
   await rejectsWith(ctx.orders.setPayment(await createDriver(ctx), first.id, { paid: true }), 'ORDER_NOT_FOUND');
   const marked = await ctx.orders.setPayment(dispatcher, second.id, { paid: true });

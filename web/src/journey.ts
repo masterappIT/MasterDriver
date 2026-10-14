@@ -1,5 +1,5 @@
 /** Same as MAX_JOURNEY_LEGS in shared/src/schemas.ts (not imported, to keep zod out of the bundle). */
-export const MAX_JOURNEY_LEGS = 4;
+export const MAX_JOURNEY_LEGS = 2;
 
 export interface LegDriver {
   name: string | null;
@@ -19,16 +19,28 @@ export interface JourneyLeg {
   pickupAt: string;
   origin: string;
   destination: string;
+  /** The leg's own claim code: the one link in the group offers both legs. */
+  code: string;
+  requiredPlates: PlateRegion[];
+  driverPrice: { amount: number; currency: string } | null;
+  /** The signed-in user holds this leg. */
+  mine: boolean;
+  /** The dispatcher drives this leg themselves (這段我自己做). */
+  selfDrive: boolean;
   /** Only for the dispatcher. */
   id?: string;
   /** Only for the dispatcher and this leg's driver. */
   driver?: LegDriver | null;
 }
 
-/** 接駁: the trip around an order, as the API returns it. */
+/** 接駁: the order around a leg, as the API returns it: one order from origin to destination in two legs. */
 export interface Journey {
   legIndex: number;
   legCount: number;
+  /** The whole order's status: open while either leg still waits for a driver. */
+  status: string;
+  origin: string;
+  destination: string;
   /** 接駁位置: where this order's car meets the car of the leg before or after it. */
   transferPlaces: string[];
   legs: JourneyLeg[];

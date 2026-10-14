@@ -66,6 +66,20 @@ export function marginOf(
   return money(order.passengerPriceMinor - order.driverPriceMinor, order.passengerCurrency);
 }
 
+/**
+ * The spread the dispatcher sees. On a 接駁 order the passenger's one price, kept on the first
+ * leg, is set against both legs' driver prices (a leg the dispatcher drives pays nobody); the
+ * second leg shows none.
+ */
+function spreadOf(order: OrderWithPeople) {
+  const legs = legsOf(order)?.filter((leg) => leg.status !== 'CANCELLED');
+  if (!legs || legs.length < 2) return marginOf(order);
+  if (order.legIndex !== 1 || order.passengerPriceMinor === null) return null;
+  const paid = legs.filter((leg) => leg.claimedById !== order.dispatcherId);
+  if (paid.some((leg) => leg.driverPriceMinor === null || leg.driverCurrency !== order.passengerCurrency)) return null;
+  return money(order.passengerPriceMinor - paid.reduce((sum, leg) => sum + (leg.driverPriceMinor as number), 0), order.passengerCurrency);
+}
+
 type ContactPage = { code: string; published: boolean; wechatId: string; whatsapp: string } | null;
 
 /**
@@ -139,18 +153,30 @@ export function linksOf(order: Pick<OrderWithPeople, 'code' | 'confirmCode'>, ba
   return { dispatch: `${baseUrl}/o/${order.code}`, passengerConfirm: `${baseUrl}/c/${order.confirmCode}` };
 }
 
+/** A 接駁 order's status as a whole: cancelled legs drop out. */
+function tripStatus(legs: { status: OrderWithPeople['status'] }[]): OrderWithPeople['status'] {
+  const live = legs.filter((leg) => leg.status !== 'CANCELLED');
+  if (live.length === 0) return 'CANCELLED';
+  if (live.every((leg) => leg.status === 'COMPLETED')) return 'COMPLETED';
+  return live.some((leg) => leg.status === 'OPEN') ? 'OPEN' : 'ASSIGNED';
+}
+
 /**
- * 接駁: the trip around this order. Anyone sees where and when each leg runs;
- * the dispatcher sees every leg's driver, and the driver of this leg sees the
- * drivers of the other legs, their phones from the time they may see the
- * passenger's contact, so they can tell each other about delays at the 接駁位置.
+ * 接駁: the order around this leg. Anyone sees where and when each leg runs and the code to
+ * claim it by, so the one link in the group offers both legs; `mine` marks the leg this user
+ * holds. The dispatcher sees every leg's driver, and the driver of this leg sees the driver of
+ * the other, their phone from the time they may see the passenger's contact, so they can tell
+ * each other about delays at the 接駁位置.
  */
-function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boolean) {
+function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boolean, userId?: string) {
   const legs = legsOf(order);
   if (!legs || order.legIndex === null) return null;
   return {
     legIndex: order.legIndex,
     legCount: legs.length,
+    status: tripStatus(legs),
+    origin: legs[0].origin,
+    destination: legs[legs.length - 1].destination,
     transferPlaces: transferPlacesOf({ ...order, legIndex: order.legIndex, legCount: legs.length }),
     legs: legs.map((leg) => {
       const driver = viewer !== 'other' && leg.status !== 'CANCELLED' ? driverOf(leg) : null;
@@ -160,6 +186,11 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         pickupAt: leg.pickupAt.toISOString(),
         origin: leg.origin,
         destination: leg.destination,
+        code: leg.code,
+        requiredPlates: leg.requiredPlates,
+        driverPrice: driverPriceOf(leg),
+        mine: Boolean(userId && leg.claimedById === userId),
+        selfDrive: leg.claimedById === order.dispatcherId,
         ...(viewer === 'dispatcher' ? { id: leg.id } : {}),
         ...(viewer !== 'other'
           ? { driver: driver && (contactVisible ? driver : { ...driver, phone: null, phones: [], wechatId: null, whatsapp: null }) }
@@ -175,7 +206,7 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
  * won the claim. Drivers only ever see the driver price; the passenger price,
  * the spread and the links are only for the dispatcher.
  */
-export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: string, now = new Date()) {
+export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: string, now = new Date(), userId?: string) {
   const participant = viewer !== 'other';
   const revealAt = contactRevealAt(order);
   // The passenger is the dispatcher's customer: once the trip is done or cancelled, the driver
@@ -196,7 +227,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     driverPrice: driverPriceOf(order),
     notes: order.notes,
     requiredPlates: order.requiredPlates,
-    journey: journeyOf(order, viewer, contactVisible),
+    journey: journeyOf(order, viewer, contactVisible, userId),
     dispatcherName: order.dispatcher.profile?.name ?? null,
     // Before claiming, a driver can look at who put the order out: their 名片頁, when it is public.
     dispatcherPageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,
@@ -233,7 +264,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
           passengerPrice: passengerPriceOf(order),
           serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
           showPassengerPrice: order.showPassengerPrice,
-          margin: marginOf(order),
+          margin: spreadOf(order),
           showPaymentMethods: order.showPaymentMethods,
           paidAt: order.paidAt?.toISOString() ?? null,
           links: linksOf(order, baseUrl),
@@ -277,14 +308,6 @@ function passengerLeg(leg: JourneyLeg, confirmCode: string) {
   };
 }
 
-/** A trip's status as the passenger sees it: cancelled legs drop out. */
-function tripStatus(legs: { status: OrderWithPeople['status'] }[]): OrderWithPeople['status'] {
-  const live = legs.filter((leg) => leg.status !== 'CANCELLED');
-  if (live.length === 0) return 'CANCELLED';
-  if (live.every((leg) => leg.status === 'COMPLETED')) return 'COMPLETED';
-  return live.some((leg) => leg.status === 'OPEN') ? 'OPEN' : 'ASSIGNED';
-}
-
 /**
  * What the passenger sees on the confirmation link. The driver price never
  * appears; the passenger price appears only when the dispatcher chose to show
@@ -305,6 +328,9 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
   // With one leg left (the others cancelled) the page shows that leg like a single order.
   const lead = shown ? shown[0] : single;
   const status = allLegs ? tripStatus(allLegs) : order.status;
+  // 接駁: the passenger is told the car changes on the way and who drives each leg, never where
+  // the cars meet: that is between the dispatcher and the two drivers.
+  const transfer = Boolean(shown && shown.length > 1);
   return {
     status,
     pickupAt: lead.pickupAt,
@@ -335,6 +361,9 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
     // is over: the driver is in it, and the passenger no longer gets ways to reach the driver.
     tripGroup: status === 'COMPLETED' ? null : tripGroupOf(order, `/api/c/${order.confirmCode}/trip-group/qr`, false, now),
     driver: lead.driver,
-    legs: shown,
+    transfer,
+    legs: transfer
+      ? shown!.map(({ legIndex, status: legStatus, passengerConfirmedAt, driver }) => ({ legIndex, status: legStatus, passengerConfirmedAt, driver }))
+      : null,
   };
 }
