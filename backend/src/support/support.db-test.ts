@@ -287,3 +287,40 @@ test('opening a conversation reads it for the whole inbox; it still waits for a 
   await ctx.support.staffSendText(item.id, admin, text('收到'), '1.1.1.1');
   assert.equal(await ctx.support.unreadCount(), 0, 'replying reads it too');
 });
+
+test('a deleted conversation is gone for good: messages, files, the user’s 客服 notifications; the audit says who and whose', async () => {
+  const userId = await createDriver(ctx, '陳師傅');
+  const user = asUser(userId);
+  const admin = await staff();
+  await ctx.support.sendText(user, text('我想取消帳號'));
+  const picture = await ctx.support.sendMedia(user, jpeg(), cid());
+  const key = (await ctx.prisma.supportMedia.findUniqueOrThrow({ where: { id: picture.media!.id } })).storageKey;
+  const conversation = (await ctx.support.list({ page: 1, filter: 'all', q: undefined })).items[0];
+  await ctx.support.staffSendText(conversation.id, admin, text('收到'), '1.1.1.1');
+  assert.ok((await ctx.prisma.notification.count({ where: { userId, kind: 'SUPPORT_REPLY' } })) > 0);
+
+  assert.deepEqual(await ctx.support.staffDelete(conversation.id, admin, '1.1.1.1'), { deleted: true });
+
+  assert.equal(await ctx.prisma.supportConversation.count(), 0);
+  assert.equal(await ctx.prisma.supportMessage.count(), 0);
+  assert.equal(await ctx.prisma.supportMedia.count(), 0);
+  assert.equal(await ctx.mediaStorage.read(key), null, 'the picture left storage');
+  assert.equal(await ctx.prisma.notification.count({ where: { userId, kind: 'SUPPORT_REPLY' } }), 0);
+  const audit = await ctx.prisma.adminAuditLog.findFirstOrThrow({ where: { action: 'support.delete' } });
+  assert.equal(audit.adminId, admin.id);
+  assert.deepEqual(audit.detail, { userId, guest: false, messages: 3 });
+  assert.ok(!JSON.stringify(audit).includes('取消帳號'), 'never what was said');
+
+  // The user's 客服 page starts empty; the next message opens a new conversation.
+  assert.deepEqual((await ctx.support.thread(user, {})).messages, []);
+  await ctx.support.sendText(user, text('還在嗎？'));
+  const fresh = (await ctx.support.list({ page: 1, filter: 'all', q: undefined })).items[0];
+  assert.notEqual(fresh.id, conversation.id);
+  await rejectsWith(ctx.support.staffDelete(conversation.id, admin), 'SUPPORT_CONVERSATION_NOT_FOUND');
+
+  // A guest's token no longer finds anything; their next message starts over.
+  const { token, guest } = await asGuest();
+  await ctx.support.sendText(guest, text('訪客問題'));
+  await ctx.support.staffDelete(guest.type === 'GUEST' ? guest.conversationId : '', admin);
+  assert.equal(await ctx.support.guestParticipant(token), null);
+});

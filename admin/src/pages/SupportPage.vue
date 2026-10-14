@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, apiFetch } from '../api';
+import { api, apiFetch, can } from '../api';
+import { ask, notify } from '../feedback';
 import { dateTime, PLATE_TYPE } from '../format';
 import { incomingTracker, playAlert, readAlertSound, writeAlertSound } from '../support-alert';
 import { supportUnread } from '../support-unread';
@@ -304,6 +305,33 @@ function onKey(event: KeyboardEvent) {
   }
 }
 
+/**
+ * 刪除對話 (超級管理員 only): every message, picture and video goes, and the user's 客服 page starts
+ * empty. The audit trail keeps who deleted whose conversation.
+ */
+async function deleteConversation() {
+  const open = thread.value;
+  if (!open || sending.value) return;
+  const confirmed = await ask({
+    title: '刪除這段對話',
+    text: `「${who(open.conversation)}」的所有訊息、圖片和影片都會刪除，對方的客服頁也會一起清空。刪除後無法復原。`,
+    confirm: '刪除對話',
+    danger: true,
+  });
+  if (confirmed === null) return;
+  sending.value = true;
+  try {
+    await api('DELETE', `/support/conversations/${open.conversation.id}`);
+    notify('已刪除對話');
+    await router.push('/support');
+    await loadInbox();
+  } catch (e) {
+    notify((e as Error).message, true);
+  } finally {
+    sending.value = false;
+  }
+}
+
 /** 不用回覆: off the waiting list without a reply; a message newer than the last one on screen keeps it there. */
 async function markHandled() {
   const open = thread.value;
@@ -519,6 +547,7 @@ onBeforeUnmount(() => {
             不用回覆
           </button>
           <button class="button secondary" type="button" :aria-expanded="details" @click="toggleDetails">{{ details ? '收起資料' : '詳細資料' }}</button>
+          <button v-if="can.superAdmin()" class="button danger" type="button" :disabled="sending" @click="deleteConversation">刪除對話</button>
         </div>
       </header>
 

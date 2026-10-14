@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import {
   adminSupportHandledSchema,
   adminSupportOpenSchema,
@@ -163,5 +163,12 @@ export class AdminSupportController {
   @Get('media/:id')
   async media(@Param('id') id: string, @Res() response: Response) {
     sendMedia(response, await this.support.staffMedia(id));
+  }
+
+  /** Deleting a conversation cannot be undone, so it is the 超級管理員's alone. */
+  @Delete('conversations/:id')
+  @AdminRoles('SUPER_ADMIN')
+  remove(@Param('id') id: string, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    return this.support.staffDelete(id, admin, request.ip);
   }
 }

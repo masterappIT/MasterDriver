@@ -53,6 +53,7 @@ const ACTION: Record<string, string> = {
   'support.open': '客服主動聯絡',
   'support.reply': '客服回覆',
   'support.handled': '客服標記不用回覆',
+  'support.delete': '刪除客服對話',
 };
 
 const action = ref('');

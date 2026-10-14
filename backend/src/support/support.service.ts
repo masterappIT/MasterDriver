@@ -275,6 +275,34 @@ export class SupportService {
   }
 
   /**
+   * Deletes a conversation for good (超級管理員 only): its messages, its pictures and videos, and
+   * the user's 客服回覆 notifications, so their 客服 page starts empty too. The files go first: if
+   * one cannot be removed, nothing is deleted and the staff member can try again. The audit trail
+   * keeps who deleted whose conversation, never what was said.
+   */
+  async staffDelete(conversationId: string, staff: Staff, ip?: string) {
+    const conversation = await this.prisma.supportConversation.findUnique({
+      where: { id: conversationId },
+      select: { userId: true, media: { select: { storageKey: true } }, _count: { select: { messages: true } } },
+    });
+    if (!conversation) throw this.conversationNotFound();
+    for (const media of conversation.media) await this.storage.remove(media.storageKey);
+    await this.prisma.$transaction([
+      ...(conversation.userId ? [this.prisma.notification.deleteMany({ where: { userId: conversation.userId, kind: 'SUPPORT_REPLY' } })] : []),
+      this.prisma.supportConversation.delete({ where: { id: conversationId } }),
+    ]);
+    await this.audit.log({
+      adminId: staff.id,
+      action: 'support.delete',
+      targetType: 'SupportConversation',
+      targetId: conversationId,
+      detail: { userId: conversation.userId, guest: conversation.userId === null, messages: conversation._count.messages },
+      ip,
+    });
+    return { deleted: true };
+  }
+
+  /**
    * Removes the bytes of every picture and video past its keep-until time.
    * The records and messages stay, marked as no longer available. Safe to run
    * again: a file that is already gone counts as removed.

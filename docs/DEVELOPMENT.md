@@ -89,6 +89,7 @@ npm run dev:admin
 - 儲存：資料庫只存紀錄（`SupportMedia`），檔案放私有儲存空間，鍵值為 `support/<對話>/<檔案>.<副檔名>`。本機放 `.data/support-media/`（已列入 `.gitignore`，可用 `SUPPORT_MEDIA_DIR` 更改）；正式環境放 `SUPPORT_MEDIA_BUCKET` 指定的私有 Cloud Storage bucket，以 Cloud Run 服務帳戶的身分存取（需要 `roles/storage.objectAdmin`），不需要金鑰檔。正式環境沒有設定 bucket 時只收文字，上傳回 `SUPPORT_MEDIA_UNAVAILABLE`。
 - 讀取：`<img>`、`<video>` 不直接指向檔案；頁面帶登入資訊向 API 取回後才顯示，所以沒有可以外流的網址。影片按了才下載。
 - 清理：檔案保留 180 天。`npm run support-media -- --purge` 刪除過期檔案並把紀錄標為已過期，正式環境請排程每天執行一次；bucket 另外設定 200 天的生命週期規則作為保險。
+- 刪除對話（2026-10-15）：只限超級管理員，後台客服頁的「刪除對話」，`DELETE /api/admin/support/conversations/:id`。先刪儲存空間的圖片影片（失敗就整個不刪，可重試），再在同一個交易刪對話（訊息、檔案紀錄隨之刪除）和該用戶的「客服回覆」通知；用戶的客服頁變空，再傳訊息就是新對話；訪客原本的憑證失效。操作紀錄 `support.delete` 只記用戶 id、是否訪客、訊息數，不記內容。
 - 上線前要做：建立 bucket（不公開、統一 bucket 層級存取）、授權服務帳戶、設定 `SUPPORT_MEDIA_BUCKET`、排程清理。Cloud Storage 的讀寫只有以假的回應做過單元測試，尚未對真正的 bucket 驗證。
 
 ## 平台服務費與點數（後台完成前用指令）
