@@ -233,6 +233,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     dispatcherPageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,
     claimedAt: order.claimedAt?.toISOString() ?? null,
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
+    completedAt: order.completedAt?.toISOString() ?? null,
     passengerConfirmedAt: order.passengerConfirmedAt?.toISOString() ?? null,
     createdAt: order.createdAt.toISOString(),
     viewer,

@@ -44,6 +44,7 @@ interface Detail {
   code: string;
   status: string;
   cancelledAt: string | null;
+  completedAt: string | null;
   pickupAt: string;
   origin: string;
   destination: string;
@@ -114,6 +115,13 @@ const ownTrip = computed(() => isDispatcher.value && Boolean(order.value?.selfDr
  * whom to ask. The passenger, the prices, their own car and the other leg are no longer theirs.
  */
 const cancelledForDriver = computed(() => !isDispatcher.value && order.value?.status === 'CANCELLED');
+/**
+ * A finished trip seen by its driver: what is left is the money (the driver price and whether the
+ * dispatcher marked it settled) and whom to settle with.
+ */
+const doneForDriver = computed(() => !isDispatcher.value && order.value?.status === 'COMPLETED');
+/** Over, either way: the driver keeps only the trip and the dispatcher's name and call button. */
+const endedForDriver = computed(() => cancelledForDriver.value || doneForDriver.value);
 /** 接駁: the passenger's one price for the whole order is kept on, and changed from, the first leg. */
 const tripPriceHere = computed(() => !order.value?.journey || order.value.journey.legIndex === 1);
 /** A driver is set and the passenger has not confirmed: remind the dispatcher to send the link. */
@@ -389,7 +397,7 @@ watch(id, () => {
 
     <div v-if="order" class="detail__body">
       <!-- Where the order stands: 已出單, 有人接, 乘客確認. -->
-      <ol v-if="order.status !== 'CANCELLED' && !ownTrip" class="detail__steps" style="order: 1" :aria-label="t('進度')">
+      <ol v-if="order.status !== 'CANCELLED' && !ownTrip && !doneForDriver" class="detail__steps" style="order: 1" :aria-label="t('進度')">
         <li class="done">{{ t('已出單') }}</li>
         <li :class="{ done: order.claimedAt }">{{ order.driver?.name ? t(`${order.driver.name} 接單`) : t('有人接') }}</li>
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
@@ -398,6 +406,12 @@ watch(id, () => {
       <section v-if="cancelledForDriver" class="card detail__ended" style="order: 0">
         <strong>{{ t('這張單已取消') }}</strong>
         <p>{{ order.cancelledAt ? t(`已在 ${shortTime(order.cancelledAt)} 取消，不用去接了。有疑問請聯絡出單者。`) : t('不用去接了。有疑問請聯絡出單者。') }}</p>
+      </section>
+      <section v-if="doneForDriver" class="card detail__ended" style="order: 0">
+        <strong>{{ t('行程已完成') }}</strong>
+        <p>
+          {{ order.completedAt ? t(`${shortTime(order.completedAt)} 完成。`) : '' }}{{ order.settledAt ? t(`出單者 ${shortTime(order.settledAt)} 標記已結清。`) : t('出單者還沒標記已結清。') }}
+        </p>
       </section>
 
       <!-- The moment to send the passenger their link: a driver is set, and the passenger has not confirmed. -->
@@ -444,13 +458,13 @@ watch(id, () => {
       </section>
 
       <!-- 接駁: both legs of the order; the dispatcher opens a leg to manage its driver. -->
-      <section v-if="order.journey && !cancelledForDriver" class="card" style="order: 5">
+      <section v-if="order.journey && !endedForDriver" class="card" style="order: 5">
         <span class="section-label">{{ isDispatcher ? t('整張接駁單（兩段），點一段管理它的司機') : t('整張接駁單（兩段）') }}</span>
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
       </section>
 
       <!-- The passenger: after the group text while waiting for a driver, after the driver once taken. -->
-      <section v-if="!cancelledForDriver" class="card" style="order: 10">
+      <section v-if="!endedForDriver" class="card" style="order: 10">
         <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
         <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
         <p v-else-if="order.contactEnded" class="detail__waiting">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
@@ -595,7 +609,7 @@ watch(id, () => {
       </section>
 
       <!-- Prices: the dispatcher sees both and the spread; the driver only the driver price -->
-      <section v-if="!cancelledForDriver" class="card" style="order: 12">
+      <section v-if="!endedForDriver" class="card" style="order: 12">
         <!-- 自己做: one price, what the passenger pays, and whether it came in. -->
         <template v-if="ownTrip && !editingPrices">
           <div class="detail__paid">
@@ -672,8 +686,17 @@ watch(id, () => {
       </section>
 
       <!-- 收款與結清: the dispatcher's own marks, apart from the prices. The platform takes no money and checks nothing. -->
-      <section v-if="((isDispatcher && order.status !== 'CANCELLED') || canSettle) && !ownTrip" class="card detail__money" style="order: 13">
-        <span class="section-label">{{ isDispatcher ? t('收款與結清') : t('結清') }}</span>
+      <section
+        v-if="((isDispatcher && order.status !== 'CANCELLED') || canSettle) && !ownTrip"
+        class="card detail__money"
+        :style="{ order: doneForDriver ? 4 : 13 }"
+      >
+        <span class="section-label">{{ isDispatcher ? t('收款與結清') : doneForDriver ? t('這趟的帳') : t('結清') }}</span>
+        <!-- The driver's finished trip: what they are owed, then whether it is settled. -->
+        <div v-if="doneForDriver" class="detail__price">
+          <span class="section-label">{{ t('出單價') }}</span>
+          <strong>{{ money(order.driverPrice) || t('未填') }}</strong>
+        </div>
         <!-- 收款: the dispatcher's own mark, after checking their account. -->
         <div v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__paid detail__divided">
           <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.paidAt }">
@@ -710,7 +733,7 @@ watch(id, () => {
         </div>
       </section>
 
-      <section v-if="order.driver && !ownTrip && !cancelledForDriver" class="card" style="order: 7">
+      <section v-if="order.driver && !ownTrip && !endedForDriver" class="card" style="order: 7">
         <span class="section-label">{{ selfDriven ? t('這單你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
         <div class="detail__person">
           <strong>{{ order.driver.name ? t(order.driver.name) : t('沒有留名') }}</strong>
@@ -731,15 +754,22 @@ watch(id, () => {
         <span class="section-label">{{ t('出單者') }}</span>
         <div class="detail__person">
           <strong>{{ order.dispatcherName ? t(order.dispatcherName) : t('沒有留名') }}</strong>
-          <span v-if="!cancelledForDriver" class="hint">{{ order.dispatcherPhone }}</span>
+          <span v-if="!endedForDriver" class="hint">{{ order.dispatcherPhone }}</span>
         </div>
-        <a v-if="cancelledForDriver" class="button secondary block detail__gap" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電出單者') }}</a>
+        <a v-if="endedForDriver" class="button secondary block detail__gap" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電出單者') }}</a>
         <div v-else class="detail__pair detail__gap">
           <a class="button secondary" :href="`tel:${order.dispatcherPhone.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電出單者') }}</a>
           <button class="button secondary" type="button" @click="copy(order.dispatcherPhone, '已複製號碼')">{{ t('複製號碼') }}</button>
         </div>
-        <ContactLines v-if="!cancelledForDriver" class="detail__gap" :phones="order.dispatcherContact?.phones?.slice(1)" :wechat-id="order.dispatcherContact?.wechatId" :whatsapp="order.dispatcherContact?.whatsapp" />
-        <RouterLink v-if="order.dispatcherPageCode && !cancelledForDriver" class="button secondary block detail__gap" :to="`/p/${order.dispatcherPageCode}`">{{ t('看出單者的名片') }}</RouterLink>
+        <!-- A finished trip is settled between the two of them, often over WeChat or WhatsApp. -->
+        <ContactLines
+          v-if="!cancelledForDriver"
+          class="detail__gap"
+          :phones="doneForDriver ? [] : order.dispatcherContact?.phones?.slice(1)"
+          :wechat-id="order.dispatcherContact?.wechatId"
+          :whatsapp="order.dispatcherContact?.whatsapp"
+        />
+        <RouterLink v-if="order.dispatcherPageCode && !endedForDriver" class="button secondary block detail__gap" :to="`/p/${order.dispatcherPageCode}`">{{ t('看出單者的名片') }}</RouterLink>
       </section>
 
       <!-- What can still be done, least drastic first; cancelling is a quiet red link. -->
