@@ -18,27 +18,9 @@ function toMyPage() {
   else void router.push('/app/profile-page');
 }
 
-const STEPS = [
-  { title: '做好你的名片頁', text: '放車輛照片、常走路線、會說的語言，再按公開。姓名和車型取自你的司機資料。' },
-  { title: '把連結放出去', text: '複製名片頁的連結，貼到客人看得到的地方。' },
-  { title: '客人預約，你報價', text: '客人不用下載、不用登入，填時間、路線、人數就送出。你收到後回一個價錢。' },
-  { title: '客人同意，一按成單', text: '客人按同意後，你按「這單我自己做」就成為你的行程；做不了也可以派給其他司機。' },
-];
-
-const PLACES = [
-  { where: '微信朋友圈', how: '發一條近況，把連結貼在文字裡。熟客點開就能預約。' },
-  { where: '傳給熟客', how: '行程結束後傳一句「下次直接在這裡約我」，附上連結。' },
-  { where: 'WhatsApp', how: '放在個人簡介或狀態，也可以直接傳給問價的人。' },
-  { where: '小紅書、抖音', how: '貼文裡的連結點不開，把連結放在主頁簡介，或在私訊裡傳給問價的人。' },
-  { where: '司機群', how: '同行有做不了的單時，知道你常走哪條線，會把客人介紹給你。' },
-];
-
-const TIPS = [
-  '有車輛照片的名片頁，客人比較放心。',
-  '常走路線寫清楚，例如「深圳灣 至 香港機場」，客人一看就知道找對人。',
-  '收到預約盡快報價；客人常常同時問幾個司機。',
-  '客人是你的：平台不抽成，也不會把你的客人派給別人。',
-];
+/** Where drivers put the link, as short chips under step 2. */
+const PLACES = ['微信朋友圈', '傳給熟客', 'WhatsApp', '小紅書主頁簡介', '司機群'];
+const TIPS = ['放車輛照片，客人比較放心', '常走路線寫清楚', '收到預約盡快報價'];
 </script>
 
 <template>
@@ -46,35 +28,103 @@ const TIPS = [
     <!-- Opened from 首頁, 我的, 預約 and the 名片頁: 返回 goes back to whichever it was. -->
     <PageBack :title="t('用名片頁找客人')" fallback="/app/me" history />
 
-    <section class="guide__lead">
-      <h2>{{ t('你自己的接單頁') }}</h2>
-      <p>{{ t('名片頁是一條屬於你的連結。把它放到客人看得到的地方，客人就能直接向你預約，不用經過群，也不用經過別人。') }}</p>
-    </section>
+    <p class="guide__lead">{{ t('一條屬於你的連結，客人直接向你預約。') }}</p>
 
-    <!-- A real sequence, so it reads as one line of stops. -->
+    <!--
+      Four steps, each a small picture of the screen it is about and one line under it. The
+      pictures are drawn with the app's own cards (no image files, nothing to download in WeChat)
+      and are decoration only: the line under each says the step.
+    -->
     <ol class="guide__steps">
-      <li v-for="(step, index) in STEPS" :key="step.title">
-        <span class="guide__number">{{ index + 1 }}</span>
-        <div>
-          <strong>{{ t(step.title) }}</strong>
-          <p>{{ t(step.text) }}</p>
+      <li class="guide__step">
+        <div class="guide__shot" aria-hidden="true">
+          <div class="guide__mock">
+            <div class="guide__mock-head">
+              <span class="guide__avatar"></span>
+              <div>
+                <strong>{{ t('張師傅') }}</strong>
+                <span>{{ t('7座商務車・黑') }}</span>
+              </div>
+            </div>
+            <div class="guide__chips">
+              <span>{{ t('深圳灣 至 香港機場') }}</span>
+              <span>{{ t('粵語') }}</span>
+            </div>
+            <span class="guide__mock-button">{{ t('預約這位師傅') }}</span>
+          </div>
+        </div>
+        <div class="guide__caption">
+          <span class="guide__number">1</span>
+          <div>
+            <strong>{{ t('做好名片頁') }}</strong>
+            <p>{{ t('放照片、路線，按公開') }}</p>
+          </div>
+        </div>
+      </li>
+
+      <li class="guide__step">
+        <div class="guide__shot" aria-hidden="true">
+          <div class="guide__bubble">
+            <span>{{ t('下次直接在這裡約我') }}</span>
+            <span class="guide__link">masterdriverapp…/p/…</span>
+          </div>
+        </div>
+        <div class="guide__caption">
+          <span class="guide__number">2</span>
+          <div>
+            <strong>{{ t('把連結放出去') }}</strong>
+            <div class="guide__places">
+              <span v-for="place in PLACES" :key="place">{{ t(place) }}</span>
+            </div>
+          </div>
+        </div>
+      </li>
+
+      <li class="guide__step">
+        <div class="guide__shot" aria-hidden="true">
+          <div class="guide__mock">
+            <span class="guide__tag guide__tag--wait">{{ t('待回覆') }}</span>
+            <strong class="guide__mock-time">{{ t('10/20（二）10:00') }}</strong>
+            <span class="guide__mock-route">{{ t('深圳灣口岸 至 香港機場') }}</span>
+            <div class="guide__mock-price">
+              <span>{{ t('你的報價') }}</span>
+              <strong>HK$500</strong>
+            </div>
+          </div>
+        </div>
+        <div class="guide__caption">
+          <span class="guide__number">3</span>
+          <div>
+            <strong>{{ t('客人預約，你報價') }}</strong>
+            <p>{{ t('客人不用下載、不用登入') }}</p>
+          </div>
+        </div>
+      </li>
+
+      <li class="guide__step">
+        <div class="guide__shot" aria-hidden="true">
+          <div class="guide__mock">
+            <span class="guide__tag guide__tag--agreed">{{ t('乘客已同意') }}</span>
+            <span class="guide__mock-button">{{ t('這單我自己做') }}</span>
+            <span class="guide__mock-button guide__mock-button--secondary">{{ t('派給其他司機') }}</span>
+          </div>
+        </div>
+        <div class="guide__caption">
+          <span class="guide__number">4</span>
+          <div>
+            <strong>{{ t('客人同意，一按成單') }}</strong>
+            <p>{{ t('自己做，或派給其他司機') }}</p>
+          </div>
         </div>
       </li>
     </ol>
 
-    <section class="guide__section">
-      <h2>{{ t('連結放在哪裡') }}</h2>
-      <div v-for="place in PLACES" :key="place.where" class="guide__place">
-        <strong>{{ t(place.where) }}</strong>
-        <p>{{ t(place.how) }}</p>
-      </div>
-    </section>
-
-    <section class="guide__section">
-      <h2>{{ t('讓客人更願意約你') }}</h2>
-      <ul class="guide__tips">
+    <section class="guide__tips">
+      <span class="section-label">{{ t('小提示') }}</span>
+      <ul>
         <li v-for="tip in TIPS" :key="tip">{{ t(tip) }}</li>
       </ul>
+      <p class="hint">{{ t('客人是你的：平台不抽成，也不會把你的客人派給別人。') }}</p>
     </section>
 
     <button class="button block large" type="button" @click="toMyPage">{{ t('去做我的名片頁') }}</button>
@@ -86,17 +136,12 @@ const TIPS = [
 .guide {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xl);
+  gap: var(--space-lg);
 }
-.guide h2 {
-  margin: 0 0 var(--space-sm);
-  font-size: 22px;
-}
-.guide__lead p {
+.guide__lead {
   margin: 0;
   color: var(--color-text-secondary);
   font-size: var(--font-body-large);
-  line-height: 1.7;
 }
 .guide__steps {
   list-style: none;
@@ -106,9 +151,140 @@ const TIPS = [
   margin: 0;
   padding: 0;
 }
-.guide__steps li {
+.guide__step {
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--color-card);
+  border: 1px solid var(--color-card-border);
+}
+/* The picture: a tinted stage with a small screen on it. */
+.guide__shot {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-lg) var(--space-lg) var(--space-md);
+  background: linear-gradient(135deg, var(--color-tint), rgba(14, 159, 154, 0.12));
+}
+.guide__mock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+  width: 100%;
+  max-width: 260px;
+  padding: var(--space-md);
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+  font-size: var(--font-caption);
+}
+.guide__mock-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.guide__mock-head div {
+  display: flex;
+  flex-direction: column;
+}
+.guide__mock-head span {
+  color: var(--color-text-secondary);
+}
+.guide__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-teal));
+}
+.guide__chips,
+.guide__places {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+.guide__chips span,
+.guide__places span {
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+  font-size: var(--font-caption);
+  font-weight: 600;
+}
+.guide__places {
+  margin-top: var(--space-xs);
+}
+.guide__mock-button {
+  align-self: stretch;
+  margin-top: var(--space-xs);
+  padding: 6px 0;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 700;
+  text-align: center;
+}
+.guide__mock-button--secondary {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+.guide__mock-time {
+  font-size: var(--font-body);
+}
+.guide__mock-route {
+  font-weight: 700;
+}
+.guide__mock-price {
+  display: flex;
+  align-self: stretch;
+  justify-content: space-between;
+  margin-top: var(--space-xs);
+  padding-top: var(--space-xs);
+  border-top: 1px solid var(--color-divider);
+}
+.guide__mock-price strong {
+  color: var(--color-gold-ink);
+}
+.guide__tag {
+  padding: 1px var(--space-sm);
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+}
+.guide__tag--wait {
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+}
+.guide__tag--agreed {
+  background: var(--status-confirmed-tint);
+  color: var(--status-confirmed);
+}
+/* A chat bubble with the link in it, as it looks in WeChat or WhatsApp. */
+.guide__bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 240px;
+  margin-left: auto;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 14px 14px 4px 14px;
+  background: #95ec69;
+  color: #142033;
+  font-size: var(--font-caption);
+}
+.guide__link {
+  color: #1f5fd6;
+  text-decoration: underline;
+}
+.guide__caption {
   display: flex;
   gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg) var(--space-lg);
+}
+.guide__caption strong {
+  font-size: var(--font-body-large);
+}
+.guide__caption p {
+  margin: 2px 0 0;
+  color: var(--color-text-secondary);
 }
 .guide__number {
   flex-shrink: 0;
@@ -122,32 +298,16 @@ const TIPS = [
   color: var(--color-on-primary);
   font-weight: 700;
 }
-.guide__steps strong,
-.guide__place strong {
-  font-size: var(--font-body-large);
-}
-.guide__steps p,
-.guide__place p {
-  margin: 2px 0 0;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
-}
-.guide__place {
-  padding: var(--space-md) 0;
-  border-top: 1px solid var(--color-divider);
-}
-.guide__place:first-of-type {
-  border-top: none;
-  padding-top: 0;
-}
-.guide__tips {
+.guide__tips ul {
   display: flex;
   flex-direction: column;
-  gap: var(--space-sm);
-  margin: 0;
+  gap: var(--space-xs);
+  margin: var(--space-sm) 0;
   padding-left: 1.2em;
   color: var(--color-text-secondary);
-  line-height: 1.6;
+}
+.guide__tips .hint {
+  margin: 0;
 }
 .guide__bookings {
   align-self: center;
