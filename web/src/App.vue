@@ -8,6 +8,7 @@ import { t } from './i18n';
 import { closeBanner, describe, inbox, markRead, startNotifications, stopNotifications } from './notifications';
 import { loadSite, site } from './site';
 import { toastState } from './toast';
+import { COPYRIGHT } from './copyright';
 
 const route = useRoute();
 const router = useRouter();
@@ -44,6 +45,8 @@ async function openBanner() {
 <template>
   <div v-if="announcement && route.meta.app" class="announcement">{{ t(announcement) }}</div>
   <RouterView :key="route.fullPath" />
+  <!-- The home page ends with its own copyright line. -->
+  <footer v-if="route.path !== '/'" class="copyright" :class="{ 'copyright--app': route.meta.app && route.path !== '/app/new' }">{{ t(COPYRIGHT) }}</footer>
   <TabBar v-if="route.meta.app && route.path !== '/app/new'" />
   <div v-if="banner" class="notice-banner" role="status">
     <button type="button" class="notice-banner__body" @click="openBanner">
@@ -57,6 +60,20 @@ async function openBanner() {
 </template>
 
 <style scoped>
+/* Every page ends with it. Pages of the tool keep room at the bottom for the tab bar; the line
+   moves up into that room so it sits under the content, not behind the bar. */
+.copyright {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space-md) var(--space-lg) calc(var(--space-lg) + var(--safe-bottom));
+  color: var(--color-text-muted);
+  font-size: var(--font-caption);
+  text-align: center;
+}
+.copyright--app {
+  margin-top: calc(-1 * (var(--tab-height) + var(--tab-offset) + var(--space-xl) + var(--safe-bottom)));
+  padding-bottom: calc(var(--tab-height) + var(--tab-offset) + var(--space-lg) + var(--safe-bottom));
+}
 .announcement {
   background: var(--color-gold-tint);
   color: var(--color-gold-ink);

@@ -114,7 +114,7 @@ onMounted(() => run(() => api('GET', '/billing'), ''));
               <td>{{ target(item) }}</td>
               <td>{{ dateTime(item.startsAt) }}</td>
               <td>{{ item.endsAt ? dateTime(item.endsAt) : '不限' }}</td>
-              <td>{{ item.inEffect ? '生效中' : item.active ? '未到時間或已過期' : '已停止' }}</td>
+              <td><span class="tag" :class="{ 'tag--info': item.inEffect }">{{ item.inEffect ? '生效中' : item.active ? '未到時間或已過期' : '已停止' }}</span></td>
               <td>
                 <button v-if="item.active" class="button secondary" @click="setActive(item, false)">停止</button>
                 <button v-else class="button secondary" @click="setActive(item, true)">重新啟用</button>

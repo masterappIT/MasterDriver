@@ -71,9 +71,9 @@ onMounted(load);
 
 <template>
   <h1>操作紀錄</h1>
-  <div class="card row">
+  <div class="filters">
     <select v-model="action" class="select" @change="(page = 1), load()">
-      <option value="">全部</option>
+      <option value="">全部操作</option>
       <option v-for="(label, key) in ACTION" :key="key" :value="key">{{ label }}</option>
     </select>
   </div>
@@ -92,7 +92,7 @@ onMounted(load);
       </thead>
       <tbody>
         <tr v-for="entry in result.items" :key="entry.id">
-          <td>{{ dateTime(entry.createdAt) }}</td>
+          <td class="nowrap">{{ dateTime(entry.createdAt) }}</td>
           <td>{{ entry.admin?.displayName ?? '—' }}</td>
           <td>{{ ACTION[entry.action] ?? entry.action }}</td>
           <td>

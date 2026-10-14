@@ -43,25 +43,28 @@ onMounted(() => load().catch((e) => (error.value = (e as Error).message)));
 </script>
 
 <template>
-  <h1>平台服務費</h1>
-  <div v-if="error" class="notice error">{{ error }}</div>
-  <div v-if="message" class="notice">{{ message }}</div>
-  <div v-if="status" class="card">
-    <p>
-      目前：<strong>{{ status.enabled ? '開啟' : '關閉' }}</strong>，每單 {{ money(status.fee) }}
-    </p>
-    <ul class="muted">
-      <li>只向出單者收，接單司機永遠不收。</li>
-      <li>出單時從點數扣，單被取消會全額退回；點數不足就不能出單。</li>
-      <li>團隊、公司方案與全站免費期期間免收。</li>
-    </ul>
-    <form class="row" @submit.prevent="save({ fee: Number(fee) }, '金額已更新')">
-      <label class="field">每單金額（HK$）<input v-model="fee" class="input" type="number" min="0" step="0.5" required /></label>
-      <button class="button secondary" type="submit">更新金額</button>
-      <button class="button" :class="{ danger: status.enabled }" type="button" @click="toggle">
-        {{ status.enabled ? '關閉服務費' : '開啟服務費' }}
-      </button>
-    </form>
-    <p class="hint">最後修改：{{ dateTime(status.updatedAt) }}　{{ status.updatedBy ?? '' }}</p>
+  <div class="settings-page">
+    <h1>平台服務費</h1>
+    <div v-if="error" class="notice error">{{ error }}</div>
+    <div v-if="message" class="notice">{{ message }}</div>
+    <div v-if="status" class="card">
+      <dl class="facts facts--numbers">
+        <div><dt>狀態</dt><dd><span class="tag" :class="status.enabled ? 'tag--info' : ''">{{ status.enabled ? '開啟' : '關閉' }}</span></dd></div>
+        <div><dt>每單</dt><dd>{{ money(status.fee) }}</dd></div>
+      </dl>
+      <ul class="muted">
+        <li>只向出單者收，接單司機永遠不收。</li>
+        <li>出單時從點數扣，單被取消會全額退回；點數不足就不能出單。</li>
+        <li>團隊、公司方案與全站免費期期間免收。</li>
+      </ul>
+      <form class="row form-foot" @submit.prevent="save({ fee: Number(fee) }, '金額已更新')">
+        <label class="field">每單金額（HK$）<input v-model="fee" class="input" type="number" min="0" step="0.5" required /></label>
+        <button class="button secondary" type="submit">更新金額</button>
+        <button class="button" :class="{ danger: status.enabled }" type="button" @click="toggle">
+          {{ status.enabled ? '關閉服務費' : '開啟服務費' }}
+        </button>
+      </form>
+      <p class="hint">最後修改：{{ dateTime(status.updatedAt) }}　{{ status.updatedBy ?? '' }}</p>
+    </div>
   </div>
 </template>

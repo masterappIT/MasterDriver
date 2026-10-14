@@ -119,81 +119,83 @@ onMounted(() => run(() => api<Channel[]>('GET', '/payment-channels'), () => ''))
 </script>
 
 <template>
-  <h1>付款通道</h1>
-  <div class="notice">
-    沿用 Master Travel 的服務商：Stripe 與 AlipayHK。這裡只管理設定；訂閱與點數的線上付款會在之後接上，屆時使用「已啟用」的那組設定。
-    <span v-if="!can.superAdmin()">只有超級管理員可以修改。</span>
-  </div>
-  <div v-if="error" class="notice error">{{ error }}</div>
-  <div v-if="message" class="notice">{{ message }}</div>
+  <div class="settings-page">
+    <h1>付款通道</h1>
+    <div class="notice">
+      沿用 Master Travel 的服務商：Stripe 與 AlipayHK。這裡只管理設定；訂閱與點數的線上付款會在之後接上，屆時使用「已啟用」的那組設定。
+      <span v-if="!can.superAdmin()">只有超級管理員可以修改。</span>
+    </div>
+    <div v-if="error" class="notice error">{{ error }}</div>
+    <div v-if="message" class="notice">{{ message }}</div>
 
-  <div class="grid">
-    <button
-      v-for="c in channels"
-      :key="`${c.provider}-${c.environment}`"
-      class="card channel-card"
-      :class="{ 'channel-card--active': c.provider === provider && c.environment === environment }"
-      type="button"
-      @click="select(c.provider, c.environment)"
-    >
-      <strong>{{ c.provider === 'STRIPE' ? 'Stripe' : 'AlipayHK' }}</strong>
-      <span class="muted">{{ ENV_LABEL[c.environment] }}</span>
-      <span :class="{ 'channel-card__on': c.enabled }">{{ statusText(c) }}</span>
-    </button>
-  </div>
+    <div class="grid">
+      <button
+        v-for="c in channels"
+        :key="`${c.provider}-${c.environment}`"
+        class="card channel-card"
+        :class="{ 'channel-card--active': c.provider === provider && c.environment === environment }"
+        type="button"
+        @click="select(c.provider, c.environment)"
+      >
+        <strong>{{ c.provider === 'STRIPE' ? 'Stripe' : 'AlipayHK' }}</strong>
+        <span class="muted">{{ ENV_LABEL[c.environment] }}</span>
+        <span :class="{ 'channel-card__on': c.enabled }">{{ statusText(c) }}</span>
+      </button>
+    </div>
 
-  <form v-if="current" class="card channel-form" @submit.prevent="save">
-    <h2>{{ provider === 'STRIPE' ? 'Stripe' : 'AlipayHK' }}・{{ ENV_LABEL[environment] }}</h2>
-    <fieldset :disabled="!can.superAdmin() || busy" class="channel-form__fields">
-      <template v-if="provider === 'STRIPE'">
-        <label class="field">Publishable key<input v-model="stripe.publishableKey" class="input" :placeholder="environment === 'production' ? 'pk_live_…' : 'pk_test_…'" required /></label>
-        <label class="field">
-          Secret key（{{ current.secretKeyConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
-          <input v-model="stripe.secretKey" class="input" type="password" autocomplete="off" :placeholder="environment === 'production' ? 'sk_live_… 或 rk_live_…' : 'sk_test_… 或 rk_test_…'" />
-        </label>
-        <label class="field">
-          Webhook 簽章密鑰（{{ current.webhookSecretConfigured ? '已加密儲存；留空表示不變' : '選填，接上付款流程前需要' }}）
-          <input v-model="stripe.webhookSecret" class="input" type="password" autocomplete="off" placeholder="whsec_…" />
-        </label>
-        <div class="field">
-          付款方式
-          <div class="row">
-            <label v-for="(label, key) in METHODS" :key="key"><input v-model="stripe.paymentMethods" type="checkbox" :value="key" /> {{ label }}</label>
+    <form v-if="current" class="card channel-form" @submit.prevent="save">
+      <h2>{{ provider === 'STRIPE' ? 'Stripe' : 'AlipayHK' }}・{{ ENV_LABEL[environment] }}</h2>
+      <fieldset :disabled="!can.superAdmin() || busy" class="channel-form__fields">
+        <template v-if="provider === 'STRIPE'">
+          <label class="field">Publishable key<input v-model="stripe.publishableKey" class="input" :placeholder="environment === 'production' ? 'pk_live_…' : 'pk_test_…'" required /></label>
+          <label class="field">
+            Secret key（{{ current.secretKeyConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
+            <input v-model="stripe.secretKey" class="input" type="password" autocomplete="off" :placeholder="environment === 'production' ? 'sk_live_… 或 rk_live_…' : 'sk_test_… 或 rk_test_…'" />
+          </label>
+          <label class="field">
+            Webhook 簽章密鑰（{{ current.webhookSecretConfigured ? '已加密儲存；留空表示不變' : '選填，接上付款流程前需要' }}）
+            <input v-model="stripe.webhookSecret" class="input" type="password" autocomplete="off" placeholder="whsec_…" />
+          </label>
+          <div class="field">
+            付款方式
+            <div class="row">
+              <label v-for="(label, key) in METHODS" :key="key"><input v-model="stripe.paymentMethods" type="checkbox" :value="key" /> {{ label }}</label>
+            </div>
           </div>
-        </div>
-        <p class="hint">支付寶、微信支付在 Stripe 一般不支援自動續訂；會以「一次付一個月或一年」處理。</p>
-      </template>
-      <template v-else>
-        <label class="field">支付網關（HTTPS）<input v-model="alipay.gatewayUrl" class="input" required /></label>
+          <p class="hint">支付寶、微信支付在 Stripe 一般不支援自動續訂；會以「一次付一個月或一年」處理。</p>
+        </template>
+        <template v-else>
+          <label class="field">支付網關（HTTPS）<input v-model="alipay.gatewayUrl" class="input" required /></label>
+          <div class="row">
+            <label class="field">商戶 ID（Partner）<input v-model="alipay.partner" class="input" inputmode="numeric" maxlength="16" placeholder="2160 開頭的 16 位數字" required /></label>
+            <label class="field">App ID（選填）<input v-model="alipay.appId" class="input" /></label>
+          </div>
+          <label class="field">
+            應用私鑰 PKCS8 PEM（{{ current.privateKeyConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
+            <textarea v-model="alipay.privateKey" class="input channel-form__key" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="field">
+            支付寶公鑰 SPKI PEM（{{ current.publicKeyConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
+            <textarea v-model="alipay.publicKey" class="input channel-form__key" autocomplete="off" spellcheck="false" />
+          </label>
+          <label class="field">異步通知地址（選填）<input v-model="alipay.notifyUrl" class="input" placeholder="https://" /></label>
+          <label class="field">同步返回地址（選填）<input v-model="alipay.returnUrl" class="input" placeholder="https://" /></label>
+          <p class="hint">和 Master Travel 一樣，AlipayHK 的「檢查」只驗證金鑰格式，不會呼叫 AlipayHK，不能證明可以實際收款。</p>
+        </template>
         <div class="row">
-          <label class="field">商戶 ID（Partner）<input v-model="alipay.partner" class="input" inputmode="numeric" maxlength="16" placeholder="2160 開頭的 16 位數字" required /></label>
-          <label class="field">App ID（選填）<input v-model="alipay.appId" class="input" /></label>
+          <button class="button" type="submit">儲存</button>
+          <button class="button secondary" type="button" :disabled="!current.saved" @click="test">{{ provider === 'STRIPE' ? '連線檢查' : '金鑰格式檢查' }}</button>
+          <button class="button" :class="{ danger: current.enabled }" type="button" :disabled="!current.saved" @click="toggle">
+            {{ current.enabled ? '停用' : '啟用' }}
+          </button>
         </div>
-        <label class="field">
-          應用私鑰 PKCS8 PEM（{{ current.privateKeyConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
-          <textarea v-model="alipay.privateKey" class="input channel-form__key" autocomplete="off" spellcheck="false" />
-        </label>
-        <label class="field">
-          支付寶公鑰 SPKI PEM（{{ current.publicKeyConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
-          <textarea v-model="alipay.publicKey" class="input channel-form__key" autocomplete="off" spellcheck="false" />
-        </label>
-        <label class="field">異步通知地址（選填）<input v-model="alipay.notifyUrl" class="input" placeholder="https://" /></label>
-        <label class="field">同步返回地址（選填）<input v-model="alipay.returnUrl" class="input" placeholder="https://" /></label>
-        <p class="hint">和 Master Travel 一樣，AlipayHK 的「檢查」只驗證金鑰格式，不會呼叫 AlipayHK，不能證明可以實際收款。</p>
-      </template>
-      <div class="row">
-        <button class="button" type="submit">儲存</button>
-        <button class="button secondary" type="button" :disabled="!current.saved" @click="test">{{ provider === 'STRIPE' ? '連線檢查' : '金鑰格式檢查' }}</button>
-        <button class="button" :class="{ danger: current.enabled }" type="button" :disabled="!current.saved" @click="toggle">
-          {{ current.enabled ? '停用' : '啟用' }}
-        </button>
-      </div>
-    </fieldset>
-    <p class="hint">
-      最後檢查：{{ dateTime(current.lastTestedAt) }}　{{ current.lastTestMessage ?? '' }}<br />
-      最後修改：{{ dateTime(current.updatedAt) }}　{{ current.updatedBy ?? '' }}
-    </p>
-  </form>
+      </fieldset>
+      <p class="hint">
+        最後檢查：{{ dateTime(current.lastTestedAt) }}　{{ current.lastTestMessage ?? '' }}<br />
+        最後修改：{{ dateTime(current.updatedAt) }}　{{ current.updatedBy ?? '' }}
+      </p>
+    </form>
+  </div>
 </template>
 
 <style scoped>

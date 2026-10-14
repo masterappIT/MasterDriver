@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, ROLE_LABEL, session, type AdminRole } from './api';
+import { COPYRIGHT } from './copyright';
 
 const route = useRoute();
 const router = useRouter();
@@ -126,9 +127,13 @@ async function logout() {
       <span class="eyebrow admin-shell__eyebrow">管理控制台</span>
       <!-- 客服 keeps its inbox while switching conversations; every other page reloads with its URL. -->
       <RouterView :key="route.path.startsWith('/support') ? '/support' : route.fullPath" />
+      <footer class="admin-shell__copyright">{{ COPYRIGHT }}</footer>
     </main>
   </div>
-  <RouterView v-else />
+  <template v-else>
+    <RouterView />
+    <footer class="admin-shell__copyright admin-shell__copyright--public">{{ COPYRIGHT }}</footer>
+  </template>
 </template>
 
 <style scoped>
@@ -266,6 +271,27 @@ async function logout() {
   width: min(100%, var(--admin-content-max-width));
   min-width: 0;
   padding: 36px 40px 48px;
+}
+
+.admin-shell__copyright {
+  margin-top: 40px;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-divider);
+  color: var(--color-text-muted);
+  font-size: var(--font-caption);
+  text-align: center;
+}
+
+/* On the sign-in page, over the dark panel at the bottom of the window. */
+.admin-shell__copyright--public {
+  position: fixed;
+  right: 0;
+  bottom: 16px;
+  left: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .admin-shell__eyebrow {

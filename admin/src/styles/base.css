@@ -399,6 +399,54 @@ textarea.input {
   margin-bottom: var(--space-md);
 }
 
+/* Settings pages: forms read best at a measure, not across a wide screen. */
+.settings-page {
+  max-width: 960px;
+}
+
+/* Fields in a card stack with room between them; side by side in a row they share the width. */
+.card > .field + .field,
+.card > .field + .row,
+.card > .row + .field,
+.card > .row + .row,
+.card > h2 + .field,
+.card > .muted + .field,
+.card > .muted + .row {
+  margin-top: var(--space-lg);
+}
+
+.card .row > .field {
+  flex: 1 1 220px;
+}
+
+.field > .input,
+.field > .select,
+.field > textarea {
+  width: 100%;
+}
+
+/* A card's save button, set off from the fields above it. */
+.form-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  margin-top: 20px;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-divider);
+}
+
+/* Buttons inside a table row: smaller, on one line. */
+.table .button {
+  min-height: 32px;
+  padding: 4px 12px;
+}
+
+.table td.row {
+  flex-wrap: nowrap;
+  gap: var(--space-sm);
+}
+
 /* The parts of a long page, one shown at a time. */
 .tabs {
   display: flex;

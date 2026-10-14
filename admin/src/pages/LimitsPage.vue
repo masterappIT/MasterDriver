@@ -133,38 +133,40 @@ onMounted(async () => {
 </script>
 
 <template>
-  <h1>防濫用設定</h1>
-  <p class="muted">這些上限用來擋住洗版和佔用儲存空間，正常使用不會碰到。修改後立即生效，不用重新部署；每次修改都會寫入操作紀錄。</p>
-  <div v-if="error" class="notice error">{{ error }}</div>
-  <div v-if="message" class="notice">{{ message }}</div>
+  <div class="settings-page">
+    <h1>防濫用設定</h1>
+    <p class="muted">這些上限用來擋住洗版和佔用儲存空間，正常使用不會碰到。修改後立即生效，不用重新部署；每次修改都會寫入操作紀錄。</p>
+    <div v-if="error" class="notice error">{{ error }}</div>
+    <div v-if="message" class="notice">{{ message }}</div>
 
-  <form class="card limits" @submit.prevent="save">
-    <h2>簡訊驗證碼</h2>
-    <label v-for="field in OTP_FIELDS" :key="field.key" class="field">
-      {{ field.label }}
-      <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
-      <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
-    </label>
-    <p class="hint">簡訊按則收費，這三項用來防止被刷。開發模式登入時同樣適用。</p>
-    <h2 class="limits__heading">客服</h2>
-    <label v-for="field in FIELDS" :key="field.key" class="field">
-      {{ field.label }}
-      <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
-      <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
-    </label>
-    <h2 class="limits__heading">名片頁預約</h2>
-    <label v-for="field in BOOKING_FIELDS" :key="field.key" class="field">
-      {{ field.label }}
-      <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
-      <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
-    </label>
-    <div class="row">
-      <button class="button" type="submit">儲存</button>
-      <span v-if="meta?.updatedBy" class="hint">最後修改：{{ dateTime(meta.updatedAt) }}　{{ meta.updatedBy }}</span>
-    </div>
-  </form>
+    <form class="card limits" @submit.prevent="save">
+      <h2>簡訊驗證碼</h2>
+      <label v-for="field in OTP_FIELDS" :key="field.key" class="field">
+        {{ field.label }}
+        <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
+        <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+      </label>
+      <p class="hint">簡訊按則收費，這三項用來防止被刷。開發模式登入時同樣適用。</p>
+      <h2 class="limits__heading">客服</h2>
+      <label v-for="field in FIELDS" :key="field.key" class="field">
+        {{ field.label }}
+        <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
+        <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+      </label>
+      <h2 class="limits__heading">名片頁預約</h2>
+      <label v-for="field in BOOKING_FIELDS" :key="field.key" class="field">
+        {{ field.label }}
+        <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
+        <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+      </label>
+      <div class="form-foot">
+        <button class="button" type="submit">儲存</button>
+        <span v-if="meta?.updatedBy" class="hint">最後修改：{{ dateTime(meta.updatedAt) }}　{{ meta.updatedBy }}</span>
+      </div>
+    </form>
 
-  <p class="hint">圖片與影片的大小上限（5 MB、25 MB）和保留天數（180 天）不在這裡設定：它們受雲端服務的限制，更改需要一併調整程式與儲存空間。</p>
+    <p class="hint">圖片與影片的大小上限（5 MB、25 MB）和保留天數（180 天）不在這裡設定：它們受雲端服務的限制，更改需要一併調整程式與儲存空間。</p>
+  </div>
 </template>
 
 <style scoped>

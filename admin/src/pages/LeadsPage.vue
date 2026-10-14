@@ -69,7 +69,7 @@ onMounted(load);
 <template>
   <h1>潛在客戶</h1>
   <p class="muted">按派單量、帶動的司機數、活躍天數、成長和付費情況排名，找出最可能需要 Master Travel 的車隊。</p>
-  <div class="card row">
+  <div class="filters">
     <select v-model.number="days" class="select" @change="load">
       <option :value="14">近 14 天</option>
       <option :value="30">近 30 天</option>
@@ -88,10 +88,10 @@ onMounted(load);
           <th>#</th>
           <th>出單者</th>
           <th>分數</th>
-          <th>單量／完成</th>
-          <th>司機數</th>
-          <th>活躍天數</th>
-          <th>成長</th>
+          <th class="num">單量／完成</th>
+          <th class="num">司機數</th>
+          <th class="num">活躍天數</th>
+          <th class="num">成長</th>
           <th>付費</th>
           <th>跟進</th>
         </tr>
@@ -107,10 +107,10 @@ onMounted(load);
             <strong>{{ lead.score }}</strong>
             <div v-for="part in breakdown(lead)" :key="part" class="hint">{{ part }}</div>
           </td>
-          <td>{{ lead.stats.orders }} / {{ lead.stats.completed }}</td>
-          <td>{{ lead.stats.drivers }}</td>
-          <td>{{ lead.stats.activeDays }}</td>
-          <td>{{ lead.stats.growth > 0 ? `+${lead.stats.growth}` : lead.stats.growth }}</td>
+          <td class="num">{{ lead.stats.orders }} / {{ lead.stats.completed }}</td>
+          <td class="num">{{ lead.stats.drivers }}</td>
+          <td class="num">{{ lead.stats.activeDays }}</td>
+          <td class="num">{{ lead.stats.growth > 0 ? `+${lead.stats.growth}` : lead.stats.growth }}</td>
           <td class="nowrap">
             {{ lead.stats.plan ? PLAN_NAME[lead.stats.plan] ?? lead.stats.plan : '' }}
             {{ lead.stats.toppedUp > 0 ? `充值 ${hkd(lead.stats.toppedUp)}` : '' }}

@@ -101,10 +101,10 @@ onMounted(() => run(() => api('GET', '/ads'), ''));
         <tr>
           <th>位置</th>
           <th>標題</th>
-          <th>優先度</th>
+          <th class="num">優先度</th>
           <th>期間</th>
-          <th>近 30 天曝光／點擊</th>
-          <th>點擊率</th>
+          <th class="num">近 30 天曝光／點擊</th>
+          <th class="num">點擊率</th>
           <th>狀態</th>
           <th></th>
         </tr>
@@ -116,11 +116,11 @@ onMounted(() => run(() => api('GET', '/ads'), ''));
             <a :href="ad.linkUrl" target="_blank" rel="noopener noreferrer">{{ ad.title }}</a>
             <div class="hint">{{ ad.body }}</div>
           </td>
-          <td>{{ ad.priority }}</td>
+          <td class="num">{{ ad.priority }}</td>
           <td class="nowrap">{{ dateTime(ad.startsAt) }}<br />至 {{ ad.endsAt ? dateTime(ad.endsAt) : '不限' }}</td>
-          <td>{{ ad.last30Days.impressions }} / {{ ad.last30Days.clicks }}</td>
-          <td>{{ ctr(ad) }}</td>
-          <td class="nowrap">{{ ad.live ? '顯示中' : ad.active ? '未到或已過期' : '已下架' }}</td>
+          <td class="num">{{ ad.last30Days.impressions }} / {{ ad.last30Days.clicks }}</td>
+          <td class="num">{{ ctr(ad) }}</td>
+          <td><span class="tag" :class="{ 'tag--info': ad.live }">{{ ad.live ? '顯示中' : ad.active ? '未到或已過期' : '已下架' }}</span></td>
           <td class="row">
             <button v-if="ad.active" class="button secondary" @click="setActive(ad, false)">下架</button>
             <button v-else class="button secondary" @click="setActive(ad, true)">上架</button>

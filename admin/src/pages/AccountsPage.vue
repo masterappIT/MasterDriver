@@ -92,8 +92,8 @@ onMounted(load);
           <td>{{ account.username }}</td>
           <td>{{ account.displayName }}</td>
           <td>{{ ROLE_LABEL[account.role] }}</td>
-          <td>{{ dateTime(account.lastLoginAt) }}</td>
-          <td>{{ account.disabled ? '已停用' : '使用中' }}</td>
+          <td class="nowrap">{{ dateTime(account.lastLoginAt) }}</td>
+          <td><span class="tag" :class="account.disabled ? 'tag--danger' : 'tag--info'">{{ account.disabled ? '已停用' : '使用中' }}</span></td>
           <td class="row">
             <template v-if="account.id !== session.admin?.id">
               <button class="button secondary" @click="resetPassword(account)">重設密碼</button>
