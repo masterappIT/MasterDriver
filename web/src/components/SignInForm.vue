@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { RouterLink } from 'vue-router';
 import { api, errorText, loadSession, rememberToken } from '../api';
 import { t } from '../i18n';
 
 const emit = defineEmits<{ signedIn: [] }>();
 
-const countryCode = ref<'+852' | '+86' | '+853'>('+852');
+type CountryCode = '+852' | '+86' | '+853';
+const AREA_NAME: Record<CountryCode, string> = { '+852': '香港', '+86': '內地', '+853': '澳門' };
+
+const countryCode = ref<CountryCode>('+852');
 const phone = ref('');
 const code = ref('');
 const sent = ref(false);
@@ -14,6 +18,28 @@ const busy = ref(false);
 const error = ref('');
 const codeInput = ref<HTMLInputElement | null>(null);
 let timer: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * The areas whose SMS is not set up, as the server says. Choosing one says so at once instead of
+ * failing after 取得驗證碼; the server still refuses it. If the list cannot be loaded, nothing is
+ * shown and the request's own error says why.
+ */
+const closedAreas = ref<CountryCode[]>([]);
+const areaClosed = computed(() => closedAreas.value.includes(countryCode.value));
+let areaChosen = false;
+const chooseArea = () => (areaChosen = true);
+
+onMounted(async () => {
+  try {
+    const { areas } = await api<{ areas: { countryCode: CountryCode; available: boolean }[] }>('GET', '/auth/otp/areas');
+    closedAreas.value = areas.filter((area) => !area.available).map((area) => area.countryCode);
+    // Start on the first area that can sign in, unless the driver already picked one.
+    const open = areas.find((area) => area.available);
+    if (!areaChosen && areaClosed.value && open) countryCode.value = open.countryCode;
+  } catch {
+    closedAreas.value = [];
+  }
+});
 
 /** The six digit slots of the code, filled as the driver types into the one real input underneath. */
 const slots = computed(() => Array.from({ length: 6 }, (_, index) => code.value[index] ?? ''));
@@ -93,7 +119,7 @@ onBeforeUnmount(() => clearInterval(timer));
       <p class="sign-in__ask">{{ t('輸入手機號碼') }}</p>
       <!-- No box: the code as a small pill, the number large on a single line. -->
       <div class="sign-in__phone">
-        <select v-model="countryCode" class="sign-in__country" :aria-label="t('國碼')">
+        <select v-model="countryCode" class="sign-in__country" :aria-label="t('國碼')" @change="chooseArea">
           <option value="+852">+852</option>
           <option value="+86">+86</option>
           <option value="+853">+853</option>
@@ -109,7 +135,10 @@ onBeforeUnmount(() => clearInterval(timer));
           required
         />
       </div>
-      <button class="button block sign-in__submit" type="submit" :disabled="busy || wait > 0">
+      <p v-if="areaClosed" class="sign-in__closed" role="status">
+        {{ t(`${AREA_NAME[countryCode]}號碼暫時收不到簡訊驗證碼，未能登入。請改用其他地區的號碼，或`) }}<RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink>{{ t('。') }}
+      </p>
+      <button class="button block sign-in__submit" type="submit" :disabled="busy || wait > 0 || areaClosed">
         {{ wait > 0 ? t(`${wait} 秒後可重新發送`) : busy ? t('發送中…') : t('取得驗證碼') }}
       </button>
       <p class="sign-in__note">{{ t('驗證一次手機，之後在這部手機都會記住你。') }}</p>
@@ -243,6 +272,16 @@ onBeforeUnmount(() => clearInterval(timer));
 }
 .sign-in__code:focus ~ .sign-in__slot.next {
   border-bottom-color: var(--color-primary);
+}
+.sign-in__closed {
+  margin: calc(var(--space-sm) * -1) 0 0;
+  color: var(--color-gold-ink);
+  font-size: var(--font-caption);
+  line-height: 1.6;
+}
+.sign-in__closed a {
+  color: var(--color-primary);
+  font-weight: 600;
 }
 .sign-in__submit {
   min-height: 48px;

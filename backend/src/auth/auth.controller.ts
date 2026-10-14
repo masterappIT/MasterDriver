@@ -21,6 +21,11 @@ export class AuthController {
     return this.auth.requestCode(body, request.ip);
   }
 
+  @Get('auth/otp/areas')
+  signInAreas() {
+    return this.auth.signInAreas();
+  }
+
   @Post('auth/otp/verify')
   @HttpCode(200)
   async verifyCode(

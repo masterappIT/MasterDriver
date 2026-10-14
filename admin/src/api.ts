@@ -43,6 +43,7 @@ const ERROR_TEXT: Record<string, string> = {
   CHANNEL_NOT_TESTED: '請先通過檢查再啟用',
   SMS_ACCOUNT_REQUIRED: '請先填寫接口網址、帳號和密碼',
   SPUG_TEMPLATE_CODE_INVALID: '請貼上 Spug「短信驗證碼」範本的調用網址（含 /sms/），或網址最後那段編碼',
+  SPUG_TEMPLATE_CODE_MASKED: '貼上的網址中間有星號，是 Spug 頁面上遮住的版本。請按調用 URL 旁的「复制」按鈕，再貼到這裡',
   SPUG_TEMPLATE_REQUIRED: '請先填寫接口網址，並貼上 Spug「短信驗證碼」範本的調用網址',
   SMS_TEST_PHONE_REQUIRED: '請先填寫測試號碼',
   LOGO_IMAGE_INVALID: 'Logo 必須是 400 KB 以內的 PNG、JPG 或 WebP 圖片',

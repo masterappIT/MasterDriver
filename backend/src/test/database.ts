@@ -81,6 +81,11 @@ const TABLES = [
 
 export class CapturingSms implements SmsProvider {
   sent: { countryCode: string; phone: string; code: string }[] = [];
+  /** Country codes whose SMS is not set up; empty means every one can receive codes. */
+  closed = new Set<string>();
+  async canSend(countryCode: string) {
+    return !this.closed.has(countryCode);
+  }
   async sendVerificationCode(countryCode: string, phone: string, code: string) {
     this.sent.push({ countryCode, phone, code });
   }
@@ -148,6 +153,7 @@ export async function setupDatabase() {
     smsChannels: new SmsChannelsService(prisma, box, { ...config, devLogOtp: false }),
     async reset() {
       sms.sent = [];
+      sms.closed.clear();
       await prisma.$executeRawUnsafe(`TRUNCATE ${TABLES.map((table) => `"${table}"`).join(', ')} CASCADE`);
     },
   };

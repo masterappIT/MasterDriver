@@ -107,6 +107,8 @@ test('Spug is set up on its own; a route that chooses it keeps its 253 account, 
   await ctx.smsChannels.save('DOMESTIC', { enabled: true, account: 'cn-acct', password: 'cn-pass' }, 'test');
   await rejectsWith(ctx.smsChannels.saveSpug({ enabled: true }, 'test'), 'SPUG_TEMPLATE_REQUIRED');
   await rejectsWith(ctx.smsChannels.saveSpug({ templateCode: 'not a code!' }, 'test'), 'SPUG_TEMPLATE_CODE_INVALID');
+  // The URL as the console shows it, starred out, is refused: the code before the stars would be wrong.
+  await rejectsWith(ctx.smsChannels.saveSpug({ templateCode: 'https://push.spug.cc/sms/A27Lsecr****EY' }, 'test'), 'SPUG_TEMPLATE_CODE_MASKED');
   // A notification template's /send URL is not an SMS template.
   await rejectsWith(ctx.smsChannels.saveSpug({ templateCode: 'https://push.spug.cc/send/A27LsecretbgEY' }, 'test'), 'SPUG_TEMPLATE_CODE_INVALID');
   // The whole /sms URL copied from the Spug console is accepted; only its code is kept.
@@ -122,6 +124,8 @@ test('Spug is set up on its own; a route that chooses it keeps its 253 account, 
   await ctx.smsChannels.sendVerificationCode('+86', '13800138000', '480917');
   assert.equal(stub.calls[0].url, 'https://push.spug.cc/sms/A27LsecretbgEY');
   assert.deepEqual(stub.calls[0].body, { to: '13800138000', code: '480917', number: '10' });
+  // +86 can receive codes through Spug; +852 cannot, its 253 account was never filled in.
+  assert.deepEqual([await ctx.smsChannels.canSend('+86'), await ctx.smsChannels.canSend('+852')], [true, false]);
   const logged = await ctx.prisma.smsMessage.findFirstOrThrow();
   assert.deepEqual([logged.provider, logged.route, logged.status], ['SPUG', 'DOMESTIC', 'sent']);
   assert.ok(!JSON.stringify(logged).includes('480917'), 'the code is never stored');

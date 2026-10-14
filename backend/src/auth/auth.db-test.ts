@@ -26,6 +26,29 @@ test('an SMS code signs in once and creates a long-lived session', async () => {
   await rejectsWith(ctx.auth.verifyCode({ ...phone, code }, undefined), 'OTP_INVALID');
 });
 
+test('a number whose SMS is not set up is refused before a code is stored, and the form is told which areas can sign in', async () => {
+  ctx.sms.closed.add('+852');
+  assert.deepEqual((await ctx.auth.signInAreas()).areas, [
+    { countryCode: '+852', available: false },
+    { countryCode: '+86', available: true },
+    { countryCode: '+853', available: true },
+  ]);
+  await rejectsWith(ctx.auth.requestCode(phone, '1.1.1.1'), 'SMS_NOT_CONFIGURED');
+  assert.equal(await ctx.prisma.verificationCode.count(), 0);
+  // Once it is set up the number can ask at once: the refusal left no resend wait behind.
+  ctx.sms.closed.clear();
+  await ctx.auth.requestCode(phone, '1.1.1.1');
+  assert.equal(ctx.sms.sent.length, 1);
+});
+
+test('development mode lets every area sign in, set up or not', async () => {
+  ctx.sms.closed.add('+852');
+  await ctx.developmentLogin.update({ enabled: true }, 'test');
+  assert.ok((await ctx.auth.signInAreas()).areas.every((area) => area.available));
+  await ctx.auth.requestCode(phone, undefined);
+  assert.equal(ctx.sms.sent.length, 0);
+});
+
 test('a wrong code counts against the limit and then locks', async () => {
   await ctx.auth.requestCode(phone, '1.1.1.1');
   const wrong = ctx.sms.sent[0].code === '111111' ? '222222' : '111111';

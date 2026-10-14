@@ -118,6 +118,10 @@ export class SmsChannelsService implements SmsProvider {
   async saveSpug(input: SpugSettingUpdate, actor: string) {
     const current = await this.spugRow();
     const { templateCode: typed, ...rest } = input;
+    // The console shows the URL with the middle of the code starred out; only its 复制 button gives the whole one.
+    if (typed?.includes('*')) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'SPUG_TEMPLATE_CODE_MASKED', 'Use the copy button in the Spug console; the URL shown there is masked');
+    }
     const templateCode = typed ? spugTemplateCode(typed) : '';
     if (templateCode && !isSpugTemplateCode(templateCode)) {
       throw apiError(HttpStatus.BAD_REQUEST, 'SPUG_TEMPLATE_CODE_INVALID', 'Paste the template URL or code from the Spug console');
@@ -201,12 +205,23 @@ export class SmsChannelsService implements SmsProvider {
     return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
   }
 
+  /** Whether the provider the route chose is switched on and filled in. */
+  private ready(row: SmsChannel, spug: SpugSetting | null) {
+    return spug ? spug.enabled && Boolean(spug.endpoint && spug.templateCodeEnc) : row.enabled && Boolean(this.credentials(row));
+  }
+
+  /** SmsProvider: a code for this number would go out now (or be logged, in local development). */
+  async canSend(countryCode: string) {
+    const row = await this.channel(routeFor(countryCode));
+    const spug = row.provider === 'SPUG' ? await this.spugRow() : null;
+    return this.ready(row, spug) || this.config.devLogOtp;
+  }
+
   /** SmsProvider: sign-in codes, through the provider the number's route chose. */
   async sendVerificationCode(countryCode: string, phone: string, code: string) {
     const row = await this.channel(routeFor(countryCode));
     const spug = row.provider === 'SPUG' ? await this.spugRow() : null;
-    const ready = spug ? spug.enabled && Boolean(spug.endpoint && spug.templateCodeEnc) : row.enabled && Boolean(this.credentials(row));
-    if (!ready) {
+    if (!this.ready(row, spug)) {
       if (this.config.devLogOtp) {
         this.logger.warn(`[development] verification code for ${countryCode} ${phone}: ${code}`);
         return;

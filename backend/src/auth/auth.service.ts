@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { defaultLocaleFor, type OtpRequest, type OtpVerify } from '@masterdriver/shared';
+import { COUNTRY_CODES, defaultLocaleFor, type CountryCode, type OtpRequest, type OtpVerify } from '@masterdriver/shared';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { readLimits } from '../common/limits';
 import { apiError } from '../common/errors';
@@ -68,6 +68,10 @@ export class AuthService {
     // and the configured code's hash is saved, so later setting changes do not
     // affect codes already issued.
     const development = await this.developmentLogin.forNewRequest();
+    // Refused before anything is stored, so a number whose SMS is not set up is not held to the resend wait.
+    if (!development.enabled && !(await this.sms.canSend(countryCode))) {
+      throw apiError(HttpStatus.SERVICE_UNAVAILABLE, 'SMS_NOT_CONFIGURED', 'SMS is not configured for this number');
+    }
     if (development.enabled) {
       await this.prisma.verificationCode.create({
         data: { countryCode, phone, ip, mode: 'DEVELOPMENT', codeHash: development.codeHash, expiresAt },
@@ -81,6 +85,18 @@ export class AuthService {
     });
     await this.sms.sendVerificationCode(countryCode, phone, code);
     return { resendAfterSeconds: limits.otpResendSeconds };
+  }
+
+  /**
+   * Which country codes can sign in now, for the sign-in form to say so before a code is asked
+   * for. Development mode sends no SMS, so every one can then.
+   */
+  async signInAreas(): Promise<{ areas: { countryCode: CountryCode; available: boolean }[] }> {
+    const development = await this.developmentLogin.forNewRequest();
+    const areas = await Promise.all(
+      COUNTRY_CODES.map(async (countryCode) => ({ countryCode, available: development.enabled || (await this.sms.canSend(countryCode)) })),
+    );
+    return { areas };
   }
 
   async verifyCode(input: OtpVerify, userAgent: string | undefined, now = new Date()) {

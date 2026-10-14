@@ -107,6 +107,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | 方法與路徑 | 登入 | 用途 |
 |---|---|---|
 | `POST /api/auth/otp/request` | — | 申請驗證碼 |
+| `GET /api/auth/otp/areas` | — | 每個國碼現在能否收驗證碼（依簡訊設定；開發模式開啟時全部可以），登入表單據此提示 |
 | `POST /api/auth/otp/verify` | — | 驗證並登入；回傳 token，同時設定 cookie |
 | `POST /api/auth/logout` | 要 | 登出 |
 | `GET /api/me` | 要 | 目前用戶與司機資料 |
