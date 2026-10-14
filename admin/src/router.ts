@@ -6,6 +6,8 @@ declare module 'vue-router' {
     title?: string;
     roles?: AdminRole[];
     public?: boolean;
+    /** The page names its own section above its title, as the Master Travel pages do. */
+    ownHeading?: boolean;
   }
 }
 
@@ -33,7 +35,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/settings/limits', component: () => import('./pages/LimitsPage.vue'), meta: { title: '防濫用設定', roles: WRITE } },
   { path: '/payment-channels', component: () => import('./pages/PaymentChannelsPage.vue'), meta: { title: '付款通道', roles: WRITE } },
   { path: '/sms-channels', redirect: { path: '/settings/login', query: { tab: 'sms' } } },
-  { path: '/accounts', component: () => import('./pages/AccountsPage.vue'), meta: { title: '後台帳號', roles: ['SUPER_ADMIN'] } },
+  { path: '/accounts', component: () => import('./pages/AccountsPage.vue'), meta: { title: '後台帳號', roles: ['SUPER_ADMIN'], ownHeading: true } },
   { path: '/audit', component: () => import('./pages/AuditPage.vue'), meta: { title: '操作紀錄', roles: ['SUPER_ADMIN'] } },
   { path: '/password', component: () => import('./pages/PasswordPage.vue'), meta: { title: '修改密碼' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
