@@ -12,6 +12,7 @@ interface Dashboard {
   serviceFee: { enabled: boolean; fee: { amount: number; currency: string } };
   developmentLoginEnabled: boolean;
   supportWaiting: number;
+  supportUnread: number;
   money: { unpaidCompleted: number; unsettledCompleted: number };
   bookings: { thisWeek: number; pending: number };
   freePeriods: { name: string; endsAt: string | null }[];
@@ -39,227 +40,301 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="dashboard__title">
+  <div class="page-head">
     <h1>總覽</h1>
-    <button type="button" class="button" :disabled="loading" @click="load">{{ loading ? '載入中…' : '重新整理' }}</button>
+    <div class="row">
+      <span v-if="updatedAt" class="hint">更新時間 {{ dateTime(updatedAt.toISOString()) }}</span>
+      <button type="button" class="button secondary" :disabled="loading" @click="load">{{ loading ? '載入中…' : '重新整理' }}</button>
+    </div>
   </div>
   <div v-if="error" class="notice error">{{ error }}{{ data ? '，下方數字可能不是最新' : '' }}</div>
   <p v-if="loading && !data" class="card muted">載入中…</p>
   <template v-if="data">
-    <div v-if="data.developmentLoginEnabled" class="notice warning">
-      開發模式登入目前<strong>開啟</strong>：所有號碼都可用指定碼登入，不會發簡訊。正式上線前請到「登入配置」關閉。
-    </div>
-    <div v-for="period in data.freePeriods" :key="period.name" class="notice">
-      全站免費期「{{ period.name }}」生效中{{ period.endsAt ? `，至 ${dateTime(period.endsAt)}` : '，未設結束時間' }}。
-    </div>
-
-    <template v-if="can.write()">
-      <div class="dashboard__heading">
-        <div>
-          <h2>待處理事項</h2>
-          <p class="muted">點選卡片查看待處理內容。</p>
-        </div>
-        <p v-if="updatedAt" class="hint">更新時間 {{ dateTime(updatedAt.toISOString()) }}</p>
-      </div>
-      <div class="dashboard__metrics dashboard__metrics--priority">
-        <RouterLink to="/support" class="dashboard__card dashboard__card--action">
+    <!-- What an operator has to act on, and nothing else, comes first. -->
+    <section v-if="can.write()" class="card dashboard__todo">
+      <h2>需要處理</h2>
+      <ul class="dashboard__todo-list">
+        <li :class="{ 'dashboard__todo--due': data.supportUnread > 0 }">
           <span>客服待回覆</span>
           <strong>{{ data.supportWaiting }}</strong>
-          <small>查看客服收件匣</small>
-        </RouterLink>
-      </div>
-    </template>
+          <span class="muted">
+            {{ data.supportWaiting === 0 ? '目前沒有' : data.supportUnread > 0 ? `其中 ${data.supportUnread} 個有未讀訊息` : '都已讀過，等回覆或按「不用回覆」' }}
+          </span>
+          <RouterLink to="/support">{{ data.supportWaiting > 0 ? '去回覆' : '打開客服' }}</RouterLink>
+        </li>
+        <li v-if="data.developmentLoginEnabled" class="dashboard__todo--warning">
+          <span>開發模式登入</span>
+          <strong>開啟中</strong>
+          <span class="muted">所有號碼都可用指定碼登入，不發簡訊；正式上線前要關閉</span>
+          <RouterLink to="/settings/login?tab=development">去關閉</RouterLink>
+        </li>
+      </ul>
+    </section>
 
-    <div class="dashboard__heading">
-      <div>
-        <h2>營運概覽</h2>
-        <p class="muted">用戶總數與點數餘額為累計資料，其餘依各卡片標示的期間。</p>
-      </div>
-      <p v-if="updatedAt && !can.write()" class="hint">更新時間 {{ dateTime(updatedAt.toISOString()) }}</p>
+    <div class="dashboard__panels">
+      <section class="card">
+        <div class="dashboard__panel-head">
+          <h2>訂單</h2>
+          <RouterLink to="/orders">查看訂單</RouterLink>
+        </div>
+        <dl class="facts facts--numbers">
+          <div><dt>今日出單</dt><dd>{{ data.orders.today }}</dd></div>
+          <div><dt>近 7 天出單</dt><dd>{{ data.orders.thisWeek }}</dd></div>
+        </dl>
+        <dl class="facts dashboard__facts">
+          <div><dt>近 7 天出單者</dt><dd>{{ data.activeDispatchersThisWeek }} 人</dd></div>
+          <div><dt>近 7 天搶單嘗試</dt><dd>{{ data.claimsThisWeek }} 次</dd></div>
+        </dl>
+        <p class="dashboard__label">近 7 天出的單，現在的狀態</p>
+        <ul class="dashboard__status">
+          <li v-for="(label, status) in ORDER_STATUS" :key="status">
+            <span class="muted">{{ label }}</span>
+            <strong>{{ data.orders.thisWeekByStatus[status] ?? 0 }}</strong>
+          </li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <div class="dashboard__panel-head">
+          <h2>用戶</h2>
+          <RouterLink to="/users">查看用戶</RouterLink>
+        </div>
+        <dl class="facts facts--numbers">
+          <div><dt>用戶總數</dt><dd>{{ data.users.total }}</dd></div>
+          <div><dt>近 7 天新增</dt><dd>{{ data.users.newThisWeek }}</dd></div>
+        </dl>
+        <dl class="facts dashboard__facts">
+          <div><dt>近 7 天名片頁預約</dt><dd>{{ data.bookings.thisWeek }} 個</dd></div>
+          <div><dt>等司機回覆的預約</dt><dd>{{ data.bookings.pending }} 個</dd></div>
+        </dl>
+        <p class="hint">預約由司機自己回覆，平台不介入。</p>
+      </section>
+
+      <section class="card">
+        <div class="dashboard__panel-head">
+          <h2>收費</h2>
+          <RouterLink v-if="can.write()" to="/billing">收費控制</RouterLink>
+        </div>
+        <dl class="facts dashboard__facts dashboard__facts--first">
+          <div class="facts__wide">
+            <dt>平台服務費</dt>
+            <dd>
+              <span class="tag" :class="{ 'tag--info': data.serviceFee.enabled }">{{ data.serviceFee.enabled ? '開啟' : '關閉' }}</span>
+              {{ data.serviceFee.enabled ? `每單 ${money(data.serviceFee.fee)}` : '' }}
+            </dd>
+          </div>
+          <div class="facts__wide">
+            <dt>全站免費期</dt>
+            <dd v-if="data.freePeriods.length === 0" class="muted">沒有生效中的免費期</dd>
+            <dd v-for="period in data.freePeriods" v-else :key="period.name">
+              {{ period.name }}<span class="muted">（{{ period.endsAt ? `至 ${dateTime(period.endsAt)}` : '未設結束時間' }}）</span>
+            </dd>
+          </div>
+          <div class="facts__wide"><dt>用戶點數餘額合計</dt><dd>{{ hkd(data.creditsOutstanding) }}</dd></div>
+        </dl>
+      </section>
     </div>
-    <div class="dashboard__metrics">
-      <article class="dashboard__card">
-        <span>用戶總數</span>
-        <strong>{{ data.users.total }}</strong>
-        <small>近 7 天新增 {{ data.users.newThisWeek }}</small>
-      </article>
-      <RouterLink to="/orders" class="dashboard__card dashboard__card--link">
-        <span>今日出單</span>
-        <strong>{{ data.orders.today }}</strong>
-        <small>近 7 天 {{ data.orders.thisWeek }} 張・查看訂單</small>
-      </RouterLink>
-      <article class="dashboard__card">
-        <span>近 7 天出單者</span>
-        <strong>{{ data.activeDispatchersThisWeek }}</strong>
-        <small>搶單嘗試 {{ data.claimsThisWeek }} 次</small>
-      </article>
-      <article class="dashboard__card">
-        <span>用戶點數餘額合計</span>
-        <strong>{{ hkd(data.creditsOutstanding) }}</strong>
-        <small>平台服務費：{{ data.serviceFee.enabled ? `開啟，每單 ${money(data.serviceFee.fee)}` : '關閉' }}</small>
-      </article>
-      <article class="dashboard__card">
-        <span>近 7 天名片頁預約</span>
-        <strong>{{ data.bookings.thisWeek }}</strong>
-        <small>等司機回覆 {{ data.bookings.pending }} 個</small>
-      </article>
-      <RouterLink to="/orders?money=UNPAID" class="dashboard__card dashboard__card--link">
+
+    <section class="card dashboard__marks">
+      <div>
+        <h2>出單者自己的記號</h2>
+        <p class="hint">收款與結清由出單者自己標記，平台不經手車費、不核對，不需要後台處理；有糾紛時可從這裡查單。</p>
+      </div>
+      <RouterLink to="/orders?money=UNPAID" class="dashboard__mark">
         <span>已完成未收款</span>
         <strong>{{ data.money.unpaidCompleted }}</strong>
-        <small>出單者自己的記號・查看訂單</small>
       </RouterLink>
-      <RouterLink to="/orders?money=UNSETTLED" class="dashboard__card dashboard__card--link">
+      <RouterLink to="/orders?money=UNSETTLED" class="dashboard__mark">
         <span>已完成未結清</span>
         <strong>{{ data.money.unsettledCompleted }}</strong>
-        <small>出單者與接單司機之間・查看訂單</small>
       </RouterLink>
-    </div>
-
-    <section class="card dashboard__status">
-      <h2>近 7 天訂單狀態</h2>
-      <div class="dashboard__status-list">
-        <div v-for="(label, status) in ORDER_STATUS" :key="status">
-          <span class="muted">{{ label }}</span>
-          <strong>{{ data.orders.thisWeekByStatus[status] ?? 0 }}</strong>
-        </div>
-      </div>
     </section>
   </template>
 </template>
 
 <style scoped>
-.dashboard__title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: var(--space-lg);
+.dashboard__todo h2 {
+  margin-bottom: var(--space-sm);
 }
 
-.dashboard__heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px 24px;
-  margin: 24px 0 12px;
-}
-
-.dashboard__heading h2 {
+/* One line per thing to do: what, how many, a word on it, and where to do it. */
+.dashboard__todo-list {
+  display: grid;
   margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.dashboard__heading p {
-  margin: 5px 0 0;
-  font-size: var(--font-label);
+.dashboard__todo-list li {
+  display: grid;
+  grid-template-columns: 140px 80px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+  padding: 12px 0;
+  border-top: 1px solid var(--color-divider);
 }
 
-.dashboard__heading .hint {
+.dashboard__todo-list li:first-child {
+  border-top: 0;
+}
+
+.dashboard__todo-list strong {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard__todo-list a {
+  font-weight: 700;
   white-space: nowrap;
 }
 
-.dashboard__metrics {
+.dashboard__todo--due strong {
+  color: var(--color-danger);
+}
+
+.dashboard__todo--warning strong {
+  color: var(--color-warning-text);
+  font-size: var(--font-body);
+}
+
+.dashboard__panels {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
 }
 
-.dashboard__metrics--priority {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+.dashboard__panels > .card {
+  margin-bottom: 0;
 }
 
-/* A number with what it counts: small, so a row of them fits above the fold. */
-.dashboard__card {
-  position: relative;
-  display: block;
-  min-width: 0;
-  padding: 18px 20px;
-  overflow: hidden;
-  border: 1px solid var(--color-card-border);
-  border-radius: var(--radius-card);
-  color: var(--color-text);
-  background: var(--color-surface);
-  box-shadow: var(--shadow-card);
-  text-align: left;
+/* Two facts side by side, however narrow the panel. */
+.dashboard__panels .facts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md) var(--space-lg);
 }
 
-.dashboard__card span {
-  display: block;
-  color: var(--color-text-secondary);
-  font-size: var(--font-caption);
+.dashboard__panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.dashboard__panel-head h2 {
+  margin: 0;
+}
+
+.dashboard__panel-head a {
+  font-size: var(--font-label);
   font-weight: 600;
 }
 
-.dashboard__card strong {
-  display: block;
-  margin-top: 8px;
-  font-size: 30px;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+.dashboard__facts {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-divider);
 }
 
-.dashboard__card small {
-  position: relative;
-  z-index: 1;
-  display: block;
-  margin-top: 2px;
-  color: var(--color-text-muted);
+.dashboard__facts--first {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.dashboard__label {
+  margin: var(--space-lg) 0 var(--space-sm);
+  color: var(--color-text-secondary);
   font-size: var(--font-caption);
 }
 
-.dashboard__card--action {
-  border-color: #bcd6f7;
-  background: #fafdff;
+.dashboard__status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.dashboard__card--action small {
-  color: var(--color-primary);
-  font-weight: 750;
+.dashboard__status li {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-input);
+  background: var(--color-field);
+  font-size: var(--font-caption);
 }
 
-.dashboard__card--link:hover,
-.dashboard__card--action:hover {
+.dashboard__status strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard__panels .hint {
+  margin: var(--space-md) 0 0;
+}
+
+/* The dispatchers' own marks: for looking up, not for acting on. */
+.dashboard__marks {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(2, 180px);
+  align-items: center;
+  gap: var(--space-lg);
+}
+
+.dashboard__marks h2 {
+  margin-bottom: 4px;
+}
+
+.dashboard__marks .hint {
+  margin: 0;
+}
+
+.dashboard__mark {
+  display: grid;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-card-border);
+  border-radius: var(--radius-input);
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+
+.dashboard__mark strong {
+  color: var(--color-text);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard__mark:hover {
   border-color: var(--color-primary);
   text-decoration: none;
 }
 
-.dashboard__status {
-  margin-top: 14px;
-}
-
-.dashboard__status-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 10px;
-}
-
-.dashboard__status-list div {
-  display: grid;
-  gap: 2px;
-  padding: 8px 12px;
-  border: 1px solid #e1eaf4;
-  border-radius: 10px;
-  background: #f8fbff;
-}
-
-.dashboard__status-list strong {
-  font-size: 20px;
-}
-
 @media (max-width: 700px) {
-  .dashboard__heading {
-    align-items: stretch;
-    flex-direction: column;
+  .dashboard__todo-list li {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 4px var(--space-md);
   }
 
-  .dashboard__heading .hint {
-    white-space: normal;
+  .dashboard__todo-list li > .muted {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    font-size: var(--font-caption);
   }
 
-  .dashboard__metrics {
-    gap: 8px;
+  .dashboard__status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .dashboard__marks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 
+  .dashboard__marks > div {
+    grid-column: 1 / -1;
+  }
 }
 </style>

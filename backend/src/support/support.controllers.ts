@@ -1,10 +1,12 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import {
+  adminSupportHandledSchema,
   adminSupportOpenSchema,
   adminSupportQuerySchema,
   supportMediaQuerySchema,
   supportTextSchema,
   supportThreadQuerySchema,
+  type AdminSupportHandled,
   type AdminSupportOpen,
   type AdminSupportQuery,
   type SupportMediaQuery,
@@ -135,6 +137,17 @@ export class AdminSupportController {
     @Req() request: Request,
   ) {
     return this.support.staffSendText(id, admin, body, request.ip);
+  }
+
+  @Post('conversations/:id/handled')
+  @HttpCode(200)
+  markHandled(
+    @Param('id') id: string,
+    @Body(new ZodPipe(adminSupportHandledSchema)) body: AdminSupportHandled,
+    @CurrentAdmin() admin: AdminUser,
+    @Req() request: Request,
+  ) {
+    return this.support.staffMarkHandled(id, admin, body.seq, request.ip);
   }
 
   @Post('conversations/:id/media')

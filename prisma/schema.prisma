@@ -870,6 +870,8 @@ model SupportConversation {
   waiting             Boolean   @default(false)
   /// Staff messages the user or guest has not opened yet.
   unreadByParticipant Int       @default(0)
+  /// Messages from the user or guest no staff member has opened yet (the inbox is shared, so one look clears it).
+  unreadByStaff       Int       @default(0)
   lastMessageAt       DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt

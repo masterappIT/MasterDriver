@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api, ROLE_LABEL, session, type AdminRole } from './api';
+import { api, can, ROLE_LABEL, session, type AdminRole } from './api';
 import { COPYRIGHT } from './copyright';
+import { supportUnread, watchSupportUnread } from './support-unread';
 
 const route = useRoute();
 const router = useRouter();
@@ -19,17 +20,22 @@ interface NavGroup {
 
 const WRITE: AdminRole[] = ['SUPER_ADMIN', 'OPERATOR'];
 
-// Grouped by what an operator comes to do: the day's work first, then money, settings and the system itself.
+// Grouped by what an operator comes to do: the day's work first, then growth, money, settings and the system itself.
 const NAV: (NavLink | NavGroup)[] = [
   { to: '/', label: '總覽' },
   {
-    label: '營運',
+    label: '日常',
     items: [
-      { to: '/users', label: '用戶' },
-      { to: '/orders', label: '訂單' },
       { to: '/support', label: '客服', roles: WRITE },
+      { to: '/orders', label: '訂單' },
+      { to: '/users', label: '用戶' },
+    ],
+  },
+  {
+    label: '推廣',
+    items: [
       { to: '/leads', label: '潛在客戶' },
-      { to: '/observability', label: '數據流監控', roles: WRITE },
+      { to: '/ads', label: '廣告欄位', roles: WRITE },
     ],
   },
   {
@@ -38,7 +44,6 @@ const NAV: (NavLink | NavGroup)[] = [
       { to: '/billing', label: '收費控制', roles: WRITE },
       { to: '/service-fee', label: '平台服務費', roles: WRITE },
       { to: '/payment-channels', label: '付款通道', roles: WRITE },
-      { to: '/ads', label: '廣告欄位', roles: WRITE },
     ],
   },
   {
@@ -53,6 +58,7 @@ const NAV: (NavLink | NavGroup)[] = [
   {
     label: '系統',
     items: [
+      { to: '/observability', label: '數據流監控', roles: WRITE },
       { to: '/accounts', label: '後台帳號', roles: ['SUPER_ADMIN'] },
       { to: '/audit', label: '操作紀錄', roles: ['SUPER_ADMIN'] },
     ],
@@ -66,6 +72,20 @@ const nav = computed(() =>
   ),
 );
 const isActive = (to: string) => (to === '/' ? route.path === '/' : route.path === to || route.path.startsWith(`${to}/`));
+
+/** Above each page's title: the group it sits in, so a detail page still says where it belongs. */
+const section = computed(() => {
+  for (const entry of NAV) {
+    if ('items' in entry && entry.items.some((item) => isActive(item.to))) return entry.label;
+  }
+  return '管理控制台';
+});
+
+watch(
+  () => can.write(),
+  (on) => watchSupportUnread(on),
+  { immediate: true },
+);
 
 const mobileNavOpen = ref(false);
 watch(
@@ -98,6 +118,7 @@ async function logout() {
         @click="mobileNavOpen = !mobileNavOpen"
       >
         <span aria-hidden="true"></span>
+        <i v-if="supportUnread.count && !mobileNavOpen" class="admin-shell__toggle-dot" aria-hidden="true"></i>
       </button>
       <nav id="admin-navigation" class="admin-shell__nav">
         <template v-for="entry in nav" :key="entry.label">
@@ -106,6 +127,9 @@ async function logout() {
             <div class="admin-shell__group-items">
               <RouterLink v-for="item in entry.items" :key="item.to" :to="item.to" :class="{ active: isActive(item.to) }">
                 {{ item.label }}
+                <span v-if="item.to === '/support' && supportUnread.count" class="admin-shell__badge" :aria-label="`${supportUnread.count} 個未讀`">
+                  {{ supportUnread.count }}
+                </span>
               </RouterLink>
             </div>
           </div>
@@ -124,7 +148,7 @@ async function logout() {
       </div>
     </aside>
     <main class="admin-shell__main">
-      <span class="eyebrow admin-shell__eyebrow">管理控制台</span>
+      <span class="eyebrow admin-shell__eyebrow">{{ section }}</span>
       <!-- 客服 keeps its inbox while switching conversations; every other page reloads with its URL. -->
       <RouterView :key="route.path.startsWith('/support') ? '/support' : route.fullPath" />
       <footer class="admin-shell__copyright">{{ COPYRIGHT }}</footer>
@@ -238,6 +262,26 @@ async function logout() {
 .admin-shell__group-items {
   display: grid;
   gap: 4px;
+}
+
+.admin-shell__group-items a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* How many 客服 conversations have a message nobody has opened yet. */
+.admin-shell__badge {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  color: #fff;
+  background: var(--color-danger);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
 }
 
 .admin-shell__mobile-only {
@@ -358,6 +402,18 @@ async function logout() {
     color: #fff;
     background: linear-gradient(145deg, #2a78df, #1769d5);
     box-shadow: 0 0 0 3px rgb(42 120 223 / 24%), 0 5px 12px rgb(7 25 52 / 26%);
+  }
+
+  /* 客服 has something unread, while the menu is folded away. */
+  .admin-shell__toggle-dot {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 10px;
+    height: 10px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: var(--color-danger);
   }
 
   /* Three bars drawn with one span. */

@@ -50,6 +50,9 @@ const ACTION: Record<string, string> = {
   'channels.sms.save': '修改簡訊通道',
   'channels.sms.test': '檢查簡訊連線',
   'channels.sms.testSend': '發送測試簡訊',
+  'support.open': '客服主動聯絡',
+  'support.reply': '客服回覆',
+  'support.handled': '客服標記不用回覆',
 };
 
 const action = ref('');

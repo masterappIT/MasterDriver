@@ -110,11 +110,16 @@ export const adminPolicyUpdateSchema = z
   .refine((value) => value.active !== undefined || value.endsAt !== undefined, { message: 'NOTHING_TO_UPDATE' });
 export type AdminPolicyUpdate = z.infer<typeof adminPolicyUpdateSchema>;
 
-/** 客服: which conversations the inbox lists. */
+/** 客服: which conversations the inbox lists; `participant` narrows it to signed-in users or to guests. */
 export const adminSupportQuerySchema = pageQuerySchema.extend({
   filter: z.enum(['waiting', 'all']).default('waiting'),
+  participant: z.enum(['USER', 'GUEST']).optional(),
 });
 export type AdminSupportQuery = z.infer<typeof adminSupportQuerySchema>;
+
+/** 不用回覆: `seq` is the last message the staff member saw; anything newer keeps the conversation waiting. */
+export const adminSupportHandledSchema = z.object({ seq: z.number().int().min(0).max(2_000_000_000) });
+export type AdminSupportHandled = z.infer<typeof adminSupportHandledSchema>;
 
 export const adminSupportOpenSchema = z.object({ userId: z.string().trim().min(1).max(40) });
 export type AdminSupportOpen = z.infer<typeof adminSupportOpenSchema>;

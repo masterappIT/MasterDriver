@@ -55,7 +55,7 @@ export class AdminDataService {
   async dashboard(now = new Date()) {
     const today = startOfHongKongDay(now);
     const weekAgo = new Date(now.getTime() - 7 * DAY_MS);
-    const [users, newUsers, ordersToday, ordersWeek, byStatus, claimsWeek, dispatchers, credits, fee, devLogin, freePeriods, supportWaiting, unpaid, unsettled, bookingsWeek, bookingsPending] =
+    const [users, newUsers, ordersToday, ordersWeek, byStatus, claimsWeek, dispatchers, credits, fee, devLogin, freePeriods, supportWaiting, supportUnread, unpaid, unsettled, bookingsWeek, bookingsPending] =
       await Promise.all([
         this.prisma.user.count(),
         this.prisma.user.count({ where: { createdAt: { gte: weekAgo } } }),
@@ -72,6 +72,7 @@ export class AdminDataService {
           select: { name: true, endsAt: true },
         }),
         this.prisma.supportConversation.count({ where: { waiting: true } }),
+        this.prisma.supportConversation.count({ where: { unreadByStaff: { gt: 0 } } }),
         this.prisma.order.count({ where: { ...UNPAID, status: 'COMPLETED' } }),
         this.prisma.order.count({ where: this.unsettled() }),
         this.prisma.bookingRequest.count({ where: { createdAt: { gte: weekAgo } } }),
@@ -91,6 +92,8 @@ export class AdminDataService {
       developmentLoginEnabled: devLogin?.enabled ?? false,
       /** 客服 conversations whose last message has no reply yet. */
       supportWaiting,
+      /** Of those and any others, how many have a message no staff member has opened yet. */
+      supportUnread,
       /** Finished trips still waiting on the dispatcher's own marks; the platform handles no money. */
       money: { unpaidCompleted: unpaid, unsettledCompleted: unsettled },
       /** 名片頁 bookings: sent in the last 7 days, and still waiting for the driver's answer. */

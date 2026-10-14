@@ -148,17 +148,24 @@ export class SupportService {
     return this.prisma.supportConversation.count({ where: { waiting: true } });
   }
 
+  async unreadCount() {
+    return this.prisma.supportConversation.count({ where: { unreadByStaff: { gt: 0 } } });
+  }
+
   /** The shared inbox: conversations waiting for a reply first come, first served; or all, newest first. */
   async list(query: AdminSupportQuery) {
     const where: Prisma.SupportConversationWhereInput = {
       ...(query.filter === 'waiting' ? { waiting: true } : { lastMessageAt: { not: null } }),
+      ...(query.participant === 'USER' ? { userId: { not: null } } : query.participant === 'GUEST' ? { userId: null } : {}),
       ...(query.q
         ? { user: { OR: [{ phone: { contains: query.q } }, { profile: { name: { contains: query.q, mode: 'insensitive' } } }] } }
         : {}),
     };
-    const [total, waiting, rows] = await Promise.all([
+    const [total, waiting, unread, unreadGuests, rows] = await Promise.all([
       this.prisma.supportConversation.count({ where }),
       this.waitingCount(),
+      this.unreadCount(),
+      this.prisma.supportConversation.count({ where: { unreadByStaff: { gt: 0 }, userId: null } }),
       this.prisma.supportConversation.findMany({
         where,
         orderBy: { lastMessageAt: query.filter === 'waiting' ? 'asc' : 'desc' },
@@ -173,6 +180,10 @@ export class SupportService {
     return {
       total,
       waiting,
+      /** Conversations with a message no staff member has opened yet: the red dots and numbers. */
+      unread,
+      /** The same, split by who is asking, for the inbox's 用戶／訪客 tabs. */
+      unreadBy: { USER: unread - unreadGuests, GUEST: unreadGuests },
       page: query.page,
       pageSize: PAGE_SIZE,
       items: rows.map((row) => ({
@@ -181,6 +192,7 @@ export class SupportService {
         name: row.user?.profile?.name ?? null,
         phone: row.user ? `${row.user.countryCode} ${row.user.phone}` : null,
         waiting: row.waiting,
+        unread: row.unreadByStaff,
         lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
         lastFromStaff: row.messages[0]?.fromStaff ?? false,
         preview: preview(row.messages[0]),
@@ -194,6 +206,10 @@ export class SupportService {
       include: { user: { select: { id: true, countryCode: true, phone: true, createdAt: true, profile: { select: { name: true } } } } },
     });
     if (!conversation) throw this.conversationNotFound();
+    // Seen on a staff member's screen (opened, or polled while open): read, for the whole shared inbox.
+    if (conversation.unreadByStaff > 0) {
+      await this.prisma.supportConversation.updateMany({ where: { id: conversationId, unreadByStaff: { gt: 0 } }, data: { unreadByStaff: 0 } });
+    }
     return {
       conversation: {
         id: conversation.id,
@@ -207,6 +223,26 @@ export class SupportService {
       ...(await this.page(conversationId, query, true)),
       uploads: this.uploadRules('STAFF'),
     };
+  }
+
+  /**
+   * 不用回覆: the last message needs no answer (a thank-you, a duplicate), so the conversation leaves
+   * the waiting list without a reply. The next message from the user puts it back.
+   */
+  async staffMarkHandled(conversationId: string, staff: Staff, seenSeq: number, ip?: string) {
+    await this.requireConversation(conversationId);
+    // A message that arrived after the one the staff member saw has not been read: it keeps waiting.
+    // One statement, so a message arriving meanwhile cannot be cleared unseen.
+    const { count } = await this.prisma.supportConversation.updateMany({
+      where: { id: conversationId, waiting: true, messages: { none: { seq: { gt: seenSeq } } } },
+      data: { waiting: false, unreadByStaff: 0 },
+    });
+    if (count > 0) {
+      await this.audit.log({ adminId: staff.id, action: 'support.handled', targetType: 'SupportConversation', targetId: conversationId, ip });
+      return { waiting: false };
+    }
+    const { waiting } = await this.prisma.supportConversation.findUniqueOrThrow({ where: { id: conversationId }, select: { waiting: true } });
+    return { waiting };
   }
 
   /** 主動聯繫: the conversation of an existing user, created when there is none yet. */
@@ -345,8 +381,8 @@ export class SupportService {
         await tx.supportConversation.update({
           where: { id: conversationId },
           data: fromStaff
-            ? { lastMessageAt: now, waiting: false, unreadByParticipant: { increment: 1 } }
-            : { lastMessageAt: now, waiting: true, unreadByParticipant: 0 },
+            ? { lastMessageAt: now, waiting: false, unreadByParticipant: { increment: 1 }, unreadByStaff: 0 }
+            : { lastMessageAt: now, waiting: true, unreadByParticipant: 0, unreadByStaff: { increment: 1 } },
         });
         return message;
       });

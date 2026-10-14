@@ -228,3 +228,62 @@ test('the dashboard counts conversations waiting for a reply', async () => {
   await ctx.support.sendText(user, text('有人嗎'));
   assert.equal((await ctx.adminData.dashboard()).supportWaiting, 1);
 });
+
+test('the inbox splits users from guests, and counts each kind unread', async () => {
+  const user = asUser(await createDriver(ctx, '黃師傅'));
+  const { guest } = await asGuest();
+  await ctx.support.sendText(user, text('出單頁打不開'));
+  await ctx.support.sendText(guest, text('怎樣註冊？'));
+
+  const all = await ctx.support.list({ page: 1, filter: 'waiting', q: undefined });
+  assert.equal(all.total, 2);
+  assert.equal(all.unread, 2);
+  assert.deepEqual(all.unreadBy, { USER: 1, GUEST: 1 });
+
+  const users = await ctx.support.list({ page: 1, filter: 'waiting', q: undefined, participant: 'USER' });
+  assert.deepEqual(users.items.map((item) => item.name), ['黃師傅']);
+  const guests = await ctx.support.list({ page: 1, filter: 'all', q: undefined, participant: 'GUEST' });
+  assert.deepEqual(guests.items.map((item) => item.participant), ['GUEST']);
+});
+
+test('不用回覆 takes a conversation off the waiting list, unless a newer message arrived; the next message puts it back', async () => {
+  const user = asUser(await createDriver(ctx, '林師傅'));
+  const admin = await staff();
+  const first = await ctx.support.sendText(user, text('謝謝'));
+  const id = (await ctx.support.list({ page: 1, filter: 'waiting', q: undefined })).items[0].id;
+
+  // The staff member saw only the first message; a second one came in meanwhile.
+  const second = await ctx.support.sendText(user, text('還有一個問題'));
+  assert.deepEqual(await ctx.support.staffMarkHandled(id, admin, first.seq, '1.1.1.1'), { waiting: true });
+  assert.equal(await ctx.support.waitingCount(), 1);
+
+  assert.deepEqual(await ctx.support.staffMarkHandled(id, admin, second.seq, '1.1.1.1'), { waiting: false });
+  assert.equal(await ctx.support.waitingCount(), 0);
+  const logged = await ctx.prisma.adminAuditLog.findMany({ where: { action: 'support.handled' } });
+  assert.equal(logged.length, 1);
+
+  await ctx.support.sendText(user, text('再問一下'));
+  assert.equal(await ctx.support.waitingCount(), 1);
+  await rejectsWith(ctx.support.staffMarkHandled('missing', admin, 0), 'SUPPORT_CONVERSATION_NOT_FOUND');
+});
+
+test('opening a conversation reads it for the whole inbox; it still waits for a reply until one is sent', async () => {
+  const user = asUser(await createDriver(ctx, '周師傅'));
+  const admin = await staff();
+  await ctx.support.sendText(user, text('第一則'));
+  await ctx.support.sendText(user, text('第二則'));
+  const [item] = (await ctx.support.list({ page: 1, filter: 'waiting', q: undefined })).items;
+  assert.equal(item.unread, 2);
+  assert.equal(await ctx.support.unreadCount(), 1);
+
+  await ctx.support.staffThread(item.id, {});
+  const read = await ctx.support.list({ page: 1, filter: 'waiting', q: undefined });
+  assert.equal(read.unread, 0, 'the red dot and number go once someone has looked');
+  assert.equal(read.waiting, 1, 'still waiting for an answer');
+  assert.equal(read.items[0].unread, 0);
+
+  await ctx.support.sendText(user, text('第三則'));
+  assert.equal(await ctx.support.unreadCount(), 1);
+  await ctx.support.staffSendText(item.id, admin, text('收到'), '1.1.1.1');
+  assert.equal(await ctx.support.unreadCount(), 0, 'replying reads it too');
+});
