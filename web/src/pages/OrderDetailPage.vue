@@ -101,6 +101,11 @@ const prices = reactive({ currency: 'HKD', driver: '', passengerCurrency: 'HKD',
 const isDispatcher = computed(() => order.value?.viewer === 'dispatcher');
 const live = computed(() => order.value?.status === 'OPEN' || order.value?.status === 'ASSIGNED');
 const selfDriven = computed(() => Boolean(order.value?.selfDrive) && order.value?.status === 'ASSIGNED');
+/**
+ * 這單我自己做: the dispatcher drives it, so the page keeps what driving needs (trip, passenger,
+ * price and payment, 標記完成); the settings fold into 其他設定 and the dispatching parts go.
+ */
+const ownTrip = computed(() => isDispatcher.value && Boolean(order.value?.selfDrive));
 /** A driver is set and the passenger has not confirmed: remind the dispatcher to send the link. */
 /** Someone else has the order: the group now needs 已派出, not the order again. */
 const taken = computed(() => order.value?.status === 'ASSIGNED' && !selfDriven.value && Boolean(order.value.share?.claimed));
@@ -203,7 +208,7 @@ const waitingForDriver = computed(() => isDispatcher.value && order.value?.statu
 /** 行程群 folded to one line: what is set up now. */
 const tripGroupSummary = computed(() => {
   const group = order.value?.tripGroup;
-  if (!group) return '還沒加上，可讓乘客和接單司機一起進群';
+  if (!group) return ownTrip.value ? '還沒加上，可讓乘客進群' : '還沒加上，可讓乘客和接單司機一起進群';
   if (group.expired) return '微信群二維碼已過期，請重新上傳';
   return group.platform === 'WHATSAPP' ? '已加上 WhatsApp 群' : `已加上微信群，${shortTime(group.expiresAt ?? null)} 前有效`;
 });
@@ -294,7 +299,10 @@ function editPrices() {
   prices.currency = o.driverPrice?.currency ?? o.passengerPrice?.currency ?? 'HKD';
   prices.passengerCurrency = o.passengerPrice?.currency ?? prices.currency;
   prices.driver = o.driverPrice ? String(o.driverPrice.amount) : '';
-  prices.passenger = o.passengerPrice ? String(o.passengerPrice.amount) : '';
+  // 自己做 shows one price, the driver price when no passenger price was set; editing keeps that figure.
+  const passenger = o.passengerPrice ?? (ownTrip.value ? o.driverPrice : null);
+  if (passenger) prices.passengerCurrency = passenger.currency;
+  prices.passenger = passenger ? String(passenger.amount) : '';
   editingPrices.value = true;
 }
 
@@ -360,7 +368,7 @@ watch(id, () => {
 
     <div v-if="order" class="detail__body">
       <!-- Where the order stands: 已出單, 有人接, 乘客確認. -->
-      <ol v-if="order.status !== 'CANCELLED'" class="detail__steps" style="order: 1" :aria-label="t('進度')">
+      <ol v-if="order.status !== 'CANCELLED' && !ownTrip" class="detail__steps" style="order: 1" :aria-label="t('進度')">
         <li class="done">{{ t('已出單') }}</li>
         <li :class="{ done: order.claimedAt }">{{ order.driver?.name ? t(`${order.driver.name} 接單`) : t('有人接') }}</li>
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
@@ -421,7 +429,7 @@ watch(id, () => {
       </section>
 
       <!-- 加接駁段 is seldom needed: one folded line, near the end. -->
-      <details v-else-if="canAddLeg" class="card detail__fold" style="order: 16">
+      <details v-else-if="canAddLeg && !ownTrip" class="card detail__fold" style="order: 16">
         <summary>
           <span class="detail__fold-text">
             <strong>{{ t('加接駁段') }}</strong>
@@ -446,7 +454,7 @@ watch(id, () => {
           <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電乘客') }}</a>
           <button class="button secondary" type="button" @click="copy(order.passengerContact, '已複製')">{{ t('複製號碼') }}</button>
         </div>
-        <div v-if="isDispatcher" class="detail__divided detail__reveal">
+        <div v-if="isDispatcher && !ownTrip" class="detail__divided detail__reveal">
           <template v-if="!editingReveal">
             <span class="detail__reveal-text">{{ order.contactRevealMinutes == null ? t('接單司機搶到就看到乘客電話') : t(`接單司機${revealLabel(order.contactRevealMinutes)}看到乘客電話`) }}</span>
             <button v-if="live" class="chip" type="button" @click="editReveal">{{ t('修改') }}</button>
@@ -468,13 +476,56 @@ watch(id, () => {
 
       <!-- 行程群: the dispatcher's own group for this trip, passed on to the passenger and the driver; folded to one line. -->
       <details v-if="isDispatcher && order.status !== 'CANCELLED'" class="card detail__fold" style="order: 14" :open="editingGroup || undefined">
-        <summary>
+        <summary v-if="ownTrip">
+          <span class="detail__fold-text">
+            <strong>{{ t('其他設定') }}</strong>
+            <span class="hint">{{ t('確認頁顯示的內容、行程群、加接駁段') }}</span>
+          </span>
+          <AppIcon name="chevron" class="detail__fold-arrow" />
+        </summary>
+        <summary v-else>
           <span class="detail__fold-text">
             <strong>{{ t('行程群（你、乘客、司機）') }}</strong>
             <span class="hint" :class="{ 'detail__group-expired': order.tripGroup?.expired }">{{ t(tripGroupSummary) }}</span>
           </span>
           <AppIcon name="chevron" class="detail__fold-arrow" />
         </summary>
+        <!-- 自己做: what the passenger's page shows, kept here instead of on cards of their own. -->
+        <template v-if="ownTrip">
+          <label v-if="live" class="detail__switch">
+            <span>{{ t('乘客確認頁顯示價錢') }}</span>
+            <input
+              class="switch"
+              type="checkbox"
+              :checked="order.showPassengerPrice"
+              :disabled="busy"
+              @change="patchPrices({ showPassengerPrice: !order.showPassengerPrice }, '已更新')"
+            />
+          </label>
+          <label class="detail__switch detail__divided">
+            <span>
+              {{ t('乘客確認頁顯示收款方式') }}
+              <small>{{ order.journey ? t('整個接駁行程一起顯示，乘客付一次') : t('顯示時會一併顯示價錢') }}</small>
+            </span>
+            <input
+              class="switch"
+              type="checkbox"
+              :checked="order.showPaymentMethods"
+              :disabled="busy"
+              @change="setPayment({ showPaymentMethods: !order.showPaymentMethods }, '已更新')"
+            />
+          </label>
+          <p v-if="order.serviceFee" class="hint detail__divided">
+            {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整個接駁行程只收一次，全部段都取消才退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
+          </p>
+          <RouterLink v-if="canAddLeg && !order.journey" class="button secondary block detail__gap" :to="`/app/new?after=${order.id}`">
+            <AppIcon name="add" :size="18" />{{ t('加接駁段') }}
+          </RouterLink>
+          <div class="detail__divided">
+            <span class="section-label">{{ t('行程群（你和乘客）') }}</span>
+            <p class="hint" :class="{ 'detail__group-expired': order.tripGroup?.expired }">{{ t(tripGroupSummary) }}</p>
+          </div>
+        </template>
         <template v-if="order.tripGroup && !editingGroup">
           <p v-if="order.tripGroup.expired" class="detail__group-expired">{{ t('微信群二維碼已超過 7 天，乘客和司機看不到了，請重新上傳。') }}</p>
           <p v-else class="hint">{{ t('乘客確認頁和接單司機都看得到。') }}</p>
@@ -498,10 +549,9 @@ watch(id, () => {
       </details>
 
       <!-- Dispatcher: texts to paste into groups and to the passenger -->
-      <section v-if="isDispatcher && order.share && live" class="card" :style="{ order: waitingForDriver ? 6 : taken ? 8 : 15 }">
-        <p v-if="selfDriven" class="detail__line">{{ t('這單你自己做，不用貼到群裡。要交給別的司機，按下面的「放到群裡搶」。') }}</p>
+      <section v-if="isDispatcher && order.share && live && !ownTrip" class="card" :style="{ order: waitingForDriver ? 6 : taken ? 8 : 15 }">
         <!-- Taken: the group needs to hear that, and the order must not be pasted again. -->
-        <template v-else-if="taken">
+        <template v-if="taken">
           <span class="section-label">{{ t('已有人接，貼回群裡讓大家知道') }}</span>
           <GroupText :text="order.share.claimed ?? ''" />
           <button class="button block" type="button" @click="copy(order.share.claimed, '已複製，貼回群裡吧')">
@@ -541,7 +591,25 @@ watch(id, () => {
 
       <!-- Prices: the dispatcher sees both and the spread; the driver only the driver price -->
       <section class="card" style="order: 12">
-        <template v-if="!editingPrices">
+        <!-- 自己做: one price, what the passenger pays, and whether it came in. -->
+        <template v-if="ownTrip && !editingPrices">
+          <div class="detail__paid">
+            <span class="detail__price">
+              <span class="section-label">{{ t('價錢') }}</span>
+              <strong>{{ money(order.passengerPrice ?? order.driverPrice) || t('未填') }}</strong>
+            </span>
+            <button v-if="live" class="chip" type="button" @click="editPrices">{{ t('修改') }}</button>
+          </div>
+          <div v-if="order.status !== 'CANCELLED'" class="detail__paid detail__divided">
+            <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.paidAt }">
+              {{ order.paidAt ? t(`${shortTime(order.paidAt)} 已收款`) : t('未收款') }}
+            </span>
+            <button class="chip" type="button" :disabled="busy" @click="setPayment({ paid: !order.paidAt }, order.paidAt ? '已改回未收款' : '已記為已收款')">
+              {{ order.paidAt ? t('改回未收款') : t('標記已收款') }}
+            </button>
+          </div>
+        </template>
+        <template v-else-if="!editingPrices">
           <!-- 這單我自己做 has no price for another driver, so the line is left out unless one was set. -->
           <div v-if="order.driverPrice || !order.selfDrive" class="detail__price">
             <span class="section-label">{{ t('出單價') }}</span>
@@ -570,16 +638,18 @@ watch(id, () => {
           </template>
         </template>
         <form v-if="editingPrices" @submit.prevent="savePrices">
-          <span class="section-label">{{ order.status === 'OPEN' ? t('出單價') : t('出單價（已有司機接單，不能再改）') }}</span>
-          <div class="amount-line detail__gap-bottom">
-            <select v-model="prices.currency" :aria-label="t('出單價幣種')" :disabled="order.status !== 'OPEN'">
-              <option value="HKD">HK$</option>
-              <option value="CNY">RMB¥</option>
-              <option value="MOP">MOP$</option>
-            </select>
-            <input v-model="prices.driver" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :disabled="order.status !== 'OPEN'" />
-          </div>
-          <span class="section-label">{{ t('乘客價，只有你看得到') }}</span>
+          <template v-if="!ownTrip">
+            <span class="section-label">{{ order.status === 'OPEN' ? t('出單價') : t('出單價（已有司機接單，不能再改）') }}</span>
+            <div class="amount-line detail__gap-bottom">
+              <select v-model="prices.currency" :aria-label="t('出單價幣種')" :disabled="order.status !== 'OPEN'">
+                <option value="HKD">HK$</option>
+                <option value="CNY">RMB¥</option>
+                <option value="MOP">MOP$</option>
+              </select>
+              <input v-model="prices.driver" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :disabled="order.status !== 'OPEN'" />
+            </div>
+          </template>
+          <span class="section-label">{{ ownTrip ? t('價錢') : t('乘客價，只有你看得到') }}</span>
           <div class="amount-line amount-line--quiet detail__gap-bottom">
             <select v-model="prices.passengerCurrency" :aria-label="t('乘客價幣種')">
               <option value="HKD">HK$</option>
@@ -596,7 +666,7 @@ watch(id, () => {
       </section>
 
       <!-- 收款與結清: the dispatcher's own marks, apart from the prices. The platform takes no money and checks nothing. -->
-      <section v-if="(isDispatcher && order.status !== 'CANCELLED') || canSettle" class="card detail__money" style="order: 13">
+      <section v-if="((isDispatcher && order.status !== 'CANCELLED') || canSettle) && !ownTrip" class="card detail__money" style="order: 13">
         <span class="section-label">{{ isDispatcher ? t('收款與結清') : t('結清') }}</span>
         <!-- 收款: the dispatcher's own mark, after checking their account. -->
         <div v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__paid detail__divided">
@@ -634,7 +704,7 @@ watch(id, () => {
         </div>
       </section>
 
-      <section v-if="order.driver" class="card" style="order: 7">
+      <section v-if="order.driver && !ownTrip" class="card" style="order: 7">
         <span class="section-label">{{ selfDriven ? t('這單你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
         <div class="detail__person">
           <strong>{{ order.driver.name ? t(order.driver.name) : t('沒有留名') }}</strong>
@@ -676,11 +746,11 @@ watch(id, () => {
             :disabled="busy"
             @click="
               selfDriven
-                ? ask('reopen', '已重新開放搶單', '把這單放到群裡讓司機搶？', '放到群裡搶')
+                ? ask('reopen', '已重新開放搶單', '把這單放到群裡讓別的司機搶？', '交給別的司機')
                 : ask('reopen', '已重新開放搶單', '收回這張單，重新讓司機搶？', '改派', '原本接單的司機打開連結會看到單已改派，請另外通知他。')
             "
           >
-            {{ selfDriven ? t('放到群裡搶') : t('改派') }}
+            {{ selfDriven ? t('交給別的司機') : t('改派') }}
           </button>
           <button class="detail__cancel" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? '取消這一段' : '取消這張單', cancelNote)">
             {{ order.journey ? t('取消這一段') : t('取消這張單') }}
