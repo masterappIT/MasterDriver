@@ -269,7 +269,7 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 .booking-detail__route {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -319,7 +319,7 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 18px;
+  font-size: 17px;
   outline: none;
 }
 .booking-detail__quote-note:focus {
@@ -327,7 +327,7 @@ onBeforeUnmount(() => {
 }
 .booking-detail__quoted {
   color: var(--color-gold-ink);
-  font-size: 26px;
+  font-size: 24px;
 }
 .booking-detail__add-phone {
   display: flex;

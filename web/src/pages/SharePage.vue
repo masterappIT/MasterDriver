@@ -168,7 +168,7 @@ onMounted(async () => {
   text-align: center;
 }
 .share__head strong {
-  font-size: 24px;
+  font-size: 22px;
 }
 .share__head span {
   color: var(--color-text-secondary);

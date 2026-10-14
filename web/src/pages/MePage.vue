@@ -2,14 +2,15 @@
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api, session, signOut } from '../api';
+import AppIcon from '../components/AppIcon.vue';
+import BottomSheet from '../components/BottomSheet.vue';
 import GroupInvites from '../components/GroupInvites.vue';
 import MenuRow from '../components/MenuRow.vue';
 import NotificationBell from '../components/NotificationBell.vue';
 import PlateTag from '../components/PlateTag.vue';
-import RevealSelect from '../components/RevealSelect.vue';
+import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
 import { money, plateKind } from '../format';
 import { language, setLanguage, t } from '../i18n';
-import { inbox } from '../notifications';
 import { toast } from '../toast';
 import { refreshUnread, unread } from '../unread';
 
@@ -20,6 +21,9 @@ interface Settings {
 const router = useRouter();
 const reveal = ref<number | null>(60);
 const poolByDefault = ref(false);
+/** 出單預設: the two defaults for new orders, opened from one line. */
+const defaultsOpen = ref(false);
+const defaultsSummary = computed(() => `乘客電話${revealLabel(reveal.value)}｜${poolByDefault.value ? '放接單池' : '不放接單池'}`);
 
 async function savePool() {
   try {
@@ -79,7 +83,7 @@ onMounted(async () => {
 
 <template>
   <div class="page me">
-    <!-- Who you are, as a few lines rather than a box of fields. -->
+    <!-- Who you are: one card, with the plates as they look on the car. -->
     <header class="me__hero">
       <div class="me__name">
         <h1>{{ session.profile?.name ? t(session.profile.name) : t('未填司機資料') }}</h1>
@@ -96,66 +100,52 @@ onMounted(async () => {
       <p v-else class="me__missing">{{ t('搶單和公開名片頁之前，要先填姓名、車牌和車型。') }}</p>
     </header>
 
+    <!-- 我的客源 keeps its explanations: a driver new to the tool learns from them what each is for. -->
     <section class="card me__group">
       <span class="section-label">{{ t('我的客源') }}</span>
-      <MenuRow to="/app/guide/customers" :title="t('怎麼用名片頁找客人')" :detail="t('名片頁可以做什麼、連結放在哪裡、客人怎樣預約')" />
-      <MenuRow to="/app/profile-page" :title="t('我的名片頁')" :detail="t('放到朋友圈、小紅書或傳給熟客，乘客在上面預約')" />
+      <MenuRow to="/app/guide/customers" icon="help" :title="t('怎麼用名片頁找客人')" :detail="t('名片頁可以做什麼、連結放在哪裡、客人怎樣預約')" />
+      <MenuRow to="/app/profile-page" icon="card" :title="t('我的名片頁')" :detail="t('放到朋友圈、小紅書或傳給熟客，乘客在上面預約')" />
       <MenuRow
         to="/app/bookings"
+        icon="event"
         :title="t('預約')"
         :detail="unread.bookings ? t(`${unread.bookings} 個預約有新消息`) : t('乘客從名片頁送來的預約，由你報價')"
         :count="unread.bookings"
       />
-      <MenuRow to="/app/passengers" :title="t('客人通訊錄')" :detail="t('你出過的單的乘客，只有你看得到；熟客可以直接出單')" />
+      <MenuRow to="/app/passengers" icon="people" :title="t('客人通訊錄')" :detail="t('你出過的單的乘客，只有你看得到；熟客可以直接出單')" />
     </section>
 
-    <section class="card me__group">
-      <span class="section-label">{{ t('出單') }}</span>
-      <MenuRow to="/app/payment-methods" :title="t('收款方式')" :detail="t('乘客付車費給你的方式，出單時選擇是否顯示')" />
-      <div v-if="credits" class="me__line">
-        <span class="me__line-text">
-          {{ t('點數餘額') }}
-          <small>
-            {{
-              !credits.serviceFee.enabled
-                ? t('目前不收服務費')
-                : credits.serviceFee.exempt
-                  ? t('你目前免收平台服務費')
-                  : t(`每出一張單扣 ${money(credits.serviceFee.feePerOrder)}，取消會退回；充值請找客服`)
-            }}
-          </small>
-        </span>
-        <strong class="me__balance">{{ money(credits.balance) }}</strong>
-      </div>
-      <label class="me__line">
-        <span class="me__line-text">
-          {{ t('乘客電話給接單司機看') }}
-          <small>{{ t('你自己隨時看得到；每張單也可以另外選') }}</small>
-        </span>
-        <RevealSelect v-model="reveal" class="select--inline" @update:model-value="saveReveal" />
-      </label>
-      <label class="me__line">
-        <span class="me__line-text">
-          {{ t('新單同時放到接單池') }}
-          <small>{{ t('登入的司機都看得到；不放的話只有拿到連結的人看得到') }}</small>
-        </span>
-        <input v-model="poolByDefault" class="switch" type="checkbox" @change="savePool" />
-      </label>
+    <section v-if="credits" class="card me__credits">
+      <span class="me__credits-text">
+        <span class="section-label">{{ t('點數餘額') }}</span>
+        <small>
+          {{
+            !credits.serviceFee.enabled
+              ? t('目前不收服務費')
+              : credits.serviceFee.exempt
+                ? t('你目前免收平台服務費')
+                : t(`每出一張單扣 ${money(credits.serviceFee.feePerOrder)}，取消會退回；充值請找客服`)
+          }}
+        </small>
+      </span>
+      <strong class="me__balance">{{ money(credits.balance) }}</strong>
     </section>
 
     <GroupInvites />
 
     <section class="card me__group">
-      <MenuRow
-        to="/app/notifications"
-        :title="t('通知')"
-        :detail="inbox.unread ? t(`${inbox.unread} 則未讀`) : t('單被接走、乘客確認、新預約、客服回覆')"
-        :count="inbox.unread"
-      />
-      <MenuRow to="/app/notification-settings" :title="t('通知設定')" :detail="t('提示音、要收哪些通知')" />
-      <MenuRow to="/support" :title="t('聯絡客服')" :detail="supportContacts || t('文字、圖片、影片都可以傳')" :count="unread.support" />
+      <MenuRow to="/app/payment-methods" icon="wallet" :title="t('收款方式')" :detail="t('乘客付車費給你的方式，出單時選擇是否顯示')" />
+      <button class="menu-row me__row-button" type="button" @click="defaultsOpen = true">
+        <AppIcon name="tune" class="me__row-icon" />
+        <span class="me__line-text">
+          <strong>{{ t('出單預設') }}</strong>
+          <small>{{ t(defaultsSummary) }}</small>
+        </span>
+        <AppIcon name="chevron" class="me__row-arrow" />
+      </button>
+      <MenuRow to="/support" icon="chat" :title="t('聯絡客服')" :detail="supportContacts || undefined" :count="unread.support" />
       <div class="me__line">
-        <span class="me__line-text">{{ t('介面語言') }}</span>
+        <span class="me__line-lead"><AppIcon name="language" class="me__row-icon" />{{ t('介面語言') }}</span>
         <span class="segment" role="group" :aria-label="t('介面語言')">
           <button type="button" :aria-pressed="language === 'zh-Hant'" @click="setLanguage('zh-Hant')">繁體</button>
           <button type="button" :aria-pressed="language === 'zh-Hans'" @click="setLanguage('zh-Hans')">简体</button>
@@ -171,6 +161,24 @@ onMounted(async () => {
 
     <button class="me__logout" type="button" @click="logout">{{ t('登出') }}</button>
 
+    <!-- Rarely changed, so they are kept off the page itself. -->
+    <BottomSheet v-if="defaultsOpen" :title="t('出單預設')" @close="defaultsOpen = false">
+      <p class="hint">{{ t('新出的單會先帶入這兩項，每張單出單時還可以另外選。') }}</p>
+      <label class="me__line">
+        <span class="me__line-text">
+          {{ t('乘客電話給接單司機看') }}
+          <small>{{ t('你自己隨時看得到') }}</small>
+        </span>
+        <RevealSelect v-model="reveal" class="select--inline" @update:model-value="saveReveal" />
+      </label>
+      <label class="me__line">
+        <span class="me__line-text">
+          {{ t('新單同時放到接單池') }}
+          <small>{{ t('登入的司機都看得到；不放的話只有拿到連結的人看得到') }}</small>
+        </span>
+        <input v-model="poolByDefault" class="switch" type="checkbox" @change="savePool" />
+      </label>
+    </BottomSheet>
   </div>
 </template>
 
@@ -179,7 +187,10 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-  margin: var(--space-sm) 0 var(--space-xl);
+  margin: var(--space-sm) 0 var(--space-lg);
+  padding: var(--space-lg);
+  border-radius: var(--radius-card);
+  background: var(--color-tint);
 }
 .me__name {
   display: flex;
@@ -189,7 +200,7 @@ onMounted(async () => {
 }
 .me__name h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
   overflow-wrap: anywhere;
 }
 .me__top-actions {
@@ -207,11 +218,61 @@ onMounted(async () => {
   padding: 0 var(--space-lg);
   border: none;
   border-radius: var(--radius-pill);
-  background: var(--color-tint);
+  background: var(--color-card);
   color: var(--color-primary-dark);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+.me__credits {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+.me__credits-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.me__credits-text small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+.menu-row + .me__row-button {
+  border-top: 1px solid var(--color-divider);
+}
+.me__row-button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 52px;
+  padding: var(--space-sm) 0;
+  color: var(--color-text);
+  width: 100%;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.me__row-button .me__line-text {
+  flex: 1;
+}
+.me__row-button strong {
+  font-weight: 600;
+}
+.me__row-icon {
+  flex: none;
+  color: var(--color-primary);
+}
+.me__row-arrow {
+  color: var(--color-text-muted);
+}
+.me__line-lead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 .me__phone {
   color: var(--color-text-secondary);
@@ -261,7 +322,7 @@ onMounted(async () => {
 }
 .me__balance {
   color: var(--color-gold-ink);
-  font-size: 20px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }

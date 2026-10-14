@@ -331,7 +331,7 @@ onBeforeUnmount(() => {
   margin: var(--space-md) 0 var(--space-lg);
 }
 .claim-page__time {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1.25;
   font-variant-numeric: tabular-nums;
@@ -362,7 +362,7 @@ onBeforeUnmount(() => {
 .claim-page__price,
 .claim-page__bar-price strong {
   color: var(--color-gold-ink);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -435,7 +435,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 .claim-page__won strong {
-  font-size: 22px;
+  font-size: 20px;
 }
 .claim-page__won span {
   color: var(--color-text-secondary);

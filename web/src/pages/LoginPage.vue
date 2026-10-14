@@ -71,7 +71,7 @@ function done() {
 }
 .login__body h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
   letter-spacing: 0.02em;
 }
 .login__lead {

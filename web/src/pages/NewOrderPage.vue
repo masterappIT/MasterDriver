@@ -639,7 +639,7 @@ onMounted(async () => {
   background: transparent;
   color: var(--color-text);
   font: inherit;
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1.5;
   resize: vertical;
   outline: none;

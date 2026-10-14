@@ -986,7 +986,7 @@ watch(id, () => {
 }
 .detail__price strong {
   color: var(--color-gold-ink);
-  font-size: 26px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
 }
 .detail__fee {
@@ -1015,7 +1015,7 @@ watch(id, () => {
 }
 .detail__phone {
   display: block;
-  font-size: 24px;
+  font-size: 22px;
   font-variant-numeric: tabular-nums;
 }
 .detail__waiting {

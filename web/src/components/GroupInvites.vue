@@ -79,11 +79,28 @@ function remove(invite: Invite) {
   return run(() => api('DELETE', `/me/group-invites/${invite.id}`), '已刪除');
 }
 
-onMounted(() => run(() => api<Invite[]>('GET', '/me/group-invites')));
+/** Known only once the list has been read, so the one-line form does not flash before it. */
+const loaded = ref(false);
+
+onMounted(async () => {
+  await run(() => api<Invite[]>('GET', '/me/group-invites'));
+  loaded.value = true;
+});
 </script>
 
 <template>
-  <section class="card">
+  <!-- With no group yet it is one line; it opens into the full section when the driver adds one. -->
+  <section v-if="loaded && invites.length === 0 && !adding && !error" class="card group-invites--none">
+    <button class="group-invites__open" type="button" @click="adding = true">
+      <AppIcon name="people" class="group-invites__icon" />
+      <span class="group-invites__text">
+        <strong>{{ t('我的派單群') }}</strong>
+        <small>{{ t('還沒加入。加了之後，搶單的司機可以找到你的群') }}</small>
+      </span>
+      <AppIcon name="chevron" class="group-invites__arrow" />
+    </button>
+  </section>
+  <section v-else class="card">
     <span class="section-label">{{ t('我的派單群') }}</span>
     <p class="hint">{{ t('司機點開你的搶單連結時，可以按「加入派單群」找到你的群。最多 5 個。') }}</p>
     <div v-if="error" class="notice error">{{ error }}</div>
@@ -131,6 +148,44 @@ onMounted(() => run(() => api<Invite[]>('GET', '/me/group-invites')));
 </template>
 
 <style scoped>
+.group-invites--none {
+  padding-top: var(--space-sm);
+  padding-bottom: var(--space-sm);
+}
+.group-invites__open {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-sm) 0;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.group-invites__icon {
+  flex: none;
+  color: var(--color-primary);
+}
+.group-invites__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.group-invites__text strong {
+  font-weight: 600;
+}
+.group-invites__text small {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+.group-invites__arrow {
+  color: var(--color-text-muted);
+}
 .group-invite {
   display: flex;
   gap: var(--space-md);

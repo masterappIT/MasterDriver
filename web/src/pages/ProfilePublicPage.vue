@@ -210,7 +210,7 @@ onBeforeUnmount(() => watcher?.disconnect());
 }
 .profile__name {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
 }
 .profile__car {
   margin: var(--space-xs) 0 0;

@@ -25,7 +25,10 @@ onMounted(() => void refreshInbox());
   <div class="page">
     <!-- Opened from the bell on 首頁 and 我的, and from 我的: 返回 goes back to whichever it was. -->
     <PageBack :title="t('通知')" history>
-      <button v-if="inbox.unread" class="chip" type="button" @click="markAllRead">{{ t('全部已讀') }}</button>
+      <span class="notices__actions">
+        <button v-if="inbox.unread" class="chip" type="button" @click="markAllRead">{{ t('全部已讀') }}</button>
+        <RouterLink to="/app/notification-settings" class="chip">{{ t('設定') }}</RouterLink>
+      </span>
     </PageBack>
 
     <p v-if="inbox.loaded && inbox.items.length === 0" class="notices__empty">
@@ -49,8 +52,6 @@ onMounted(() => void refreshInbox());
         <span v-if="describe(item).detail" class="notices__detail">{{ t(describe(item).detail) }}</span>
       </button>
     </section>
-
-    <RouterLink to="/app/notification-settings" class="notices__settings">{{ t('通知設定：提示音、要收哪些通知') }}</RouterLink>
   </div>
 </template>
 
@@ -114,10 +115,9 @@ onMounted(() => void refreshInbox());
   color: var(--color-text-secondary);
   line-height: 1.7;
 }
-.notices__settings {
-  display: block;
-  margin-top: var(--space-lg);
-  color: var(--color-primary-dark);
-  font-weight: 600;
+.notices__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
 }
 </style>

@@ -1,17 +1,18 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router';
-import AppIcon from './AppIcon.vue';
+import AppIcon, { type IconName } from './AppIcon.vue';
 
 /**
- * One line in a list such as 我的: what it is, a short line under it, a red count of what is new,
- * and an arrow. Goes to `to` in the app, or opens `href` outside it. Lines replace boxed sections
+ * One line in a list such as 我的: an icon when given, what it is, a short line under it, a red
+ * count of what is new, and an arrow. Goes to `to` in the app, or opens `href` outside it. Lines replace boxed sections
  * (docs/DESIGN.md「不要像表格」).
  */
-defineProps<{ to?: string; href?: string; title: string; detail?: string; count?: number }>();
+defineProps<{ to?: string; href?: string; title: string; detail?: string; count?: number; icon?: IconName }>();
 </script>
 
 <template>
   <RouterLink v-if="to" :to="to" class="menu-row">
+    <AppIcon v-if="icon" :name="icon" class="menu-row__icon" />
     <span class="menu-row__text">
       <strong>{{ title }}</strong>
       <span v-if="detail" class="menu-row__detail">{{ detail }}</span>
@@ -20,6 +21,7 @@ defineProps<{ to?: string; href?: string; title: string; detail?: string; count?
     <AppIcon name="chevron" class="menu-row__arrow" />
   </RouterLink>
   <a v-else :href="href" class="menu-row" target="_blank" rel="noopener">
+    <AppIcon v-if="icon" :name="icon" class="menu-row__icon" />
     <span class="menu-row__text">
       <strong>{{ title }}</strong>
       <span v-if="detail" class="menu-row__detail">{{ detail }}</span>
@@ -52,6 +54,10 @@ defineProps<{ to?: string; href?: string; title: string; detail?: string; count?
 .menu-row__detail {
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
+}
+.menu-row__icon {
+  flex: none;
+  color: var(--color-primary);
 }
 .menu-row__arrow {
   color: var(--color-text-muted);

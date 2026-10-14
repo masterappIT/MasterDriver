@@ -256,7 +256,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .confirm-page__title {
   margin: var(--space-sm) 0 var(--space-lg);
-  font-size: 22px;
+  font-size: 20px;
   text-wrap: balance;
 }
 .confirm-page__done {
@@ -306,16 +306,16 @@ onBeforeUnmount(() => {
 }
 .confirm-page__ended strong {
   color: var(--status-confirmed);
-  font-size: 22px;
+  font-size: 20px;
 }
 .confirm-page__arranger {
   display: block;
   margin-bottom: var(--space-sm);
-  font-size: 18px;
+  font-size: 17px;
 }
 .confirm-page__time {
   margin-bottom: var(--space-lg);
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
 }
 .confirm-page__price strong {
   color: var(--color-gold-ink);
-  font-size: 22px;
+  font-size: 20px;
 }
 .confirm-page__driver {
   display: flex;
@@ -374,7 +374,7 @@ onBeforeUnmount(() => {
 }
 .confirm-page__pay-amount {
   color: var(--color-gold-ink);
-  font-size: 26px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
 }
 .confirm-page__paid {

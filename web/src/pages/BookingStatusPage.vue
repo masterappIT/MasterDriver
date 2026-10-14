@@ -177,7 +177,7 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 .booking__route {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -202,7 +202,7 @@ onBeforeUnmount(() => {
   display: block;
   margin-bottom: var(--space-xs);
   color: var(--color-gold-ink);
-  font-size: 26px;
+  font-size: 24px;
   font-variant-numeric: tabular-nums;
 }
 .booking__next {
