@@ -107,6 +107,24 @@ test('the driver sees the passenger contact only from the reveal time; the dispa
   assert.equal(toOrderView(timed, 'dispatcher', 'https://x.test', before).passengerContact, '+852 9123 4567');
 });
 
+test('once the trip is over the passenger keeps the driver and car but not the driver numbers', () => {
+  const during = toPassengerView(order);
+  assert.ok(during.driver && during.driver.phones.length > 0);
+  const after = toPassengerView({ ...order, status: 'COMPLETED' });
+  assert.ok(after.driver);
+  assert.equal(after.driver.phone, null);
+  assert.deepEqual(after.driver.phones, []);
+  assert.equal(after.driver.name, during.driver.name);
+  // The person who arranged the trip stays reachable.
+  assert.ok(after.dispatcher && after.dispatcher.phones.length > 0);
+});
+
+test('a trip its dispatcher drove gives the dispatcher contact once it is over', () => {
+  const own = { ...order, claimedById: order.dispatcherId };
+  assert.equal(toPassengerView(own).dispatcher, null);
+  assert.ok(toPassengerView({ ...own, status: 'COMPLETED' }).dispatcher);
+});
+
 test('the passenger sees no driver before the order is claimed', () => {
   const view = toPassengerView({ ...order, status: 'OPEN', claimedById: null, claimedBy: null });
   assert.equal(view.driver, null);

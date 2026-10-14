@@ -99,7 +99,8 @@ const ERROR_TEXT: Record<string, string> = {
   SUPPORT_VIDEO_SIGN_IN: '登入後才能傳送影片',
   SUPPORT_TOO_FAST: '訊息太頻密，請稍等一下再傳',
   SUPPORT_GUEST_LIMIT: '暫時無法開始新的訪客對話，請登入後再聯絡客服',
-  TRANSFER_PLACE_LOCKED: '上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段'
+  TRANSFER_PLACE_LOCKED: '上一段已有司機接單，接駁位置要和上一段的目的地相同；要改請先改派上一段',
+  VEHICLE_TYPE_REQUIRED: '請填車型，例如 7座',
 };
 
 const INVALID_PHONE = 'INVALID_PHONE';

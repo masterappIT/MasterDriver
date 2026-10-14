@@ -455,7 +455,7 @@ onMounted(async () => {
         </label>
         <label class="line-field">
           <span>{{ t('車型') }}</span>
-          <input v-model="form.vehicleType" class="line-input" maxlength="30" :placeholder="t('7座')" />
+          <input v-model.trim="form.vehicleType" class="line-input" maxlength="30" :placeholder="t('7座')" required />
         </label>
       </div>
       <div v-if="afterId || form.transfer" class="line-field">

@@ -261,8 +261,10 @@ function passengerLeg(leg: JourneyLeg, confirmCode: string) {
       plateType: driver.plateType,
       vehicleType: driver.vehicleType,
       color: driver.color,
-      phone: driver.phone,
-      phones: driver.phones,
+      // Once the leg is over the passenger no longer gets the driver's numbers; the person who
+      // arranged the trip stays reachable.
+      phone: leg.status === 'COMPLETED' ? null : driver.phone,
+      phones: leg.status === 'COMPLETED' ? [] : driver.phones,
       // The driver's vehicle photos, so the passenger knows the car; served only through this link.
       photos: driver.photoIds.map((id) => `/api/c/${confirmCode}/driver-photos/${id}`),
     },
@@ -309,10 +311,11 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
     price: lead.price,
     dispatcherName: order.dispatcher.profile?.name ?? null,
     // Who arranged the trip, for questions and changes. The passenger got this link from them,
-    // so their phone, WeChat ID and WhatsApp are theirs to give here. Left out when they drive
-    // the whole trip themselves: the driver's card already is them.
+    // so their phone, WeChat ID and WhatsApp are theirs to give here. Left out while they drive
+    // the whole trip themselves: the driver's card already is them. Once that trip is over the
+    // driver's card loses its numbers, so they are given here.
     dispatcher:
-      !allLegs && isSelfDriven(order)
+      !allLegs && isSelfDriven(order) && order.status !== 'COMPLETED'
         ? null
         : {
             name: order.dispatcher.profile?.name ?? null,

@@ -46,6 +46,9 @@ export class OrdersController {
 
   @Post()
   create(@CurrentUser() user: SessionUser, @Body(new ZodPipe(createOrderSchema)) body: CreateOrderInput) {
+    // 車型 goes into the group text, so an order offered to other drivers must say it.
+    // 這單我自己做 from a booking is the dispatcher's own car and is never pasted into a group.
+    if (!body.vehicleType && !body.selfDrive) throw apiError(HttpStatus.BAD_REQUEST, 'VEHICLE_TYPE_REQUIRED', 'An order offered to drivers needs a vehicle type');
     return this.orders.create(user.id, body);
   }
 

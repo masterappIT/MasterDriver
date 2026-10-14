@@ -21,8 +21,8 @@ interface TripDriver {
   plateType?: PlateType | null;
   vehicleType: string | null;
   color: string | null;
-  phone: string;
-  /** Every number of the driver: the first is `phone`, then their other side of the border. */
+  phone: string | null;
+  /** Every number of the driver: the first is `phone`, then their other side of the border. None once the leg is over. */
   phones: string[];
   /** The driver chose not to show their plates to passengers. */
   platesHidden?: boolean;
@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
       <div v-if="trip.status === 'CANCELLED'" class="notice error">{{ t('這個行程已取消，如有疑問請聯絡為你安排的司機。') }}</div>
       <div v-if="trip.status === 'COMPLETED'" ref="ended" class="confirm-page__ended">
         <strong>{{ t('行程已完成') }}</strong>
-        <span>{{ t('多謝乘搭。遺留物品或其他問題，可以聯絡司機或為你安排的人。') }}</span>
+        <span>{{ t('多謝乘搭。遺留物品或其他問題，請聯絡為你安排的人。') }}</span>
       </div>
       <p v-else-if="trip.passengerConfirmedAt" class="notice confirm-page__done">{{ t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`) }}</p>
 
