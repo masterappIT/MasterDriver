@@ -142,11 +142,11 @@ async function logout() {
   position: sticky;
   top: 0;
   display: flex;
-  flex: 0 0 208px;
+  flex: 0 0 232px;
   flex-direction: column;
-  width: 208px;
+  width: 232px;
   height: 100vh;
-  padding: 16px 10px;
+  padding: 24px 14px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -160,11 +160,11 @@ async function logout() {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 4px 10px 8px;
+  padding: 4px 12px 8px;
 }
 
 .admin-shell__brand strong {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -181,8 +181,8 @@ async function logout() {
   position: relative;
   z-index: 1;
   display: grid;
-  gap: 2px;
-  margin-top: 12px;
+  gap: 4px;
+  margin-top: 18px;
 }
 
 .admin-shell__nav a,
@@ -191,12 +191,12 @@ async function logout() {
 .admin-shell__account button {
   display: block;
   width: 100%;
-  padding: 7px 10px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--color-nav-inactive);
   background: transparent;
-  font-size: 13px;
+  font-size: 14px;
   text-align: left;
   text-decoration: none;
   transition: 0.2s ease;
@@ -218,7 +218,7 @@ async function logout() {
 }
 
 .admin-shell__group {
-  margin-top: 10px;
+  margin-top: 14px;
 }
 
 /* A small caption over each group of pages. */
@@ -232,7 +232,7 @@ async function logout() {
 
 .admin-shell__group-items {
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .admin-shell__mobile-only {
@@ -265,7 +265,7 @@ async function logout() {
   flex: 1 1 auto;
   width: min(100%, var(--admin-content-max-width));
   min-width: 0;
-  padding: 24px 28px 40px;
+  padding: 36px 40px 48px;
 }
 
 .admin-shell__eyebrow {
@@ -274,12 +274,12 @@ async function logout() {
 
 @media (max-width: 1100px) {
   .admin-shell__side {
-    flex-basis: 184px;
-    width: 184px;
+    flex-basis: 204px;
+    width: 204px;
   }
 
   .admin-shell__main {
-    padding: 20px;
+    padding: 28px 24px;
   }
 }
 

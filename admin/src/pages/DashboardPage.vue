@@ -141,7 +141,7 @@ onMounted(load);
   align-items: flex-end;
   justify-content: space-between;
   gap: 12px 24px;
-  margin: 18px 0 10px;
+  margin: 24px 0 12px;
 }
 
 .dashboard__heading h2 {
@@ -159,8 +159,8 @@ onMounted(load);
 
 .dashboard__metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
 }
 
 .dashboard__metrics--priority {
@@ -172,7 +172,7 @@ onMounted(load);
   position: relative;
   display: block;
   min-width: 0;
-  padding: 12px 16px;
+  padding: 18px 20px;
   overflow: hidden;
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
@@ -191,8 +191,8 @@ onMounted(load);
 
 .dashboard__card strong {
   display: block;
-  margin-top: 4px;
-  font-size: 24px;
+  margin-top: 8px;
+  font-size: 30px;
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;

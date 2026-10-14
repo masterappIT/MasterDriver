@@ -56,10 +56,10 @@
   --space-lg: 16px;
   --space-xl: 24px;
 
-  --radius-card: 12px;
-  --radius-input: 8px;
+  --radius-card: 16px;
+  --radius-input: 10px;
   --radius-pill: 999px;
-  --shadow-card: 0 1px 2px rgba(18, 36, 59, 0.05);
+  --shadow-card: 0 4px 16px rgba(39, 72, 111, 0.06);
   --shadow-primary: none;
   --gradient-primary: linear-gradient(135deg, #1769e0, #3f8df0);
 
@@ -67,7 +67,7 @@
   --font-label: 13px;
   --font-body: 14px;
   --font-body-large: 16px;
-  --font-title: 15px;
+  --font-title: 17px;
   --admin-content-max-width: 1440px;
 }
 
@@ -118,9 +118,9 @@ a:hover {
 h1 {
   margin: 0 0 var(--space-lg);
   color: var(--color-text);
-  font-size: 22px;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 h2 {
@@ -139,8 +139,8 @@ h2 {
 }
 
 .card {
-  margin-bottom: 14px;
-  padding: 16px 20px;
+  margin-bottom: 18px;
+  padding: 20px 24px;
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
@@ -165,8 +165,8 @@ h2 {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 18px;
 }
 
 .grid > .card {
@@ -177,8 +177,8 @@ h2 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 6px 14px;
+  min-height: 40px;
+  padding: 8px 16px;
   border: 0;
   border-radius: var(--radius-input);
   color: var(--color-on-primary);
@@ -228,8 +228,8 @@ h2 {
 
 .input,
 .select {
-  min-height: 36px;
-  padding: 6px 10px;
+  min-height: 40px;
+  padding: 8px 12px;
   border: 1px solid var(--color-field-border);
   border-radius: var(--radius-input);
   outline: 0;
@@ -278,7 +278,7 @@ textarea.input {
 
 .table th,
 .table td {
-  padding: 9px 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--color-divider);
   text-align: left;
   vertical-align: top;
@@ -330,12 +330,12 @@ textarea.input {
 }
 
 .card.table-wrap > :not(table) {
-  margin-right: 20px;
-  margin-left: 20px;
+  margin-right: 24px;
+  margin-left: 24px;
 }
 
 .card.table-wrap > h2:first-child {
-  margin-top: 16px;
+  margin-top: 20px;
 }
 
 .card.table-wrap > .hint:not(:last-child) {
@@ -345,17 +345,17 @@ textarea.input {
 
 .card.table-wrap > .table th,
 .card.table-wrap > .table td {
-  padding: 9px 12px;
+  padding: 12px 16px;
 }
 
 .card.table-wrap > .table th:first-child,
 .card.table-wrap > .table td:first-child {
-  padding-left: 20px;
+  padding-left: 24px;
 }
 
 .card.table-wrap > .table th:last-child,
 .card.table-wrap > .table td:last-child {
-  padding-right: 20px;
+  padding-right: 24px;
 }
 
 .card.table-wrap > .table thead th {
@@ -373,7 +373,7 @@ textarea.input {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  margin-bottom: 20px;
 }
 
 .page-head h1 {
@@ -386,7 +386,7 @@ textarea.input {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-lg);
 }
 
 .filters .input {
@@ -410,7 +410,7 @@ textarea.input {
 
 .tabs button {
   margin-bottom: -1px;
-  padding: 8px 14px;
+  padding: 10px 16px;
   border: 0;
   border-bottom: 2px solid transparent;
   color: var(--color-text-secondary);
@@ -449,7 +449,7 @@ textarea.input {
 .facts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-  gap: var(--space-md) var(--space-xl);
+  gap: var(--space-lg) 28px;
   margin: 0;
 }
 
@@ -472,7 +472,7 @@ textarea.input {
 }
 
 .facts--numbers dd {
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -481,7 +481,7 @@ textarea.input {
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 14px;
+  gap: 18px;
   align-items: start;
 }
 
@@ -491,7 +491,7 @@ textarea.input {
 
 .split + .card,
 .split + .split {
-  margin-top: 14px;
+  margin-top: 18px;
 }
 
 .card > h2 + .hint {
@@ -549,8 +549,8 @@ textarea.input {
 }
 
 .notice {
-  margin-bottom: var(--space-md);
-  padding: 9px 14px;
+  margin-bottom: var(--space-lg);
+  padding: 11px 16px;
   border: 1px solid #cfe0f6;
   border-radius: var(--radius-input);
   color: var(--color-info-text);
@@ -570,9 +570,9 @@ textarea.input {
 }
 
 .stat {
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--color-text);
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 700;
   line-height: 1.15;
   font-variant-numeric: tabular-nums;
