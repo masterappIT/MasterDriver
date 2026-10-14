@@ -193,6 +193,7 @@ export class ProfilePagesService {
         luggage: input.luggage,
         passengerName: input.passengerName,
         passengerContact: input.passengerContact,
+        passengerWechat: input.passengerWechat ?? null,
         notes: input.notes,
         source: input.source,
         ip: ip ?? null,
@@ -252,9 +253,12 @@ export class ProfilePagesService {
     return this.driverView({ ...row, driverUnread: false });
   }
 
-  /** A quote can be sent again with another price until the request is closed. */
+  /**
+   * A quote can be sent again with another price until the passenger agrees to one; after that
+   * the agreed price stands (2026-10-14).
+   */
   async quote(userId: string, id: string, input: BookingQuote, now = new Date()) {
-    return this.driverMove(userId, id, OPEN, {
+    return this.driverMove(userId, id, ['PENDING', 'QUOTED'], {
       status: 'QUOTED',
       quoteMinor: Math.round(input.amount * 100),
       quoteCurrency: input.currency,
@@ -334,6 +338,7 @@ export class ProfilePagesService {
       luggage: row.luggage,
       passengerName: row.passengerName,
       passengerContact: row.passengerContact,
+      passengerWechat: row.passengerWechat,
       notes: row.notes,
       quote: money(row.quoteMinor, row.quoteCurrency),
       quoteNote: row.quoteNote,

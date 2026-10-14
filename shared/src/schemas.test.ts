@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createOrderSchema, driverProfileSchema, groupInviteCreateSchema, otpRequestSchema } from './schemas';
 import { defaultLocaleFor, isValidMobile } from './phone';
+import { bookingCreateSchema } from './profile-page';
 
 test('accepts Hong Kong, mainland and Macau mobile numbers', () => {
   assert.equal(isValidMobile('+852', '91234567'), true);
@@ -119,4 +120,20 @@ test('a group is added without a name: the type and the QR code or link say whic
   const whatsapp = groupInviteCreateSchema.parse({ platform: 'WHATSAPP', inviteUrl: 'https://chat.whatsapp.com/AbCdEf1234567' });
   assert.equal(whatsapp.name, '');
   assert.equal(groupInviteCreateSchema.safeParse({ platform: 'WECHAT' }).success, false, 'WeChat still needs its QR image');
+});
+
+test('a 名片頁 booking takes a phone with its country code, and a WeChat ID only beside it', () => {
+  const booking = {
+    pickupAt: '2026-10-20T10:00:00+08:00',
+    origin: '香港國際機場',
+    destination: '深圳灣口岸',
+    passengers: 2,
+  };
+  const parsed = bookingCreateSchema.safeParse({ ...booking, passengerContact: '+86 138 0013 8000', passengerWechat: ' wang-test ' });
+  assert.ok(parsed.success);
+  assert.equal(parsed.data.passengerContact, '+86 13800138000');
+  assert.equal(parsed.data.passengerWechat, 'wang-test');
+  for (const contact of ['wechat: wang-test', '91234567', '+852 1234', '']) {
+    assert.equal(bookingCreateSchema.safeParse({ ...booking, passengerContact: contact }).success, false, contact);
+  }
 });

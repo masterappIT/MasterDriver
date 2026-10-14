@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import type { SmsChannelUpdate, SpugSettingUpdate } from '@masterdriver/shared';
-import type { SmsChannel, SmsProviderKind, SmsRoute, SpugSetting } from '../../generated/prisma';
+import { Prisma, type SmsChannel, type SmsProviderKind, type SmsRoute, type SpugSetting } from '../../generated/prisma';
 import type { SmsProvider } from '../auth/sms';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomSixDigits } from '../common/crypto';
@@ -68,13 +68,21 @@ export class SmsChannelsService implements SmsProvider {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
-  private channel(route: SmsRoute) {
-    return this.prisma.smsChannel.upsert({
-      where: { route },
-      update: {},
-      // Like Master Travel, only the domestic account has a default endpoint; the international one is entered by hand.
-      create: { route, endpoint: route === 'DOMESTIC' ? SMS253_DEFAULT_ENDPOINT : '', template: SMS253_DEFAULT_TEMPLATE },
-    });
+  /** The route's row, made on first read. Two first reads at once (+852 and +853) may race; the loser reads the winner's. */
+  private async channel(route: SmsRoute): Promise<SmsChannel> {
+    try {
+      return await this.prisma.smsChannel.upsert({
+        where: { route },
+        update: {},
+        // Like Master Travel, only the domestic account has a default endpoint; the international one is entered by hand.
+        create: { route, endpoint: route === 'DOMESTIC' ? SMS253_DEFAULT_ENDPOINT : '', template: SMS253_DEFAULT_TEMPLATE },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return this.prisma.smsChannel.findUniqueOrThrow({ where: { route } });
+      }
+      throw error;
+    }
   }
 
   async list() {

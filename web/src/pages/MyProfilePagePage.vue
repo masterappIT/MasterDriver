@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { api, apiFetch, errorText } from '../api';
 import { copyText } from '../device';
 import PageBack from '../components/PageBack.vue';
@@ -37,6 +37,26 @@ const busy = ref(false);
 const picker = ref<HTMLInputElement | null>(null);
 const form = reactive({ intro: '', routes: '', regions: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
 
+/**
+ * The page opens on sharing: the content and the photos are folded into one line each, and open
+ * by themselves only while nothing is filled in yet. Saving folds the content again.
+ */
+const contentOpen = ref(false);
+const photosOpen = ref(false);
+const contentSummary = computed(() => {
+  const shown = page.value;
+  if (!shown) return '';
+  const parts = [
+    shown.intro ? '介紹' : '',
+    shown.routes.length ? `${shown.routes.length} 條路線` : '',
+    shown.regions.length ? `${shown.regions.length} 個地區` : '',
+    shown.languages.length ? `${shown.languages.length} 種語言` : '',
+    shown.wechatId ? '微信號' : '',
+    shown.whatsapp ? 'WhatsApp' : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join('、') : '還沒填寫';
+});
+
 const lines = (text: string) => text.split(/\n|、|,|，/).map((item) => item.trim()).filter(Boolean);
 
 function toggleLanguage(language: string) {
@@ -58,6 +78,7 @@ async function save(published?: boolean) {
   error.value = '';
   busy.value = true;
   try {
+    const wasEditing = published === undefined;
     fill(
       await api<MyPage>('PUT', '/me/profile-page', {
         intro: form.intro,
@@ -69,6 +90,7 @@ async function save(published?: boolean) {
         ...(published === undefined ? {} : { published }),
       }),
     );
+    if (wasEditing) contentOpen.value = false;
     toast(published === true ? '已公開，乘客可以打開了' : published === false ? '已改為不公開' : '已儲存');
   } catch (e) {
     error.value = errorText(e);
@@ -115,6 +137,8 @@ async function copyLink() {
 onMounted(async () => {
   try {
     fill(await api<MyPage>('GET', '/me/profile-page'));
+    contentOpen.value = contentSummary.value === '還沒填寫';
+    photosOpen.value = Boolean(page.value?.photosAvailable && !page.value.photos.length);
   } catch (e) {
     error.value = errorText(e);
   }
@@ -123,7 +147,8 @@ onMounted(async () => {
 
 <template>
   <div class="page my-page">
-    <PageBack :title="t('我的名片頁')" fallback="/app/me" />
+    <!-- Opened from 首頁, 我的, 預約, the guide and the share page: 返回 goes back to whichever it was. -->
+    <PageBack :title="t('我的名片頁')" fallback="/app/me" history />
     <div v-if="error" class="notice error">{{ error }}</div>
     <RouterLink class="my-page__guide" to="/app/guide/customers">{{ t('名片頁可以做什麼？連結放在哪裡？看教學') }}</RouterLink>
 
@@ -143,13 +168,18 @@ onMounted(async () => {
           <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
         </div>
         <p v-if="!page.hasDriverProfile" class="my-page__notice">{{ t('公開之前，請先在「我的」填寫司機資料（姓名、車型）。') }}</p>
-        <p class="hint my-page__from">
-          {{ t('姓名、車型、座位、車色取自你的司機資料。') }}
-          {{ page.completedTrips > 0 ? t(`頁面會顯示你已在師傅幫完成 ${page.completedTrips} 張單。`) : t('完成的單數由系統計算，有完成的單之後才會顯示。') }}
-        </p>
+        <p class="hint my-page__from">{{ t('姓名、車型取自司機資料，完成單數由系統計算。') }}</p>
       </section>
 
-      <form class="card" @submit.prevent="save()">
+      <details class="card my-page__fold" :open="contentOpen" @toggle="contentOpen = ($event.target as HTMLDetailsElement).open">
+        <summary>
+          <span class="my-page__fold-text">
+            <strong>{{ t('名片內容') }}</strong>
+            <span class="hint">{{ t(contentSummary) }}</span>
+          </span>
+          <AppIcon name="chevron" class="my-page__fold-arrow" />
+        </summary>
+      <form @submit.prevent="save()">
         <label class="line-field">
           <span>{{ t('介紹自己') }}</span>
           <textarea v-model="form.intro" class="line-input" maxlength="500" :placeholder="t('例如：十年跨境接送經驗，準時、車廂整潔')" />
@@ -187,12 +217,19 @@ onMounted(async () => {
           <span>{{ t('WhatsApp 號碼（選填）') }}</span>
           <input v-model="form.whatsapp" class="line-input" maxlength="30" placeholder="+852 …" />
         </label>
-        <p class="hint">{{ t('名片頁公開後，這兩項會顯示在名片頁上。不公開也一樣：接了你的單的司機，或你接單的出單者，看得到這兩項，方便聯絡。') }}</p>
+        <p class="hint">{{ t('微信號和 WhatsApp：公開後顯示在名片頁；不公開時，和你有單往來的司機也看得到。') }}</p>
         <button class="button block" type="submit" :disabled="busy">{{ t('儲存') }}</button>
       </form>
+      </details>
 
-      <section class="card">
-        <span class="section-label">{{ t(`車輛照片，最多 ${page.photoLimit} 張`) }}</span>
+      <details class="card my-page__fold" :open="photosOpen" @toggle="photosOpen = ($event.target as HTMLDetailsElement).open">
+        <summary>
+          <span class="my-page__fold-text">
+            <strong>{{ t('車輛照片') }}</strong>
+            <span class="hint">{{ page.photos.length ? t(`${page.photos.length} 張，最多 ${page.photoLimit} 張`) : t(`還沒有照片，最多 ${page.photoLimit} 張`) }}</span>
+          </span>
+          <AppIcon name="chevron" class="my-page__fold-arrow" />
+        </summary>
         <p v-if="!page.photosAvailable" class="muted">{{ t('暫時無法上傳照片。') }}</p>
         <div class="my-page__photos">
           <div v-for="photo in page.photos" :key="photo.id" class="my-page__photo">
@@ -213,8 +250,8 @@ onMounted(async () => {
           </button>
         </div>
         <input ref="picker" class="my-page__picker" type="file" accept="image/*" @change="picked" />
-        <p class="hint">{{ t('請只放自己車輛的照片，不要拍到乘客或他人的車牌。你接單後，乘客在確認頁也會看到這些照片，方便認車，不用公開名片頁。') }}</p>
-      </section>
+        <p class="hint">{{ t('只放自己車輛的照片，不要拍到他人車牌。你接單後，乘客在確認頁也看得到，方便認車。') }}</p>
+      </details>
 
       <button v-if="!page.published" class="button block large" type="button" :disabled="busy || !page.hasDriverProfile || Boolean(page.blocked)" @click="save(true)">
         {{ t('儲存並公開') }}
@@ -266,6 +303,32 @@ onMounted(async () => {
 }
 .my-page__from {
   margin: var(--space-md) 0 0;
+}
+.my-page__fold summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  list-style: none;
+}
+.my-page__fold summary::-webkit-details-marker {
+  display: none;
+}
+.my-page__fold[open] summary {
+  margin-bottom: var(--space-md);
+}
+.my-page__fold-text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.my-page__fold-arrow {
+  color: var(--color-text-muted);
+  transition: transform 0.15s;
+}
+.my-page__fold[open] .my-page__fold-arrow {
+  transform: rotate(90deg);
 }
 .my-page__languages {
   margin: var(--space-sm) 0 var(--space-xs);

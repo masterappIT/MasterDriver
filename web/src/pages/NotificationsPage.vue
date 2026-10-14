@@ -23,7 +23,8 @@ onMounted(() => void refreshInbox());
 
 <template>
   <div class="page">
-    <PageBack :title="t('通知')">
+    <!-- Opened from the bell on 首頁 and 我的, and from 我的: 返回 goes back to whichever it was. -->
+    <PageBack :title="t('通知')" history>
       <button v-if="inbox.unread" class="chip" type="button" @click="markAllRead">{{ t('全部已讀') }}</button>
     </PageBack>
 

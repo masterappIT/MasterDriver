@@ -300,7 +300,9 @@ async function loadBooking() {
         : {}),
     });
     if (booking.quote) passengerCurrencyChosen.value = true;
-    carryContact(booking.passengerContact);
+    // A phone the driver added on the booking's page comes in the navigation state, not the address.
+    const added = (window.history.state as { passengerContact?: unknown } | null)?.passengerContact;
+    carryContact(typeof added === 'string' ? added : booking.passengerContact);
     fromBooking.value = true;
   } catch (e) {
     error.value = errorText(e);
@@ -368,7 +370,7 @@ onMounted(async () => {
     </div>
 
     <div v-if="fromBooking" class="notice">
-      {{ t('已帶入名片頁預約的資料和你的報價（作為乘客價）。核對後出單；想自己做就在最下面「更多設定」打開「這單我自己做」，否則填出單價派到群裡。') }}
+      {{ form.passengerPrice ? t('已帶入名片頁預約的資料和你的報價（作為乘客價）。填出單價後出單，貼到群裡派給其他司機。') : t('已帶入名片頁預約的資料。填出單價後出單，貼到群裡派給其他司機。') }}
     </div>
 
     <!-- 一句話出單: written like a message in the group, so it looks like one. -->

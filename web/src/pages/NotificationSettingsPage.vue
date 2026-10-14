@@ -63,7 +63,8 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <PageBack :title="t('通知設定')" fallback="/app/notifications" />
+    <!-- Opened from 通知 and from 我的: 返回 goes back to whichever it was. -->
+    <PageBack :title="t('通知設定')" fallback="/app/notifications" history />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <section class="card settings__group">

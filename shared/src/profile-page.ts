@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { passengerPhoneSchema } from './schemas';
 
 /** 名片頁 and booking requests. */
 export const PROFILE_PHOTO_MAX = 3;
@@ -40,7 +41,15 @@ export const bookingCreateSchema = z.object({
     .max(40)
     .optional()
     .transform((value) => value || undefined),
-  passengerContact: line(60),
+  /** A phone with its country code, as on an order (2026-10-14; older requests may hold any text). */
+  passengerContact: passengerPhoneSchema,
+  /** Optional, only the driver sees it. */
+  passengerWechat: z
+    .string()
+    .trim()
+    .max(60)
+    .optional()
+    .transform((value) => value || undefined),
   notes: z
     .string()
     .trim()

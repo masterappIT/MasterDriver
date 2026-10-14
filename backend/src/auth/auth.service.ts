@@ -93,9 +93,11 @@ export class AuthService {
    */
   async signInAreas(): Promise<{ areas: { countryCode: CountryCode; available: boolean }[] }> {
     const development = await this.developmentLogin.forNewRequest();
-    const areas = await Promise.all(
-      COUNTRY_CODES.map(async (countryCode) => ({ countryCode, available: development.enabled || (await this.sms.canSend(countryCode)) })),
-    );
+    // One at a time: +852 and +853 share a route, whose settings row is created on first read.
+    const areas: { countryCode: CountryCode; available: boolean }[] = [];
+    for (const countryCode of COUNTRY_CODES) {
+      areas.push({ countryCode, available: development.enabled || (await this.sms.canSend(countryCode)) });
+    }
     return { areas };
   }
 

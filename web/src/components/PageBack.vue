@@ -8,10 +8,10 @@ import AppIcon from './AppIcon.vue';
  * and room on the right for the page's own action.
  *
  * 返回 goes up, to the page this one belongs under (`fallback`): 訂單詳情 to 訂單, 預約詳情 to 預約,
- * the pages of 我的 to 我的. Where the driver came from does not matter, so the same button always
- * leads to the same place. Pages that are opened from many places and belong under none of them
- * (客服, the terms, a link from a group) set `history` and go back to wherever the driver was,
- * or to `fallback` when the page was opened on its own.
+ * 收款方式 and the like to 我的. Where the driver came from does not matter, so the same button always
+ * leads to the same place. Pages that are opened from several places (我的名片頁, its guide, 通知,
+ * 通知設定, 客服, the terms, a link from a group) set `history` and go back to wherever the driver
+ * was, or to `fallback` when the page was opened on its own.
  *
  * `onlyInApp` hides the bar on pages people usually open from a group link. `iconOnly` shows just a
  * round arrow, for a coloured panel such as the sign-in page's.

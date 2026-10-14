@@ -11,6 +11,7 @@ export interface Booking {
   luggage: number;
   passengerName: string | null;
   passengerContact: string;
+  passengerWechat: string | null;
   notes: string | null;
   quote: Money;
   quoteNote: string | null;

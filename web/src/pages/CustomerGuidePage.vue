@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 
@@ -7,6 +8,16 @@ import { t } from '../i18n';
  * find it, and what happens when one books. Shown to new drivers from the home page, and kept
  * under 我的 for later. Only what the tool does today: a link to copy, no posters or QR images.
  */
+const router = useRouter();
+// Vue Router records the previous in-app page; empty when the guide was opened on its own.
+const cameFromPage = (window.history.state as { back?: unknown } | null)?.back === '/app/profile-page';
+
+/** Read from the 名片頁: go back to it rather than stacking a second one on top. */
+function toMyPage() {
+  if (cameFromPage) router.back();
+  else void router.push('/app/profile-page');
+}
+
 const STEPS = [
   { title: '做好你的名片頁', text: '放車輛照片、常走路線、會說的語言，再按公開。姓名和車型取自你的司機資料。' },
   { title: '把連結放出去', text: '複製名片頁的連結，貼到客人看得到的地方。' },
@@ -32,7 +43,8 @@ const TIPS = [
 
 <template>
   <div class="page guide">
-    <PageBack :title="t('用名片頁找客人')" fallback="/app/me" />
+    <!-- Opened from 首頁, 我的, 預約 and the 名片頁: 返回 goes back to whichever it was. -->
+    <PageBack :title="t('用名片頁找客人')" fallback="/app/me" history />
 
     <section class="guide__lead">
       <h2>{{ t('你自己的接單頁') }}</h2>
@@ -65,7 +77,7 @@ const TIPS = [
       </ul>
     </section>
 
-    <RouterLink class="button block large" to="/app/profile-page">{{ t('去做我的名片頁') }}</RouterLink>
+    <button class="button block large" type="button" @click="toMyPage">{{ t('去做我的名片頁') }}</button>
     <RouterLink class="guide__bookings" to="/app/bookings">{{ t('看收到的預約') }}</RouterLink>
   </div>
 </template>

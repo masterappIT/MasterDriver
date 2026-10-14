@@ -1005,7 +1005,10 @@ model BookingRequest {
   passengers       Int
   luggage          Int           @default(0)
   passengerName    String?
+  /// A phone with its country code since 2026-10-14; older requests may hold any text.
   passengerContact String
+  /// Optional, only the driver sees it.
+  passengerWechat  String?
   notes            String?
   /// The driver's quote; what the passenger pays is agreed between the two of them.
   quoteMinor       Int?

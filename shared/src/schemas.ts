@@ -9,6 +9,22 @@ export const CURRENCIES = ['HKD', 'CNY', 'MOP'] as const;
 export type Currency = (typeof CURRENCIES)[number];
 
 const text = (max: number) => z.string().trim().min(1).max(max);
+
+/**
+ * A passenger's phone with its country code, e.g. "+852 91234567", stored as formatPassengerPhone
+ * writes it. Used for orders and for 名片頁 bookings alike.
+ */
+export const passengerPhoneSchema = z
+  .string()
+  .trim()
+  .transform((value, ctx) => {
+    const parts = splitPassengerPhone(value);
+    if (!parts || !/^\+(852|853|86)\s?\d/.test(value.replace(/[\-()]/g, ''))) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'INVALID_PASSENGER_PHONE' });
+      return z.NEVER;
+    }
+    return formatPassengerPhone(parts.countryCode, parts.phone);
+  });
 const optionalText = (max: number) =>
   z
     .string()
@@ -124,17 +140,7 @@ export const createOrderSchema = z.object({
    * The passenger's phone with its country code, e.g. "+852 91234567". Passengers give a
    * phone, not a WeChat ID, when an order is put out; stored as formatPassengerPhone writes it.
    */
-  passengerContact: z
-    .string()
-    .trim()
-    .transform((value, ctx) => {
-      const parts = splitPassengerPhone(value);
-      if (!parts || !/^\+(852|853|86)\s?\d/.test(value.replace(/[\-()]/g, ''))) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'INVALID_PASSENGER_PHONE' });
-        return z.NEVER;
-      }
-      return formatPassengerPhone(parts.countryCode, parts.phone);
-    }),
+  passengerContact: passengerPhoneSchema,
   /** The one-line text the order was written from, as typed. */
   rawText: optionalText(300),
   /** Minutes before pickup when the winning driver sees the passenger's contact; null: right away. Defaults to the dispatcher's preference. */

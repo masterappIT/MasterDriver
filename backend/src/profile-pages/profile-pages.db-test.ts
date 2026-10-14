@@ -24,7 +24,8 @@ const request = () => ({
   passengers: 3,
   luggage: 2,
   passengerName: '王小姐',
-  passengerContact: 'wechat: wang-test',
+  passengerContact: '+852 91234567',
+  passengerWechat: 'wang-test',
 });
 
 async function publishedPage(name = '陳師傅') {
@@ -111,7 +112,10 @@ test('a booking goes from request to quote to agreement to an order, and the pas
   assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1 });
 
   const [listed] = await ctx.profilePages.bookings(userId);
-  assert.deepEqual([listed.status, listed.unread, listed.source, listed.passengerContact], ['PENDING', true, 'xhs', 'wechat: wang-test']);
+  assert.deepEqual(
+    [listed.status, listed.unread, listed.source, listed.passengerContact, listed.passengerWechat],
+    ['PENDING', true, 'xhs', '+852 91234567', 'wang-test'],
+  );
   await ctx.profilePages.booking(userId, listed.id);
   assert.deepEqual(await ctx.profilePages.unread(userId), { count: 0 });
 
@@ -124,6 +128,9 @@ test('a booking goes from request to quote to agreement to an order, and the pas
   seen = await ctx.profilePages.passengerAccept(sent.code);
   assert.equal(seen.status, 'ACCEPTED');
   assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1 }, "the passenger's answer is news for the driver");
+  // The agreed price stands: no new quote once the passenger has agreed.
+  await rejectsWith(ctx.profilePages.quote(userId, listed.id, { amount: 1200, currency: 'HKD' }), 'BOOKING_NOT_OPEN');
+  assert.deepEqual((await ctx.profilePages.passengerBooking(sent.code)).quote, { amount: 900, currency: 'HKD' });
 
   const order = await ctx.orders.create(userId, {
     ...sampleOrder,

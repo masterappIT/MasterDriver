@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import { BOOKING_STATUS, bookingOpen, passengerTone, type Booking } from '../booking';
+import PoolRadar from '../components/PoolRadar.vue';
 import { copyText } from '../device';
 import { loadLine, money, pickup } from '../format';
 import { t } from '../i18n';
@@ -23,6 +24,14 @@ const booking = ref<PassengerBooking | null>(null);
 const error = ref('');
 const busy = ref(false);
 let poller: ReturnType<typeof setInterval> | undefined;
+
+/** While it waits on the driver, the page says so with a turning radar: it is still being looked at. */
+const waiting = computed(() => {
+  const status = booking.value?.status;
+  if (status === 'PENDING') return '正在等司機報價';
+  if (status === 'ACCEPTED') return '你已同意報價，正在等司機安排行程';
+  return null;
+});
 
 async function load() {
   try {
@@ -77,6 +86,14 @@ onBeforeUnmount(() => {
         <button class="chip" type="button" @click="copyLink">{{ t('複製連結') }}</button>
       </div>
 
+      <section v-if="waiting" class="card booking__waiting" role="status">
+        <PoolRadar :size="64" />
+        <div>
+          <strong>{{ t(waiting) }}</strong>
+          <p class="hint">{{ t('司機回覆後，這一頁會自動更新，不用重新整理。') }}</p>
+        </div>
+      </section>
+
       <section class="card booking__trip">
         <span class="booking__status" :class="`booking__status--${passengerTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].passenger) }}</span>
         <strong class="booking__time">{{ pickup(booking.pickupAt) }}</strong>
@@ -114,6 +131,17 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-sm);
+}
+.booking__waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+.booking__waiting strong {
+  font-size: var(--font-body-large);
+}
+.booking__waiting .hint {
+  margin: var(--space-xs) 0 0;
 }
 .booking__trip {
   display: flex;

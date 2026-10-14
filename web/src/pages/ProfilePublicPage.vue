@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { formatPassengerPhone, isValidPassengerPhone, type CountryCode } from '@masterdriver/shared/phone';
 import { api, errorText } from '../api';
 import BrandMark from '../components/BrandMark.vue';
 import { copyText } from '../device';
 import { fromLocalInput, plateKind, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
+import PhoneField from '../components/PhoneField.vue';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
@@ -48,7 +50,10 @@ const form = reactive({
   passengers: '1',
   luggage: '0',
   passengerName: '',
-  passengerContact: '',
+  // A phone is required so the driver can always reach the passenger and make the trip an order.
+  passengerCountry: '+852' as CountryCode,
+  passengerPhone: '',
+  passengerWechat: '',
   notes: '',
 });
 
@@ -60,6 +65,11 @@ function vehicleLine(shown: Page) {
 
 async function submit() {
   formError.value = '';
+  if (!isValidPassengerPhone(form.passengerCountry, form.passengerPhone)) {
+    formError.value = t(form.passengerCountry === '+86' ? '電話請填 11 位內地手機號碼' : '電話請填 8 位數字');
+    document.getElementById('booking-phone')?.focus();
+    return;
+  }
   busy.value = true;
   try {
     const source = typeof route.query.from === 'string' && /^[A-Za-z0-9_-]{1,30}$/.test(route.query.from) ? route.query.from : undefined;
@@ -70,7 +80,8 @@ async function submit() {
       passengers: Number(form.passengers),
       luggage: Number(form.luggage),
       passengerName: form.passengerName,
-      passengerContact: form.passengerContact,
+      passengerContact: formatPassengerPhone(form.passengerCountry, form.passengerPhone),
+      passengerWechat: form.passengerWechat,
       notes: form.notes,
       source,
     });
@@ -180,9 +191,13 @@ onBeforeUnmount(() => watcher?.disconnect());
           </label>
         </div>
         <input v-model="form.passengerName" class="line-input profile__gap" maxlength="40" :aria-label="t('稱呼')" :placeholder="t('怎樣稱呼你（選填）')" />
+        <div class="line-field">
+          <label for="booking-phone">{{ t('你的電話，只有這位司機看得到') }}</label>
+          <PhoneField id="booking-phone" v-model:country="form.passengerCountry" v-model:phone="form.passengerPhone" />
+        </div>
         <label class="line-field">
-          <span>{{ t('你的電話或微信，只有這位司機看得到') }}</span>
-          <input v-model="form.passengerContact" class="line-input" maxlength="60" required />
+          <span>{{ t('微信號（選填）') }}</span>
+          <input v-model="form.passengerWechat" class="line-input" maxlength="60" />
         </label>
         <label class="line-field">
           <span>{{ t('備註（選填）') }}</span>

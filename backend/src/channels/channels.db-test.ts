@@ -148,6 +148,11 @@ test('Spug is set up on its own; a route that chooses it keeps its 253 account, 
   await rejectsWith(ctx.smsChannels.sendVerificationCode('+852', '91234567', '123456'), 'SMS_SEND_FAILED');
 });
 
+test('on a fresh database, +852 and +853 asked at once share one international row', async () => {
+  assert.deepEqual(await Promise.all([ctx.smsChannels.canSend('+852'), ctx.smsChannels.canSend('+853')]), [false, false]);
+  assert.equal(await ctx.prisma.smsChannel.count({ where: { route: 'INTERNATIONAL' } }), 1);
+});
+
 test('a Spug test message goes to the number typed, under the route its country code belongs to', async () => {
   await ctx.smsChannels.saveSpug({ templateCode: 'A27LsecretbgEY', testPhone: '85291234567' }, 'test');
   const stub = stubFetch({ code: 200 });

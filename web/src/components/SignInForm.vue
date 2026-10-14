@@ -20,22 +20,28 @@ const codeInput = ref<HTMLInputElement | null>(null);
 let timer: ReturnType<typeof setInterval> | undefined;
 
 /**
- * The areas whose SMS is not set up, as the server says. Choosing one says so at once instead of
- * failing after 取得驗證碼; the server still refuses it. If the list cannot be loaded, nothing is
- * shown and the request's own error says why.
+ * The areas whose SMS is not set up, as the server says. They cannot be chosen, and the form says
+ * which areas can sign in now; the server still refuses the others. If the list cannot be loaded,
+ * every area stays open and the request's own error says why.
  */
+const COUNTRY_ORDER: CountryCode[] = ['+852', '+86', '+853'];
 const closedAreas = ref<CountryCode[]>([]);
 const areaClosed = computed(() => closedAreas.value.includes(countryCode.value));
-let areaChosen = false;
-const chooseArea = () => (areaChosen = true);
+/** e.g. "目前只可以用 +86 內地號碼登入，香港、澳門號碼暫未開通。" */
+const areasNote = computed(() => {
+  if (!closedAreas.value.length) return '';
+  const open = COUNTRY_ORDER.filter((area) => !closedAreas.value.includes(area));
+  if (!open.length) return '暫時未能發送簡訊驗證碼。';
+  const closedNames = closedAreas.value.map((area) => AREA_NAME[area]).join('、');
+  return `目前只可以用 ${open.map((area) => `${area} ${AREA_NAME[area]}`).join('、')}號碼登入，${closedNames}號碼暫未開通。`;
+});
 
 onMounted(async () => {
   try {
     const { areas } = await api<{ areas: { countryCode: CountryCode; available: boolean }[] }>('GET', '/auth/otp/areas');
     closedAreas.value = areas.filter((area) => !area.available).map((area) => area.countryCode);
-    // Start on the first area that can sign in, unless the driver already picked one.
     const open = areas.find((area) => area.available);
-    if (!areaChosen && areaClosed.value && open) countryCode.value = open.countryCode;
+    if (areaClosed.value && open) countryCode.value = open.countryCode;
   } catch {
     closedAreas.value = [];
   }
@@ -119,10 +125,9 @@ onBeforeUnmount(() => clearInterval(timer));
       <p class="sign-in__ask">{{ t('輸入手機號碼') }}</p>
       <!-- No box: the code as a small pill, the number large on a single line. -->
       <div class="sign-in__phone">
-        <select v-model="countryCode" class="sign-in__country" :aria-label="t('國碼')" @change="chooseArea">
-          <option value="+852">+852</option>
-          <option value="+86">+86</option>
-          <option value="+853">+853</option>
+        <select v-model="countryCode" class="sign-in__country" :aria-label="t('國碼')">
+          <!-- Closed areas stay listed but greyed out; the line under the number says why (a longer label would widen the pill). -->
+          <option v-for="area in COUNTRY_ORDER" :key="area" :value="area" :disabled="closedAreas.includes(area)">{{ area }}</option>
         </select>
         <input
           v-model="phone"
@@ -135,8 +140,8 @@ onBeforeUnmount(() => clearInterval(timer));
           required
         />
       </div>
-      <p v-if="areaClosed" class="sign-in__closed" role="status">
-        {{ t(`${AREA_NAME[countryCode]}號碼暫時收不到簡訊驗證碼，未能登入。請改用其他地區的號碼，或`) }}<RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink>{{ t('。') }}
+      <p v-if="areasNote" class="sign-in__closed" role="status">
+        {{ t(areasNote) }}<RouterLink to="/support">{{ t('有問題請聯絡客服') }}</RouterLink>
       </p>
       <button class="button block sign-in__submit" type="submit" :disabled="busy || wait > 0 || areaClosed">
         {{ wait > 0 ? t(`${wait} 秒後可重新發送`) : busy ? t('發送中…') : t('取得驗證碼') }}
