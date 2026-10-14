@@ -284,59 +284,79 @@ async function contact() {
 const quotaText = (grant: Grant) => (!grant.enabled ? '不可用' : grant.quota === null ? '不限' : `${grant.quota} 張`);
 
 onMounted(load);
+
+/** The page in parts, so the one being worked on is not far down a long page. */
+const TABS = [
+  { key: 'profile', label: '司機資料' },
+  { key: 'page', label: '名片頁與派單群' },
+  { key: 'money', label: '點數與方案' },
+  { key: 'notices', label: '通知' },
+] as const;
+const tab = ref<(typeof TABS)[number]['key']>('profile');
 </script>
 
 <template>
-  <RouterLink to="/users" class="hint">返回用戶</RouterLink>
+  <RouterLink to="/users" class="back-link">返回用戶</RouterLink>
   <div v-if="error" class="notice error">{{ error }}</div>
   <div v-if="message" class="notice">{{ message }}</div>
   <template v-if="user">
-    <h1>{{ user.profile?.name ?? '未填姓名' }}　<span class="muted">{{ user.phone }}</span></h1>
+    <div class="page-head">
+      <div class="page-head__title">
+        <h1>{{ user.profile?.name ?? '未填姓名' }}</h1>
+        <span class="muted">{{ user.phone }}</span>
+        <span v-if="user.suspendedAt" class="tag tag--danger">已停用</span>
+      </div>
+      <div v-if="can.write()" class="row">
+        <button class="button secondary" type="button" @click="contact">用客服聯絡這位用戶</button>
+        <button v-if="user.suspendedAt" class="button" type="button" @click="restore">恢復帳號</button>
+        <button v-else class="button danger" type="button" @click="suspend">停用帳號</button>
+      </div>
+    </div>
     <div v-if="user.suspendedAt" class="notice error">
       這個帳號已於 {{ dateTime(user.suspendedAt) }} 停用，不能登入。原因：{{ user.suspendedReason ?? '—' }}
     </div>
-    <p v-if="can.write()" class="row">
-      <button class="button secondary" type="button" @click="contact">用客服聯絡這位用戶</button>
-      <button v-if="user.suspendedAt" class="button" type="button" @click="restore">恢復帳號</button>
-      <button v-else class="button danger" type="button" @click="suspend">停用帳號</button>
-    </p>
-
-    <div class="grid">
-      <div class="card">
-        <div class="muted">派單／接單</div>
-        <div class="stat">{{ user.counts.dispatched }} / {{ user.counts.claimed }}</div>
-      </div>
-      <div class="card">
-        <div class="muted">點數餘額</div>
-        <div class="stat">{{ money(user.credits.balance) }}</div>
-        <div class="hint">
-          服務費：{{
-            !user.serviceFee.enabled ? '平台未開啟' : user.serviceFee.exempt ? '免收' : `每單 ${money(user.serviceFee.feePerOrder)}`
-          }}
-        </div>
-      </div>
-      <div class="card">
-        <div class="muted">每月出單額度</div>
-        <div class="stat">{{ quotaText(user.entitlements.orderCreate) }}</div>
-        <div class="hint">來源：{{ SOURCE[user.entitlements.orderCreate.source] }}</div>
-      </div>
-    </div>
 
     <div class="card">
+      <dl class="facts facts--numbers">
+        <div><dt>派單／接單</dt><dd>{{ user.counts.dispatched }} / {{ user.counts.claimed }}</dd></div>
+        <div>
+          <dt>
+            點數餘額<span class="tag">服務費：{{
+              !user.serviceFee.enabled ? '平台未開啟' : user.serviceFee.exempt ? '免收' : `每單 ${money(user.serviceFee.feePerOrder)}`
+            }}</span>
+          </dt>
+          <dd>{{ money(user.credits.balance) }}</dd>
+        </div>
+        <div>
+          <dt>每月出單額度<span class="tag">來源：{{ SOURCE[user.entitlements.orderCreate.source] }}</span></dt>
+          <dd>{{ quotaText(user.entitlements.orderCreate) }}</dd>
+        </div>
+      </dl>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button v-for="item in TABS" :key="item.key" type="button" role="tab" :aria-selected="tab === item.key" :class="{ active: tab === item.key }" @click="tab = item.key">
+        {{ item.label }}
+      </button>
+    </div>
+
+    <div v-show="tab === 'profile'" class="card">
       <h2>司機資料</h2>
       <p v-if="!user.profile" class="muted">尚未填寫（第一次搶單前會要求填寫）</p>
-      <div v-else class="row">
-        <span>港牌：{{ user.profile.hkPlate ?? '—' }}</span>
-        <span>澳牌：{{ user.profile.macauPlate ?? '—' }}</span>
-        <span>內地牌：{{ user.profile.mainlandPlate ?? '—' }}</span>
-        <span>車型：{{ user.profile.vehicleType ?? '—' }}</span>
-        <span>座位：{{ user.profile.seats ?? '—' }}</span>
-        <span>車色：{{ user.profile.color ?? '—' }}</span>
-        <span>車牌類型：{{ user.profile.plateType ? PLATE_TYPE[user.profile.plateType] : '—' }}</span>
-        <span>港澳號碼：{{ user.profile.hkMacauPhone ?? '—' }}</span>
-        <span>內地號碼：{{ user.profile.mainlandPhone ?? '—' }}</span>
-        <span>對乘客隱藏車牌：{{ user.profile.hidePlates ? '是' : '否' }}</span>
-      </div>
+      <dl v-else class="facts">
+        <div><dt>港牌</dt><dd>{{ user.profile.hkPlate ?? '—' }}</dd></div>
+        <div><dt>澳牌</dt><dd>{{ user.profile.macauPlate ?? '—' }}</dd></div>
+        <div><dt>內地牌</dt><dd>{{ user.profile.mainlandPlate ?? '—' }}</dd></div>
+        <div><dt>車牌類型</dt><dd>{{ user.profile.plateType ? PLATE_TYPE[user.profile.plateType] : '—' }}</dd></div>
+        <div><dt>車型</dt><dd>{{ user.profile.vehicleType ?? '—' }}</dd></div>
+        <div><dt>座位</dt><dd>{{ user.profile.seats ?? '—' }}</dd></div>
+        <div><dt>車色</dt><dd>{{ user.profile.color ?? '—' }}</dd></div>
+        <div><dt>對乘客隱藏車牌</dt><dd>{{ user.profile.hidePlates ? '是' : '否' }}</dd></div>
+        <div><dt>港澳號碼</dt><dd>{{ user.profile.hkMacauPhone ?? '—' }}</dd></div>
+        <div><dt>內地號碼</dt><dd>{{ user.profile.mainlandPhone ?? '—' }}</dd></div>
+        <div><dt>註冊</dt><dd>{{ dateTime(user.createdAt) }}</dd></div>
+        <div><dt>介面語言</dt><dd>{{ user.locale === 'zh-Hans' ? '簡體' : '繁體' }}</dd></div>
+      </dl>
       <p class="hint">港澳號碼與內地號碼由司機自己填寫，沒有經過簡訊驗證；登入用的是上方的號碼。</p>
       <p v-if="can.write() && !editingProfile"><button class="button secondary" type="button" @click="editProfile">代改司機資料</button></p>
       <form v-if="editingProfile" class="user-profile-form" @submit.prevent="saveProfile">
@@ -380,10 +400,10 @@ onMounted(load);
           <button class="button secondary" type="button" @click="editingProfile = false">取消</button>
         </div>
       </form>
-      <p class="hint">註冊：{{ dateTime(user.createdAt) }}　介面語言：{{ user.locale === 'zh-Hans' ? '簡體' : '繁體' }}</p>
+      <p v-if="!user.profile" class="hint">註冊：{{ dateTime(user.createdAt) }}　介面語言：{{ user.locale === 'zh-Hans' ? '簡體' : '繁體' }}</p>
     </div>
 
-    <div class="card">
+    <div v-show="tab === 'page'" class="card">
       <h2>名片頁</h2>
       <p class="hint">有投訴時在這裡查看內容並處理。用戶列表的搜尋框可以直接貼名片頁連結找到司機。</p>
       <p v-if="!user.profilePage" class="muted">還沒有打開過名片頁設定</p>
@@ -391,14 +411,14 @@ onMounted(load);
         <div v-if="user.profilePage.blockedAt" class="notice error">
           已於 {{ dateTime(user.profilePage.blockedAt) }} 下架，原因：{{ user.profilePage.blockedReason ?? '—' }}
         </div>
-        <div class="row">
-          <span>狀態：{{ user.profilePage.blockedAt ? '已下架' : user.profilePage.published ? '已公開' : '未公開' }}</span>
-          <span>代碼：{{ user.profilePage.code }}</span>
-          <span>收到預約：{{ user.profilePage.bookings }} 個</span>
-          <span>微信號：{{ user.profilePage.wechatId ?? '—' }}</span>
-          <span>WhatsApp：{{ user.profilePage.whatsapp ?? '—' }}</span>
-        </div>
-        <p><b>介紹：</b>{{ user.profilePage.intro || '—' }}</p>
+        <dl class="facts">
+          <div><dt>狀態</dt><dd>{{ user.profilePage.blockedAt ? '已下架' : user.profilePage.published ? '已公開' : '未公開' }}</dd></div>
+          <div><dt>代碼</dt><dd>{{ user.profilePage.code }}</dd></div>
+          <div><dt>收到預約</dt><dd>{{ user.profilePage.bookings }} 個</dd></div>
+          <div><dt>微信號</dt><dd>{{ user.profilePage.wechatId ?? '—' }}</dd></div>
+          <div><dt>WhatsApp</dt><dd>{{ user.profilePage.whatsapp ?? '—' }}</dd></div>
+          <div class="facts__wide"><dt>介紹</dt><dd>{{ user.profilePage.intro || '—' }}</dd></div>
+        </dl>
         <p><b>路線：</b>{{ user.profilePage.routes.join('、') || '—' }}　<b>語言：</b>{{ user.profilePage.languages.join('、') || '—' }}　<b>服務地區：</b>{{ user.profilePage.regions.join('、') || '—' }}</p>
         <div v-if="user.profilePage.photoIds.length" class="user-media">
           <figure v-for="photoId in user.profilePage.photoIds" :key="photoId" class="user-media__item">
@@ -418,7 +438,7 @@ onMounted(load);
       <p>收款方式：{{ user.paymentMethods }} 個<span class="hint">　帳號與收款碼只給用戶自己和他選擇顯示的乘客，後台不顯示</span></p>
     </div>
 
-    <div class="card">
+    <div v-show="tab === 'page'" class="card">
       <h2>派單群</h2>
       <p v-if="user.groupInvites.length === 0" class="muted">沒有加入派單群</p>
       <div v-else class="user-media">
@@ -440,7 +460,7 @@ onMounted(load);
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="tab === 'notices'" class="card">
       <h2>通知</h2>
       <p>
         關掉的通知：{{ user.notifications.off.map((group) => NOTIFICATION_GROUP[group] ?? group).join('、') || '沒有' }}
@@ -455,7 +475,7 @@ onMounted(load);
             <td>{{ dateTime(item.createdAt) }}</td>
             <td>{{ NOTIFICATION_KIND[item.kind] ?? item.kind }}</td>
             <td>{{ item.summary || '—' }}</td>
-            <td>{{ item.read ? '已讀' : '未讀' }}</td>
+            <td><span class="tag" :class="{ 'tag--info': !item.read }">{{ item.read ? '已讀' : '未讀' }}</span></td>
           </tr>
           <tr v-if="user.notifications.recent.length === 0">
             <td colspan="4" class="muted">最近沒有通知</td>
@@ -464,7 +484,7 @@ onMounted(load);
       </table>
     </div>
 
-    <div class="card">
+    <div v-show="tab === 'money'" class="card">
       <h2>點數</h2>
       <form v-if="can.write()" class="row" @submit.prevent="changeCredits">
         <select v-model="credit.type" class="select">
@@ -481,8 +501,8 @@ onMounted(load);
             <tr>
               <th>時間</th>
               <th>類型</th>
-              <th>金額</th>
-              <th>餘額</th>
+              <th class="num">金額</th>
+              <th class="num">餘額</th>
               <th>備註</th>
             </tr>
           </thead>
@@ -490,8 +510,8 @@ onMounted(load);
             <tr v-for="(entry, i) in user.credits.entries" :key="i">
               <td>{{ dateTime(entry.createdAt) }}</td>
               <td>{{ CREDIT_ENTRY[entry.type] ?? entry.type }}</td>
-              <td>{{ hkd(entry.amount) }}</td>
-              <td>{{ hkd(entry.balanceAfter) }}</td>
+              <td class="num">{{ hkd(entry.amount) }}</td>
+              <td class="num">{{ hkd(entry.balanceAfter) }}</td>
               <td>{{ entry.note ?? '' }}</td>
             </tr>
             <tr v-if="user.credits.entries.length === 0">
@@ -502,7 +522,7 @@ onMounted(load);
       </div>
     </div>
 
-    <div class="card">
+    <div v-show="tab === 'money'" class="card">
       <h2>方案與贈送</h2>
       <p v-for="sub in user.subscriptions" :key="sub.id">
         訂閱：{{ PLAN_NAME[sub.planKey] ?? sub.planKey }}（{{ sub.source }}，{{ sub.status }}）{{ dateTime(sub.startsAt) }} 至 {{ dateTime(sub.endsAt) }}

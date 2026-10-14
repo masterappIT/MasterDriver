@@ -394,6 +394,136 @@ textarea.input {
   max-width: 360px;
 }
 
+/* A form of a few fields above the list it adds to. */
+.card > form.row {
+  margin-bottom: var(--space-md);
+}
+
+/* The parts of a long page, one shown at a time. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.tabs button {
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary);
+  background: none;
+  font-size: var(--font-body);
+  font-weight: 600;
+}
+
+.tabs button:hover {
+  color: var(--color-text);
+}
+
+.tabs button.active {
+  border-bottom-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* Back to the list a detail page belongs to. */
+.back-link {
+  display: inline-block;
+  margin-bottom: var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+}
+
+/* A detail page's title: what it is, its state beside it, and its actions on the right. */
+.page-head__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm) var(--space-md);
+  min-width: 0;
+}
+
+/* Facts about one thing: a small label over each value, as many across as fit. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--space-md) var(--space-xl);
+  margin: 0;
+}
+
+.facts > div {
+  min-width: 0;
+}
+
+.facts dt {
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+
+.facts dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.facts .facts__wide {
+  grid-column: 1 / -1;
+}
+
+.facts--numbers dd {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two columns of cards on a wide screen, one on a narrow one. */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.split > .card {
+  margin-bottom: 0;
+}
+
+.split + .card,
+.split + .split {
+  margin-top: 14px;
+}
+
+.card > h2 + .hint {
+  display: block;
+  margin: -6px 0 var(--space-md);
+}
+
+/* Steps in time, each with when it happened; those not reached yet are dimmed. */
+.timeline {
+  display: grid;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.timeline li.pending {
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* A small mark beside a value: what kind it is, or a state worth noticing. */
 .tag {
   display: inline-block;

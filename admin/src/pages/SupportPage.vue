@@ -205,14 +205,19 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <h1>客服 <span v-if="inbox.waiting" class="support__count">{{ inbox.waiting }} 個待回覆</span></h1>
+  <div class="page-head">
+    <div class="page-head__title">
+      <h1>客服</h1>
+      <span v-if="inbox.waiting" class="tag tag--danger">{{ inbox.waiting }} 個待回覆</span>
+    </div>
+  </div>
   <div v-if="error" class="notice error">{{ error }}</div>
 
   <div class="support">
     <section class="card support__inbox" :class="{ 'support__inbox--behind': currentId }">
-      <div class="row support__filters">
-        <button class="button" :class="{ secondary: filter !== 'waiting' }" type="button" @click="filter = 'waiting'">待回覆</button>
-        <button class="button" :class="{ secondary: filter !== 'all' }" type="button" @click="filter = 'all'">全部</button>
+      <div class="tabs support__filters">
+        <button :class="{ active: filter === 'waiting' }" type="button" @click="filter = 'waiting'">待回覆</button>
+        <button :class="{ active: filter === 'all' }" type="button" @click="filter = 'all'">全部</button>
       </div>
       <form class="support__search" @submit.prevent="loadInbox">
         <input v-model="search" class="input" placeholder="搜尋姓名或手機號碼" />
@@ -289,18 +294,16 @@ onBeforeUnmount(() => {
 <style scoped>
 .support {
   display: flex;
-  gap: var(--space-lg);
+  gap: 14px;
   align-items: flex-start;
 }
-.support__count {
-  font-size: var(--font-body);
-  font-weight: 400;
-  color: var(--color-danger);
-}
 .support__inbox {
-  width: 320px;
+  width: 300px;
   flex-shrink: 0;
-  padding: var(--space-lg);
+  padding: var(--space-md) var(--space-lg);
+}
+.support__search .input {
+  width: 100%;
 }
 .support__filters,
 .support__search {
@@ -352,8 +355,9 @@ onBeforeUnmount(() => {
 .support__back {
   display: none;
 }
+/* As tall as the window allows, so a conversation is read without scrolling the page. */
 .support__messages {
-  height: 56vh;
+  height: max(320px, calc(100vh - 290px));
   overflow-y: auto;
   padding: var(--space-md) 0;
 }
