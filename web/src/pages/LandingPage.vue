@@ -112,9 +112,11 @@ function replay() {
   play();
 }
 
+// Used while SEO → 首頁 in the platform admin is left empty: the same words as the share card
+// (web/index.html and the API's link preview), so a share from the open page says the same.
 usePageSeo('HOME', {
-  title: 'MasterDriver 跨境師傅幫｜有單就派，有空就接',
-  description: '跨境司機在微信群和 WhatsApp 群派單、搶單、請乘客確認的免費工具。不用換群，不用下載 App。',
+  title: 'MasterDriver 跨境師傅幫｜跨境司機派單、接單、獲客',
+  description: '一條連結派單到多個群，司機搶單；名片頁讓客人直接約你。免費。',
 });
 
 onBeforeUnmount(() => {

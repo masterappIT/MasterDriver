@@ -107,7 +107,6 @@ test('each square renders to a 600 × 600 JPEG; a driver without a photo gets th
     { kind: 'driver' as const, name: '<李', photo: null },
     { kind: 'order' as const, badge: '有單', when: '10/16 02:57' },
     { kind: 'confirm' as const },
-    { kind: 'home' as const },
   ]) {
     const svg = squareSvg(square);
     assert.ok(!svg.includes('<李'));

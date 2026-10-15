@@ -26,8 +26,8 @@ const PLATE_KIND = { SINGLE: '單牌', DUAL: '兩地牌', TRIPLE: '三地牌' } 
  * whose tags every other page carries. Robots get the wide picture, a visitor's tags the square.
  */
 const HOME = {
-  title: '跨境師傅幫｜跨境司機派單工具',
-  description: '在微信群、WhatsApp 群出單、搶單，請乘客確認行程。不用下載，免費使用。',
+  title: 'MasterDriver 跨境師傅幫｜跨境司機派單、接單、獲客',
+  description: '一條連結派單到多個群，司機搶單；名片頁讓客人直接約你。免費。',
   image: '/share-card.jpg',
   square: '/share-square.jpg',
 };

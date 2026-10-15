@@ -22,7 +22,7 @@ after(async () => {
   await ctx?.prisma.$disconnect();
 });
 
-const GENERIC = '跨境師傅幫｜跨境司機派單工具';
+const GENERIC = 'MasterDriver 跨境師傅幫｜跨境司機派單、接單、獲客';
 
 test('a published 名片頁 gets the driver’s own preview; unpublished, taken down or unknown gets the generic one', async () => {
   const owner = await createDriver(ctx, '陳師傅');
