@@ -8,12 +8,17 @@ import GroupText from '../components/GroupText.vue';
 import PhotoCrop from '../components/PhotoCrop.vue';
 import NameCardSheet from '../components/NameCardSheet.vue';
 import { t } from '../i18n';
+import { plateKind } from '../format';
 import { toast } from '../toast';
 
 interface MyPage {
   code: string;
   /** From the driver profile, as the public page shows it. */
   name: string | null;
+  vehicleType: string | null;
+  seats: number | null;
+  color: string | null;
+  plateType: 'SINGLE' | 'DUAL' | 'TRIPLE' | null;
   url: string;
   /** A few lines about the driver and the link, to paste where the page is shared. */
   shareText: string;
@@ -45,6 +50,13 @@ const picker = ref<HTMLInputElement | null>(null);
 const cropping = ref<File | null>(null);
 /** 名片圖: the square picture with the QR code, made on the phone when asked for. */
 const nameCardOpen = ref(false);
+/** The car as the public 名片頁 words it (ProfilePublicPage): 車型・座位・顏色・車牌類型. */
+const vehicleSummary = computed(() => {
+  const shown = page.value;
+  if (!shown) return null;
+  const seats = shown.seats ? `${shown.seats}座` : '';
+  return [shown.vehicleType, shown.vehicleType?.includes(seats) ? '' : seats, shown.color, plateKind(shown)].filter(Boolean).join('・') || null;
+});
 const form = reactive({ intro: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
 
 /**
@@ -281,7 +293,8 @@ onMounted(async () => {
     <NameCardSheet
       v-if="nameCardOpen && page"
       :name="page.name ?? t('司機')"
-      :routes="page.routes"
+      :vehicle="vehicleSummary"
+      :languages="page.languages"
       :completed-trips="page.completedTrips"
       :photo-url="page.photos[0]?.url ?? null"
       :url="page.url"

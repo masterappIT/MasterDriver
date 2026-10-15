@@ -6,8 +6,9 @@ import { CARD_HEIGHT, CARD_WIDTH, PHOTO_WIDTH, cardSvg, fit, previewHtml, type C
 const card: CardData = {
   kind: 'profile',
   name: '陳師傅',
-  routes: ['深圳灣 往返 香港機場', '皇崗 往返 東莞'],
   vehicle: '7座商務車 · 兩地牌',
+  languages: ['粵語', '普通話'],
+  intro: '十年跨境接送經驗，準時、車廂整潔，深圳灣、皇崗、港珠澳大橋都熟，機場接送可以舉牌，行李多也沒問題，歡迎預約。',
   completedTrips: 128,
   photo: null,
 };
@@ -20,15 +21,19 @@ test('the preview page escapes what drivers typed', () => {
   assert.ok(html.includes('<meta name="robots" content="noindex, nofollow" />'));
 });
 
-test('a 名片頁 card shows the routes; a confirmation card never does, nor a next step on a 名片頁', () => {
+test('a 名片頁 card shows languages, two lines of the intro and how to book; a confirmation card none of these', () => {
   const profile = cardSvg(card);
   assert.ok(profile.includes('司機名片'));
-  assert.ok(profile.includes('深圳灣 往返 香港機場'));
+  assert.ok(profile.includes('7座商務車 · 兩地牌 · 會說粵語、普通話'));
+  assert.ok(profile.includes('十年跨境接送經驗'));
+  assert.equal((profile.match(/…<\/text>/g) ?? []).length, 1, 'a long intro stops at two lines, the second cut');
+  assert.ok(profile.includes('點開直接約車，不用註冊'));
   assert.ok(!profile.includes('點開連結'));
 
   const confirm = cardSvg({ ...card, kind: 'confirm' });
   assert.ok(confirm.includes('為你安排的行程'));
-  assert.ok(!confirm.includes('深圳灣 往返 香港機場'), 'the driver’s usual routes would read as this trip’s');
+  assert.ok(!confirm.includes('會說粵語'), 'languages are for the 名片頁 card');
+  assert.ok(!confirm.includes('十年跨境'), 'the intro is for the 名片頁 card');
   assert.ok(confirm.includes('點開連結，確認時間與上車地點'));
 });
 

@@ -20,10 +20,15 @@ export interface CardData {
   /** 司機名片 on a 名片頁 link, 為你安排的行程 on a confirmation link. */
   kind: 'profile' | 'confirm';
   name: string;
-  /** The 名片頁's routes; never shown on a confirmation card, where they would read as the trip's. */
-  routes: string[];
   /** 「7座商務車 · 兩地牌」: vehicle and plate kind, never the plate numbers. */
   vehicle: string | null;
+  /**
+   * A 名片頁 card only, and only what the public page shows: the languages they speak and the start
+   * of their own introduction. Never routes or regions, which 名片頁 dropped on 2026-10-14 (old
+   * values are still stored, but no longer shown or editable).
+   */
+  languages?: string[];
+  intro?: string | null;
   /**
    * On a 名片頁 card the trips they drove; on a confirmation card the trips they arranged
    * (put out and completed, whoever drove), which is what 為你安排 speaks of.
@@ -81,6 +86,26 @@ function textWidth(text: string, size: number) {
   return width;
 }
 
+/** Breaks text into at most `lines` lines of `max` pixels; the last is cut with an ellipsis if more remains. */
+export function wrap(text: string, size: number, max: number, lines: number) {
+  const out: string[] = [];
+  let rest = text.replace(/\s+/g, ' ').trim();
+  while (rest && out.length < lines) {
+    if (out.length === lines - 1 || textWidth(rest, size) <= max) {
+      out.push(fit(rest, size, max));
+      break;
+    }
+    let line = '';
+    for (const char of rest) {
+      if (textWidth(line + char, size) > max) break;
+      line += char;
+    }
+    out.push(line);
+    rest = rest.slice(line.length).trim();
+  }
+  return out;
+}
+
 /** Cuts a line that would run past `max` pixels, ending it with an ellipsis. */
 export function fit(text: string, size: number, max: number) {
   if (textWidth(text, size) <= max) return text;
@@ -113,15 +138,19 @@ export function cardSvg(card: CardData): string {
   parts.push(text(card.name, 56, 800, '#142033'));
   y += 22;
 
-  if (card.kind === 'profile') {
-    for (const route of card.routes.slice(0, 2)) {
-      y += 44;
-      parts.push(text(route, 30, 700, '#142033'));
-    }
+  const facts = [card.vehicle, card.kind === 'profile' && card.languages?.length ? `會說${card.languages.join('、')}` : null].filter(Boolean).join(' · ');
+  if (facts) {
+    y += 50;
+    parts.push(text(facts, 25, 600, '#34445a'));
   }
-  if (card.vehicle) {
-    y += 52;
-    parts.push(text(card.vehicle, 24, 400, '#556579'));
+  if (card.kind === 'profile' && card.intro?.trim()) {
+    // Their own words, two lines at most, set off by a teal rule as on the page.
+    // The lines are indented 16px; text() allows a line that much less on each side, so wrap to the same.
+    const lines = wrap(card.intro, 24, column - 32, 2);
+    y += 22;
+    parts.push(`<rect x="${left}" y="${y}" width="4" height="${lines.length * 36}" rx="2" fill="#d8f1ef" />`);
+    lines.forEach((line, index) => parts.push(text(line, 24, 400, '#34445a', y + 27 + index * 36, left + 16)));
+    y += lines.length * 36;
   }
   if (card.completedTrips > 0) {
     const label = card.kind === 'confirm' ? `已在師傅幫安排 ${card.completedTrips} 趟` : `已在師傅幫完成 ${card.completedTrips} 張`;
@@ -139,16 +168,24 @@ export function cardSvg(card: CardData): string {
     if (card.owner.next) parts.push(text(card.owner.next, 21, 600, '#556579', y + 74, left + 20));
     y += height;
   }
-  if (card.kind === 'confirm') {
-    const label = '點開連結，確認時間與上車地點';
-    y += 22;
-    const width = Math.min(textWidth(label, 26) + 44, column);
+  {
+    // What opening the link does: book on a 名片頁, confirm on a confirmation link.
+    const label = card.kind === 'confirm' ? '點開連結，確認時間與上車地點' : '點開直接約車，不用註冊';
+    y += 26;
+    const width = Math.min(textWidth(label, 26) + 48, column);
     parts.push(`<rect x="${left}" y="${y}" width="${width}" height="64" rx="32" fill="#1f5fd6" />`);
-    parts.push(text(label, 26, 800, '#ffffff', y + 42, left + 22));
+    parts.push(text(label, 26, 800, '#ffffff', y + 42, left + 24));
+    y += 64;
   }
 
   // The brand at the bottom of the column: the cloud M on its tile, 跨境師傅幫 over MasterDriver.
   const markY = CARD_HEIGHT - 82;
+  // A short card sits in the middle of the room above the brand rather than bunched at the top.
+  const top = 66;
+  const offset = Math.max(0, (markY - 40 - y - (top - 40)) / 2);
+  const content = `<g transform="translate(0 ${Math.round(offset)})">${parts.join('')}</g>`;
+  parts.length = 0;
+  parts.push(content);
   parts.push(
     `<rect x="${left}" y="${markY}" width="42" height="42" rx="12" fill="url(#brand)" />`,
     `<g transform="translate(${left + 6.5} ${markY + 10.5}) scale(0.58)">${MARK_PATHS.map((d) => `<path d="${d}" fill="#fff" />`).join('')}</g>`,

@@ -13,7 +13,9 @@ import BottomSheet from './BottomSheet.vue';
  */
 const props = defineProps<{
   name: string;
-  routes: string[];
+  /** 「7座埃爾法・兩地牌」: as the public page shows it, never a plate number. */
+  vehicle: string | null;
+  languages: string[];
   completedTrips: number;
   photoUrl: string | null;
   url: string;
@@ -74,7 +76,14 @@ async function draw() {
     const scale = Math.max(SIZE / photo.width, PHOTO_HEIGHT / photo.height);
     const width = photo.width * scale;
     const height = photo.height * scale;
+    // Clipped to the top: a portrait photo scaled to the width is taller than the space, and would
+    // otherwise run down over the name and the QR code (seen in WeChat, 2026-10-15).
+    c.save();
+    c.beginPath();
+    c.rect(0, 0, SIZE, PHOTO_HEIGHT);
+    c.clip();
     c.drawImage(photo, (SIZE - width) / 2, (PHOTO_HEIGHT - height) / 2, width, height);
+    c.restore();
     const shade = c.createLinearGradient(0, PHOTO_HEIGHT * 0.6, 0, PHOTO_HEIGHT);
     shade.addColorStop(0, 'rgba(10, 20, 35, 0)');
     shade.addColorStop(1, 'rgba(10, 20, 35, 0.4)');
@@ -98,25 +107,27 @@ async function draw() {
     c.textAlign = 'left';
   }
 
-  // The bottom left: who, where they go, how many they have done, and whose card this is.
+  // The bottom left: who, their car and languages, how many they have done, and whose card this is.
+  // No routes: 名片頁 dropped them on 2026-10-14.
   const left = 56;
   const column = 640;
   c.textBaseline = 'alphabetic';
   c.fillStyle = '#0e9f9a';
   c.font = `800 32px ${FONT}`;
-  c.fillText(t('司機名片'), left, 678);
+  c.fillText(t('司機名片'), left, 682);
   c.fillStyle = '#142033';
   c.font = `800 84px ${FONT}`;
-  c.fillText(fit(c, props.name, column), left, 772);
-  let y = 772;
-  if (props.routes.length) {
-    y += 64;
+  c.fillText(fit(c, props.name, column), left, 776);
+  let y = 776;
+  const facts = [props.vehicle, props.languages.length ? `會說${props.languages.join('、')}` : null].filter(Boolean).join('・');
+  if (facts) {
+    y += 56;
     c.fillStyle = '#34445a';
-    c.font = `700 34px ${FONT}`;
-    c.fillText(fit(c, props.routes.slice(0, 2).map((route) => t(route)).join('・'), column), left, y);
+    c.font = `700 32px ${FONT}`;
+    c.fillText(fit(c, t(facts), column), left, y);
   }
   if (props.completedTrips > 0) {
-    y += 34;
+    y += 30;
     c.font = `700 30px ${FONT}`;
     const label = t(`已在師傅幫完成 ${props.completedTrips} 張`);
     const width = c.measureText(label).width + 40;

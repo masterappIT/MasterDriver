@@ -29,7 +29,8 @@ test('a published 名片頁 gets the driver’s own preview; unpublished, taken 
   await ctx.prisma.profilePage.update({ where: { code: page.code }, data: { routes: ['深圳灣 往返 香港機場'] } });
 
   const shown = await previews.page(`/p/${page.code}`);
-  assert.equal(shown.title, '陳師傅｜深圳灣 往返 香港機場｜跨境師傅幫');
+  assert.equal(shown.title, '陳師傅｜跨境師傅幫', 'old routes are stored but the page no longer shows them');
+  assert.ok(!JSON.stringify(await previews.cardData('p', page.code)).includes('深圳灣'), 'nor does the card');
   assert.equal(shown.description, '十年經驗，準時');
   assert.equal(shown.url, `https://md.test/p/${page.code}`);
   assert.match(shown.image, new RegExp(`^https://md\\.test/api/public/link-preview/card/p/${page.code}\\.jpg\\?v=`));

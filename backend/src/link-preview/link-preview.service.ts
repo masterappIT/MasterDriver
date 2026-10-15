@@ -15,7 +15,8 @@ const GENERIC = {
   description: '跨境司機在微信群和 WhatsApp 群裡派單、搶單、請乘客確認的工具。免費使用。',
   image: '/share-card.jpg',
 };
-const PROFILE_TITLE = '{司機}｜{路線}｜跨境師傅幫';
+/** 名片頁 has no routes or regions since 2026-10-14, so the default title names only the driver. */
+const PROFILE_TITLE = '{司機}｜跨境師傅幫';
 const CODE = /^[A-Za-z0-9_-]{4,64}$/;
 const CACHE_MS = 10 * 60 * 1000;
 const CACHE_MAX = 200;
@@ -130,17 +131,19 @@ export class LinkPreviewService {
     const name = profile?.name || '司機';
     const vehicle = vehicleLine(profile);
     const settings = await this.prisma.seoPageSetting.findUnique({ where: { page: 'PROFILE' } });
-    const values = { 司機: name, 路線: page.routes[0] ?? null, 車型: profile?.vehicleType ?? null, 地區: page.regions[0] ?? null };
+    // 路線 and 地區 stay empty: old values are still stored, but the page no longer shows them.
+    const values = { 司機: name, 路線: null, 車型: profile?.vehicleType ?? null, 地區: null };
     const title = renderSeoTemplate(settings?.title || PROFILE_TITLE, values) || `${name}｜跨境師傅幫`;
     const description =
       (settings?.description && renderSeoTemplate(settings.description, values)) ||
       page.intro.trim().slice(0, 80) ||
-      `${name}的名片頁：路線、車型，直接在這裡約車。`;
+      `看${name}的車和聯絡方式，直接在這裡約車，不用註冊。`;
     const card = {
       kind: 'profile' as const,
       name,
-      routes: page.routes,
       vehicle,
+      languages: page.languages,
+      intro: page.intro,
       completedTrips: await this.completedTrips(page.userId),
       photoKey: this.firstPhotoKey(page.photos),
     };
@@ -169,7 +172,6 @@ export class LinkPreviewService {
     const card = {
       kind: 'confirm' as const,
       name: name || '司機',
-      routes: [],
       vehicle: drivesIt ? vehicleLine(dispatcher?.profile ?? null) : null,
       completedTrips: await this.arrangedTrips(order.dispatcherId),
       photoKey: drivesIt && page && !page.blockedAt ? this.firstPhotoKey(page.photos) : null,
