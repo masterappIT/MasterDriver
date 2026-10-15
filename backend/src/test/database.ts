@@ -198,6 +198,12 @@ export const sampleOrder = {
   contactRevealMinutes: null,
 };
 
+/**
+ * A pickup some days after the real clock, for a test that runs without a simulated "now" and needs
+ * the pickup still ahead (sampleOrder's fixed date passes as the calendar moves on).
+ */
+export const daysFromNow = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString();
+
 /** Asserts that an API call fails with the given stable error code. */
 export async function rejectsWith(promise: Promise<unknown>, code: string) {
   const { rejects } = await import('node:assert/strict');

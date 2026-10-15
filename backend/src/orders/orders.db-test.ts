@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
-import { createDriver, sampleOrder, seedPlans, setupDatabase, type TestContext, rejectsWith } from '../test/database';
+import { createDriver, daysFromNow, sampleOrder, seedPlans, setupDatabase, type TestContext, rejectsWith } from '../test/database';
 
 let ctx: TestContext;
 
@@ -169,7 +169,7 @@ test('by default the winner sees the passenger contact one hour before pickup, a
   const dispatcher = await createDriver(ctx);
   const driver = await createDriver(ctx);
   const { contactRevealMinutes: _, ...withoutReveal } = sampleOrder;
-  const created = await ctx.orders.create(dispatcher, withoutReveal);
+  const created = await ctx.orders.create(dispatcher, { ...withoutReveal, pickupAt: daysFromNow(3) });
   assert.equal(created.contactRevealMinutes, 60);
 
   const won = await ctx.orders.claim(created.code, driver);
@@ -414,7 +414,13 @@ test("the other leg's driver phone waits for this leg's reveal time", async () =
   const hkDriver = await createDriver(ctx, '香港師傅');
   const mainlandDriver = await createDriver(ctx, '內地師傅');
   await freeForAll();
-  const order = await ctx.orders.create(dispatcher, { ...transferOrder, contactRevealMinutes: 60 });
+  // Both legs days ahead of the real clock, so neither driver's phone is due yet.
+  const order = await ctx.orders.create(dispatcher, {
+    ...transferOrder,
+    pickupAt: daysFromNow(3),
+    transfer: { ...transferOrder.transfer, pickupAt: daysFromNow(3.1) },
+    contactRevealMinutes: 60,
+  });
   const [first, second] = order.journey!.legs;
   await ctx.orders.claim(first.code, hkDriver);
   await ctx.orders.claim(second.code, mainlandDriver);
@@ -553,7 +559,7 @@ const PNG = `data:image/png;base64,${Buffer.concat([Buffer.from([0x89, 0x50, 0x4
 test('行程群: the dispatcher gives the trip a group; the passenger gets it, the driver when they may see the passenger', async () => {
   const dispatcher = await createDriver(ctx);
   const driver = await createDriver(ctx);
-  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, contactRevealMinutes: 60 });
+  const created = await ctx.orders.create(dispatcher, { ...sampleOrder, pickupAt: daysFromNow(3), contactRevealMinutes: 60 });
   const confirmCode = created.links.passengerConfirm.split('/c/')[1];
   await rejectsWith(ctx.orders.setTripGroup(driver, created.id, { platform: 'WHATSAPP', inviteUrl: 'https://chat.whatsapp.com/AbCdEf1234567890' }), 'ORDER_NOT_FOUND');
 
