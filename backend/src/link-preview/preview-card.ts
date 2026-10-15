@@ -1,8 +1,9 @@
 /**
- * What a chat app shows when a 名片頁 or a passenger's confirmation link is pasted: a small page of
- * preview tags (only link-preview robots are sent here, see deploy/frontend/web.conf) and a
- * 1200 × 630 card drawn as SVG. Pure functions, so what may appear on a card can be tested without
- * a database or an image library.
+ * What a chat app shows when a 名片頁, a passenger's confirmation link or a 搶單 link is shared: the
+ * preview tags (a small page for link-preview robots, and the same tags nginx puts into every
+ * visitor's page, see deploy/frontend/web.conf), a 1200 × 630 card and a 600 × 600 square, drawn
+ * as SVG. Pure functions, so what may appear on a card can be tested without a database or an
+ * image library.
  *
  * Version C (approved 2026-10-15): the left 560px is a fixed frame on the brand gradient. The whole
  * car photo fits in its middle (never cut, whatever its size), with the brand mark in the band
@@ -62,13 +63,33 @@ export interface PreviewMeta {
   /** Where the link opens, and the card image; both full addresses. */
   url: string;
   image: string;
+  /** The image is the 600 × 600 square (squareSvg) rather than the wide card. */
+  square?: boolean;
 }
+
+/**
+ * The square picture, for the previews that show a small square: WeChat's card (from iOS's share
+ * menu, which reads the tags every visitor gets) crops the middle of any picture to a thumbnail,
+ * where the wide card would be a strip of photo (2026-10-15). It carries one thing, large: the
+ * brand and the car whole (or the initial) for a driver; 有單 and when for a 搶單 link; the brand
+ * alone for everything else.
+ */
+export type SquareData =
+  | { kind: 'driver'; name: string; photo: string | null }
+  | { kind: 'order'; badge: string; when: string }
+  | { kind: 'home' };
+
+export const SQUARE = 600;
+/** The band at the top of a driver's square; the car photo fits inside the rest. */
+const SQUARE_BAND = 84;
+export const SQUARE_PHOTO_HEIGHT = SQUARE - SQUARE_BAND;
 
 const escape = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-/** The page a link-preview robot reads: the tags and nothing else. People are never sent here. */
-export function previewHtml(meta: PreviewMeta): string {
+/** The preview tags themselves, one per line. */
+export function previewTags(meta: PreviewMeta): string[] {
+  const size = meta.square ? SQUARE : null;
   const tags = [
     ['property', 'og:site_name', '跨境師傅幫 MasterDriver'],
     ['property', 'og:type', 'website'],
@@ -76,17 +97,22 @@ export function previewHtml(meta: PreviewMeta): string {
     ['property', 'og:description', meta.description],
     ['property', 'og:url', meta.url],
     ['property', 'og:image', meta.image],
-    ['property', 'og:image:width', String(CARD_WIDTH)],
-    ['property', 'og:image:height', String(CARD_HEIGHT)],
-    ['name', 'twitter:card', 'summary_large_image'],
+    ['property', 'og:image:width', String(size ?? CARD_WIDTH)],
+    ['property', 'og:image:height', String(size ?? CARD_HEIGHT)],
+    ['name', 'twitter:card', meta.square ? 'summary' : 'summary_large_image'],
     ['name', 'description', meta.description],
-    ['name', 'robots', 'noindex, nofollow'],
   ];
+  return tags.map(([attribute, key, value]) => `<meta ${attribute}="${key}" content="${escape(value)}" />`);
+}
+
+/** The page a link-preview robot reads: the tags and nothing else. People are never sent here. */
+export function previewHtml(meta: PreviewMeta): string {
   return [
     '<!doctype html>',
     '<html lang="zh-Hant"><head><meta charset="utf-8" />',
     `<title>${escape(meta.title)}</title>`,
-    ...tags.map(([attribute, key, value]) => `<meta ${attribute}="${key}" content="${escape(value)}" />`),
+    ...previewTags(meta),
+    '<meta name="robots" content="noindex, nofollow" />',
     `</head><body><a href="${escape(meta.url)}">${escape(meta.title)}</a></body></html>`,
   ].join('\n');
 }
@@ -263,3 +289,45 @@ export function cardSvg(card: CardData): string {
   ].join('');
 }
 
+/** The square as SVG (see SquareData), on the brand gradient. */
+export function squareSvg(square: SquareData): string {
+  const mark = (x: number, y: number, scale: number) =>
+    `<g transform="translate(${x} ${y}) scale(${scale})">${MARK_PATHS.map((d) => `<path d="${d}" fill="#fff" />`).join('')}</g>`;
+  const label = (content: string, x: number, y: number, size: number, weight: number, fill: string, max = SQUARE - 40) =>
+    `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="${size}" font-weight="${weight}" fill="${fill}" letter-spacing="${size * 0.06}">${escape(fit(content, size * 1.06, max))}</text>`;
+  const body: string[] = [];
+  if (square.kind === 'driver') {
+    // A thin brand band, then the car whole, or the initial.
+    const markWidth = 66 + textWidth('跨境師傅幫', 34) * 1.06;
+    const x = (SQUARE - markWidth) / 2;
+    body.push(mark(x, SQUARE_BAND / 2 - 21, 1.1), label('跨境師傅幫', x + 66 + (markWidth - 66) / 2, SQUARE_BAND / 2 + 12, 34, 800, '#ffffff'));
+    if (square.photo) {
+      body.push(`<image href="${square.photo}" x="0" y="${SQUARE_BAND}" width="${SQUARE}" height="${SQUARE_PHOTO_HEIGHT}" preserveAspectRatio="xMidYMid meet" />`);
+    } else {
+      const cy = SQUARE_BAND + SQUARE_PHOTO_HEIGHT / 2;
+      body.push(
+        `<circle cx="${SQUARE / 2}" cy="${cy}" r="160" fill="#ffffff" fill-opacity="0.16" stroke="#ffffff" stroke-opacity="0.6" stroke-width="6" />`,
+        `<text x="${SQUARE / 2}" y="${cy + 66}" text-anchor="middle" font-family="${FONT}" font-size="190" font-weight="800" fill="#ffffff">${escape([...square.name.trim()][0] ?? '師')}</text>`,
+      );
+    }
+  } else if (square.kind === 'order') {
+    // 有單 as large as a thumbnail carries, drawn like the gold of a Hong Kong plate, and when.
+    const width = textWidth(square.badge, 150) * 1.06 + 92;
+    const x = (SQUARE - width) / 2;
+    body.push(
+      `<rect x="${x}" y="150" width="${width}" height="196" rx="26" fill="#f5c518" stroke="rgba(23,23,23,0.5)" stroke-width="12" />`,
+      label(square.badge, SQUARE / 2, 302, 150, 900, '#171717', width),
+      label(square.when, SQUARE / 2, 450, 64, 800, '#ffffff'),
+    );
+  } else {
+    // The mark and the name, nothing smaller.
+    body.push(mark((SQUARE - 260) / 2, 150, 260 / 49.1332), label('跨境師傅幫', SQUARE / 2, 470, 90, 900, '#ffffff'));
+  }
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${SQUARE}" height="${SQUARE}" viewBox="0 0 ${SQUARE} ${SQUARE}">`,
+    '<defs><linearGradient id="brand" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1f5fd6" /><stop offset="1" stop-color="#0e9f9a" /></linearGradient></defs>',
+    `<rect width="${SQUARE}" height="${SQUARE}" fill="url(#brand)" />`,
+    ...body,
+    '</svg>',
+  ].join('');
+}

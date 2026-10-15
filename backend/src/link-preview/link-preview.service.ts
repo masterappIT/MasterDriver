@@ -5,27 +5,50 @@ import sharp from 'sharp';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { PrismaService } from '../prisma.service';
 import { renderSeoTemplate } from '../site/seo-rules';
+import { formatPickup } from '../common/hong-kong-time';
+import { formatPrice } from '../orders/share-text';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
-import { PHOTO_HEIGHT, PHOTO_WIDTH, cardSvg, type CardData, type PreviewMeta } from './preview-card';
+import {
+  PHOTO_HEIGHT,
+  PHOTO_WIDTH,
+  SQUARE,
+  SQUARE_PHOTO_HEIGHT,
+  cardSvg,
+  squareSvg,
+  type CardData,
+  type PreviewMeta,
+  type SquareData,
+} from './preview-card';
 
 const PLATE_KIND = { SINGLE: '單牌', DUAL: '兩地牌', TRIPLE: '三地牌' } as const;
-/** The same as web/index.html, for any link that has no card of its own. */
-const GENERIC = {
-  title: '跨境師傅幫｜有單就派，有空就接',
-  description: '跨境司機在微信群和 WhatsApp 群裡派單、搶單、請乘客確認的工具。免費使用。',
+/**
+ * The home page, and any link that has no card of its own: the same words as web/index.html,
+ * whose tags every other page carries. Robots get the wide picture, a visitor's tags the square.
+ */
+const HOME = {
+  title: '跨境師傅幫｜跨境司機派單工具',
+  description: '在微信群、WhatsApp 群出單、搶單，請乘客確認行程。不用下載，免費使用。',
   image: '/share-card.jpg',
+  square: '/share-square.jpg',
 };
-/** 名片頁 has no routes or regions since 2026-10-14, so the default title names only the driver. */
-const PROFILE_TITLE = '{司機}｜跨境師傅幫';
+/**
+ * 名片頁 has no routes or regions since 2026-10-14, so the default title names only the driver.
+ * Short enough for the two lines a WeChat card gives a title (2026-10-15).
+ */
+const PROFILE_TITLE = '{司機}｜跨境司機名片';
 const CODE = /^[A-Za-z0-9_-]{4,64}$/;
 const CACHE_MS = 10 * 60 * 1000;
 const CACHE_MAX = 200;
 
-type Kind = 'p' | 'c';
+type Kind = 'p' | 'c' | 'o';
+type Stored<T> = T extends { photo: string | null } ? Omit<T, 'photo'> & { photoKey: string | null } : T;
 interface Resolved {
-  meta: PreviewMeta;
-  /** Null: the link has no card of its own and shows the generic one. */
-  card: (Omit<CardData, 'photo'> & { photoKey: string | null }) | null;
+  title: string;
+  description: string;
+  url: string;
+  /** The wide card; null when the link has none (a 搶單 link), and its square stands in. */
+  card: Stored<CardData> | null;
+  square: Stored<SquareData>;
 }
 
 /** What a card may say about the car: no plate numbers are ever read out of these. */
@@ -47,7 +70,7 @@ function vehicleLine(profile: { vehicleType: string | null; seats: number | null
 }
 
 /**
- * Link previews for 名片頁 and passenger confirmation links (docs/DESIGN.md, 連結預覽). Only what
+ * Link previews for 名片頁, passenger confirmation and 搶單 links (docs/DESIGN.md, 連結預覽). Only what
  * the page shows the public goes on a 名片頁 card. A confirmation card is about the dispatcher, whose
  * customer it is: who answers for the trip, how many they have arranged, their 名片頁 for next time;
  * their car only when they drive it themselves, and nothing of the driver who claimed it, the
@@ -63,28 +86,67 @@ export class LinkPreviewService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
-  /** The preview tags for a path a robot asked for, e.g. /p/AbCd1234. */
+  /**
+   * The preview tags for a path a robot asked for, e.g. /p/AbCd1234: the wide card where the link
+   * has one (WhatsApp, iMessage), else its square; the home page's for anything else.
+   */
   async page(path: string): Promise<PreviewMeta> {
     const target = this.parse(path);
     const resolved = target ? await this.resolve(target.kind, target.code) : null;
-    return resolved?.meta ?? this.generic(target ? path : '/');
+    if (!resolved) return this.home(target ? path : '/', false);
+    const image = resolved.card ? this.imageUrl('card', target!, resolved.card) : this.imageUrl('square', target!, resolved.square);
+    return { title: resolved.title, description: resolved.description, url: resolved.url, image, square: !resolved.card };
   }
 
-  /** What a link's card shows (the photo by its storage key), or null when it has none of its own. */
+  /**
+   * The tags every visitor's page carries for a /p/, /c/ or /o/ link (nginx puts them in, see
+   * deploy/frontend/web.conf), with the square: what iOS's share menu hands WeChat. Null when the
+   * link has no preview of its own, and the page keeps the home tags it was built with.
+   */
+  async tags(path: string): Promise<PreviewMeta | null> {
+    const target = this.parse(path);
+    const resolved = target ? await this.resolve(target.kind, target.code) : null;
+    if (!target || !resolved) return null;
+    return { title: resolved.title, description: resolved.description, url: resolved.url, image: this.imageUrl('square', target, resolved.square), square: true };
+  }
+
+  /** What a link's wide card shows (the photo by its storage key), or null when it has none of its own. */
   async cardData(kind: string, code: string) {
-    if ((kind !== 'p' && kind !== 'c') || !CODE.test(code)) return null;
-    return (await this.resolve(kind, code))?.card ?? null;
+    const target = this.target(kind, code);
+    return target ? ((await this.resolve(target.kind, target.code))?.card ?? null) : null;
   }
 
-  /** The card image, or null when the link has none and the generic image is the answer. */
+  /** What a link's square shows, or null when it has none and the home square is the answer. */
+  async squareData(kind: string, code: string) {
+    const target = this.target(kind, code);
+    return target ? ((await this.resolve(target.kind, target.code))?.square ?? null) : null;
+  }
+
+  /** The wide card image, or null when the link has none and the generic image is the answer. */
   async card(kind: string, code: string, now = Date.now()): Promise<Buffer | null> {
     const card = await this.cardData(kind, code);
     if (!card) return null;
-    const key = `${kind}:${code}:${this.version(card)}`;
+    return this.drawn(`card:${kind}:${code}:${this.version(card)}`, now, async () => {
+      const photo = card.photoKey ? await this.photo(card.photoKey, PHOTO_WIDTH, PHOTO_HEIGHT) : null;
+      return cardSvg({ ...card, photo });
+    });
+  }
+
+  /** The square image, or null when the link has none and the home square is the answer. */
+  async square(kind: string, code: string, now = Date.now()): Promise<Buffer | null> {
+    const square = await this.squareData(kind, code);
+    if (!square) return null;
+    return this.drawn(`square:${kind}:${code}:${this.version(square)}`, now, async () => {
+      if (square.kind !== 'driver') return squareSvg(square);
+      const photo = square.photoKey ? await this.photo(square.photoKey, SQUARE, SQUARE_PHOTO_HEIGHT) : null;
+      return squareSvg({ kind: 'driver', name: square.name, photo });
+    });
+  }
+
+  private async drawn(key: string, now: number, svg: () => Promise<string>) {
     const hit = this.cache.get(key);
     if (hit && now - hit.at < CACHE_MS) return hit.jpeg;
-    const photo = card.photoKey ? await this.photo(card.photoKey) : null;
-    const jpeg = await sharp(Buffer.from(cardSvg({ ...card, photo })))
+    const jpeg = await sharp(Buffer.from(await svg()))
       .jpeg({ quality: 82, mozjpeg: true })
       .toBuffer();
     if (this.cache.size >= CACHE_MAX) this.cache.delete(this.cache.keys().next().value as string);
@@ -92,26 +154,32 @@ export class LinkPreviewService {
     return jpeg;
   }
 
-  private parse(path: string): { kind: Kind; code: string } | null {
-    const match = /^\/([pc])\/([^/?#]+)\/?$/.exec(path);
-    return match && CODE.test(match[2]) ? { kind: match[1] as Kind, code: match[2] } : null;
+  private target(kind: string, code: string): { kind: Kind; code: string } | null {
+    return (kind === 'p' || kind === 'c' || kind === 'o') && CODE.test(code) ? { kind, code } : null;
   }
 
-  private generic(path: string): PreviewMeta {
-    return { ...GENERIC, url: `${this.config.publicBaseUrl}${path}`, image: `${this.config.publicBaseUrl}${GENERIC.image}` };
+  private parse(path: string): { kind: Kind; code: string } | null {
+    const match = /^\/([pco])\/([^/?#]+)\/?$/.exec(path);
+    return match ? this.target(match[1], match[2]) : null;
+  }
+
+  private home(path: string, square: boolean): PreviewMeta {
+    const base = this.config.publicBaseUrl;
+    return { title: HOME.title, description: HOME.description, url: `${base}${path}`, image: `${base}${square ? HOME.square : HOME.image}`, square };
   }
 
   /** A short hash of what is drawn: it goes in the image address, so a changed card is a new image to chat apps. */
-  private version(card: NonNullable<Resolved['card']>) {
-    return createHash('sha256').update(JSON.stringify(card)).digest('base64url').slice(0, 10);
+  private version(drawn: object) {
+    return createHash('sha256').update(JSON.stringify(drawn)).digest('base64url').slice(0, 10);
   }
 
-  private imageUrl(kind: Kind, code: string, card: NonNullable<Resolved['card']>) {
-    return `${this.config.publicBaseUrl}/api/public/link-preview/card/${kind}/${code}.jpg?v=${this.version(card)}`;
+  private imageUrl(shape: 'card' | 'square', target: { kind: Kind; code: string }, drawn: object) {
+    return `${this.config.publicBaseUrl}/api/public/link-preview/${shape}/${target.kind}/${target.code}.jpg?v=${this.version(drawn)}`;
   }
 
   private async resolve(kind: Kind, code: string): Promise<Resolved | null> {
-    return kind === 'p' ? this.profile(code) : this.confirmation(code);
+    if (kind === 'p') return this.profile(code);
+    return kind === 'c' ? this.confirmation(code) : this.claim(code);
   }
 
   private completedTrips(userId: string) {
@@ -144,10 +212,12 @@ export class LinkPreviewService {
     // 路線 and 地區 stay empty: old values are still stored, but the page no longer shows them.
     const values = { 司機: name, 路線: null, 車型: profile?.vehicleType ?? null, 地區: null };
     const title = renderSeoTemplate(settings?.title || PROFILE_TITLE, values) || `${name}｜跨境師傅幫`;
+    // 「埃爾法・黑・兩地牌 7 座。點開直接約車，不用註冊。」: the car first, short enough for a WeChat card.
+    const plateKind = profile?.plateType ? PLATE_KIND[profile.plateType] : null;
+    const car = [profile?.vehicleType, profile?.color, [plateKind, profile?.seats ? `${profile.seats} 座` : null].filter(Boolean).join(' ')].filter(Boolean).join('・');
     const description =
-      (settings?.description && renderSeoTemplate(settings.description, values)) ||
-      page.intro.trim().slice(0, 80) ||
-      `看${name}的車和聯絡方式，直接在這裡約車，不用註冊。`;
+      (settings?.description && renderSeoTemplate(settings.description, values)) || `${car ? `${car}。` : ''}點開直接約車，不用註冊。`;
+    const photoKey = this.firstPhotoKey(page.photos);
     const card = {
       kind: 'profile' as const,
       name,
@@ -158,10 +228,10 @@ export class LinkPreviewService {
       languages: page.languages,
       intro: page.intro,
       completedTrips: await this.completedTrips(page.userId),
-      photoKey: this.firstPhotoKey(page.photos),
+      photoKey,
     };
     const url = `${this.config.publicBaseUrl}/p/${code}`;
-    return { meta: { title, description, url, image: this.imageUrl('p', code, card) }, card };
+    return { title, description, url, card, square: { kind: 'driver', name, photoKey } };
   }
 
   private async confirmation(confirmCode: string): Promise<Resolved | null> {
@@ -182,6 +252,7 @@ export class LinkPreviewService {
     const drivesIt = order.claimedById === order.dispatcherId;
     const page = dispatcher?.profilePage;
     const who = name || '為你安排的人';
+    const photoKey = drivesIt && page && !page.blockedAt ? this.firstPhotoKey(page.photos) : null;
     const card = {
       kind: 'confirm' as const,
       name: name || '司機',
@@ -189,24 +260,69 @@ export class LinkPreviewService {
       // Their plates only with their own car: another driver's car would carry other plates.
       plates: drivesIt ? platesBand(dispatcher?.profile ?? null) : null,
       completedTrips: await this.arrangedTrips(order.dispatcherId),
-      photoKey: drivesIt && page && !page.blockedAt ? this.firstPhotoKey(page.photos) : null,
+      photoKey,
       // The customer stays the dispatcher's: they answer for the trip, and their 名片頁 is where to book next time.
       owner: {
         line: name ? `行程由${name}負責，有問題請找${name}` : '行程由為你安排的人負責，有問題請找他',
         next: page?.published && !page.blockedAt ? `下次用車，可直接在${who}的名片頁約` : null,
       },
     };
-    const title = name ? `${name}為你安排的行程｜跨境師傅幫` : '你的行程｜跨境師傅幫';
+    const title = name ? `${name}為你安排的行程` : '為你安排的行程';
+    const description = `點開確認時間與上車地點。${name ? `行程由${name}負責。` : ''}`;
     const url = `${this.config.publicBaseUrl}/c/${confirmCode}`;
-    return { meta: { title, description: '點開確認行程時間與上車地點。', url, image: this.imageUrl('c', confirmCode, card) }, card };
+    return { title, description, url, card, square: { kind: 'driver', name: name || '司機', photoKey } };
   }
 
-  /** The whole stored photo, fitted inside the frame's photo space (never cut), as a data: URL the SVG can draw. */
-  private async photo(key: string): Promise<string | null> {
+  /**
+   * A 搶單 link: what the group text already says (when, where, the car, the driver price) and
+   * whose order it is, as the claim page shows anyone (2026-10-15). Never the passenger or their
+   * price. Only while a driver can still take it; a 接駁 while any of its legs can.
+   */
+  private async claim(code: string): Promise<Resolved | null> {
+    const order = await this.prisma.order.findUnique({
+      where: { code },
+      select: {
+        status: true,
+        pickupAt: true,
+        immediate: true,
+        origin: true,
+        destination: true,
+        vehicleType: true,
+        driverPriceMinor: true,
+        driverCurrency: true,
+        journeyId: true,
+        dispatcher: { select: { profile: { select: { name: true } } } },
+      },
+    });
+    if (!order) return null;
+    const legs = order.journeyId
+      ? await this.prisma.order.findMany({ where: { journeyId: order.journeyId }, orderBy: { legIndex: 'asc' }, select: { status: true, pickupAt: true, immediate: true, origin: true, destination: true } })
+      : [order];
+    if (!legs.some((leg) => leg.status === 'OPEN')) return null;
+    const first = legs[0];
+    const transfer = legs.length > 1;
+    const badge = first.immediate ? '即時' : '有單';
+    const name = order.dispatcher.profile?.name;
+    const title = `【${badge}${transfer ? '・接駁' : ''}】${first.origin}→${legs[legs.length - 1].destination}`;
+    const facts = [
+      first.immediate ? '現在出發' : formatPickup(first.pickupAt),
+      transfer ? `接駁 ${legs.length} 段` : null,
+      order.vehicleType,
+      // A 接駁's legs each have their own price, so the text has them all and the preview none.
+      !transfer && order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
+    ].filter(Boolean);
+    const description = `${facts.join('・')}。${name ? `${name}出的單，` : ''}點開搶單，先搶先得。`;
+    // 「10/16 02:57」: the weekday would not fit at the square's size.
+    const when = first.immediate ? '現在出發' : formatPickup(first.pickupAt).replace(/（.）/, ' ');
+    return { title, description, url: `${this.config.publicBaseUrl}/o/${code}`, card: null, square: { kind: 'order', badge, when } };
+  }
+
+  /** The whole stored photo, fitted inside a picture's photo space (never cut), as a data: URL the SVG can draw. */
+  private async photo(key: string, width: number, height: number): Promise<string | null> {
     const bytes = await this.storage.read(key).catch(() => null);
     if (!bytes) return null;
     try {
-      const jpeg = await sharp(bytes).rotate().resize(PHOTO_WIDTH, PHOTO_HEIGHT, { fit: 'inside' }).jpeg({ quality: 85 }).toBuffer();
+      const jpeg = await sharp(bytes).rotate().resize(width, height, { fit: 'inside' }).jpeg({ quality: 85 }).toBuffer();
       return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
     } catch {
       return null;

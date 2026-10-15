@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api, apiFetch, errorText } from '../api';
-import { copyText } from '../device';
+import { copyText, inWeChat } from '../device';
 import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GroupText from '../components/GroupText.vue';
@@ -166,6 +166,27 @@ async function copyShare() {
   toast((await copyText(t(page.value.shareText))) ? '已複製名片文字和連結，到群裡或聊天長按貼上' : '複製失敗，請長按文字自行複製');
 }
 
+/**
+ * The phone's own share menu with the link alone: picking WeChat there sends a card with this
+ * page's picture and words, which pasting a link into WeChat never does. WeChat's own browser has
+ * no share menu, so there it says how to open the page in the phone's browser instead.
+ */
+const canShare = typeof navigator.share === 'function';
+const shareHint = ref(false);
+async function sharePage() {
+  if (!page.value) return;
+  if (inWeChat || !canShare) {
+    shareHint.value = true;
+    return;
+  }
+  try {
+    await navigator.share({ url: page.value.url });
+  } catch (e) {
+    // Closing the menu is not a failure; anything else falls back to copying.
+    if ((e as DOMException).name !== 'AbortError') await copyLink();
+  }
+}
+
 async function copyLink() {
   if (!page.value) return;
   toast((await copyText(page.value.url)) ? '已複製名片頁連結' : '複製失敗，請長按連結自行複製');
@@ -200,8 +221,12 @@ onMounted(async () => {
           <RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink>
         </div>
         <GroupText :text="page.shareText" :link-note="t('藍色是你的名片頁連結，會和文字一起複製')" />
+        <template v-if="canShare || inWeChat">
+          <button class="button block my-page__share" type="button" @click="sharePage">{{ t('分享名片頁') }}</button>
+          <p v-if="shareHint" class="my-page__share-hint">{{ t('在微信裡不能直接分享卡片：點右上角「…」→「在瀏覽器打開」，再按「分享名片頁」。') }}</p>
+        </template>
         <div class="my-page__actions">
-          <button class="button" type="button" @click="copyShare">{{ t('複製名片') }}</button>
+          <button class="button" :class="{ secondary: canShare || inWeChat }" type="button" @click="copyShare">{{ t('複製名片') }}</button>
           <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
         </div>
         <button class="my-page__link-only" type="button" @click="copyLink">{{ t('只複製連結') }}</button>
@@ -337,6 +362,18 @@ onMounted(async () => {
 .my-page__state--on {
   background: var(--status-confirmed-tint);
   color: var(--status-confirmed);
+}
+.my-page__share {
+  margin-bottom: var(--space-sm);
+}
+.my-page__share-hint {
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-input);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-size: var(--font-label);
+  line-height: 1.5;
 }
 .my-page__actions {
   display: grid;

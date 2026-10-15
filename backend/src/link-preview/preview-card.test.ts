@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import sharp from 'sharp';
-import { CARD_HEIGHT, CARD_WIDTH, PHOTO_WIDTH, cardSvg, fit, previewHtml, type CardData } from './preview-card';
+import { CARD_HEIGHT, CARD_WIDTH, PHOTO_WIDTH, SQUARE, cardSvg, fit, previewHtml, previewTags, squareSvg, type CardData } from './preview-card';
 
 const card: CardData = {
   kind: 'profile',
@@ -94,3 +94,26 @@ test('a photo is fitted whole into its space, never cut', () => {
   assert.ok(!svg.includes('slice'));
 });
 
+test('the tags nginx puts into a page are escaped and say the square’s size; no robots tag, the page has its own', () => {
+  const tags = previewTags({ title: '李師傅"><b>', description: 'x', url: 'https://md.test/o/abcd', image: 'https://md.test/s.jpg', square: true }).join('\n');
+  assert.ok(!tags.includes('"><b>'));
+  assert.ok(tags.includes('<meta property="og:image:width" content="600" />'));
+  assert.ok(tags.includes('<meta name="twitter:card" content="summary" />'));
+  assert.ok(!tags.includes('robots'));
+});
+
+test('each square renders to a 600 × 600 JPEG; a driver without a photo gets the initial, escaped', async () => {
+  for (const square of [
+    { kind: 'driver' as const, name: '<李', photo: null },
+    { kind: 'order' as const, badge: '有單', when: '10/16 02:57' },
+    { kind: 'home' as const },
+  ]) {
+    const svg = squareSvg(square);
+    assert.ok(!svg.includes('<李'));
+    const meta = await sharp(await sharp(Buffer.from(svg)).jpeg().toBuffer()).metadata();
+    assert.equal(meta.width, SQUARE);
+    assert.equal(meta.height, SQUARE);
+  }
+  assert.ok(squareSvg({ kind: 'driver', name: '<李', photo: null }).includes('&lt;'));
+  assert.ok(squareSvg({ kind: 'order', badge: '有單', when: '10/16 02:57' }).includes('10/16 02:57'));
+});
