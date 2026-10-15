@@ -63,7 +63,7 @@ test('a card with a photo renders to a 1200 × 630 JPEG', async () => {
 
 test('a confirmation card counts trips arranged and says who answers for it; a 名片頁 card counts trips driven', () => {
   const profile = cardSvg(card);
-  assert.ok(profile.includes('已在師傅幫完成 128 張'));
+  assert.ok(profile.includes('已完成 128 張'), 'shortened to sit with the contact labels');
   assert.ok(!profile.includes('負責'));
 
   const confirm = cardSvg({ ...card, kind: 'confirm', owner: { line: '行程由陳師傅負責，有問題請找陳師傅', next: '下次用車，可直接在陳師傅的名片頁約' } });
@@ -74,3 +74,23 @@ test('a confirmation card counts trips arranged and says who answers for it; a �
   const noPage = cardSvg({ ...card, kind: 'confirm', owner: { line: '行程由陳師傅負責，有問題請找陳師傅', next: null } });
   assert.ok(!noPage.includes('名片頁約'));
 });
+
+test('the band under the photo shows where the plates are from, and the contact labels only what the driver has', () => {
+  const svg = cardSvg({
+    ...card,
+    vehicle: '埃爾法・黑',
+    plates: { regions: ['香港', '粵Z'], label: '兩地牌・7座' },
+    contacts: { whatsapp: true, wechat: false, phone: true },
+  });
+  assert.ok(svg.includes('>香港</text>') && svg.includes('>粵Z</text>') && svg.includes('兩地牌・7座'));
+  assert.ok(svg.includes('WhatsApp') && svg.includes('電話'));
+  assert.ok(!svg.includes('微信'), 'no WeChat ID, no WeChat label');
+  assert.ok(svg.includes('跨境師傅幫'), 'the brand in the band above');
+});
+
+test('a photo is fitted whole into its space, never cut', () => {
+  const svg = cardSvg({ ...card, photo: 'data:image/jpeg;base64,AAAA' });
+  assert.ok(svg.includes('preserveAspectRatio="xMidYMid meet"'));
+  assert.ok(!svg.includes('slice'));
+});
+

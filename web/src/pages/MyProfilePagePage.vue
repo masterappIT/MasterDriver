@@ -19,6 +19,8 @@ interface MyPage {
   seats: number | null;
   color: string | null;
   plateType: 'SINGLE' | 'DUAL' | 'TRIPLE' | null;
+  /** Where their plates are from (「香港」「粵Z」), never the numbers: for the 名片圖. */
+  plateRegions: string[];
   url: string;
   /** A few lines about the driver and the link, to paste where the page is shared. */
   shareText: string;
@@ -50,12 +52,12 @@ const picker = ref<HTMLInputElement | null>(null);
 const cropping = ref<File | null>(null);
 /** 名片圖: the square picture with the QR code, made on the phone when asked for. */
 const nameCardOpen = ref(false);
-/** The car as the public 名片頁 words it (ProfilePublicPage): 車型・座位・顏色・車牌類型. */
-const vehicleSummary = computed(() => {
+/** 名片圖: the car's type and colour in the text; its plates and seats go in the band under the photo. */
+const vehicleSummary = computed(() => [page.value?.vehicleType, page.value?.color].filter(Boolean).join('・') || null);
+const plateLabel = computed(() => {
   const shown = page.value;
   if (!shown) return null;
-  const seats = shown.seats ? `${shown.seats}座` : '';
-  return [shown.vehicleType, shown.vehicleType?.includes(seats) ? '' : seats, shown.color, plateKind(shown)].filter(Boolean).join('・') || null;
+  return [plateKind(shown), shown.seats ? `${shown.seats}座` : ''].filter(Boolean).join('・') || null;
 });
 const form = reactive({ intro: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
 
@@ -295,6 +297,9 @@ onMounted(async () => {
       :name="page.name ?? t('司機')"
       :vehicle="vehicleSummary"
       :languages="page.languages"
+      :plate-regions="page.plateRegions"
+      :plate-label="plateLabel"
+      :contacts="{ whatsapp: Boolean(page.whatsapp), wechat: Boolean(page.wechatId), phone: true }"
       :completed-trips="page.completedTrips"
       :photo-url="page.photos[0]?.url ?? null"
       :url="page.url"

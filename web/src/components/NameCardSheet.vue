@@ -9,13 +9,19 @@ import BottomSheet from './BottomSheet.vue';
  * 名片圖: the driver's card as a square picture with a QR code to their 名片頁, for where a link
  * shows no preview (WeChat, 朋友圈, 小紅書). Drawn here on the phone with its own fonts, so nothing
  * goes to the server. WeChat cannot save a download, so there the picture is shown to long-press.
- * The layout is the square one approved on 2026-10-15 (docs/DESIGN.md, 名片圖).
+ * Version C (2026-10-15): the top is a fixed frame on the brand colours, the whole car photo fitted
+ * in its middle (never cut), the brand above and the car's plate places below (docs/DESIGN.md, 名片圖).
  */
 const props = defineProps<{
   name: string;
-  /** 「7座埃爾法・兩地牌」: as the public page shows it, never a plate number. */
+  /** 「埃爾法・黑」: the car's type and colour; its plates and seats are in the band. */
   vehicle: string | null;
   languages: string[];
+  /** Where the plates are from (「香港」「粵Z」), never the numbers, and 「兩地牌・7座」. */
+  plateRegions: string[];
+  plateLabel: string | null;
+  /** The ways to reach them the public page shows, as labels. */
+  contacts: { whatsapp: boolean; wechat: boolean; phone: boolean };
   completedTrips: number;
   photoUrl: string | null;
   url: string;
@@ -24,7 +30,10 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>();
 
 const SIZE = 1080;
-const PHOTO_HEIGHT = 600;
+/** The frame at the top: a band for the brand, the photo's space, a band for the plates. */
+const FRAME_HEIGHT = 600;
+const BAND = 90;
+const PHOTO_HEIGHT = FRAME_HEIGHT - BAND * 2;
 const FONT = "-apple-system, 'PingFang TC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft JhengHei', 'Noto Sans CJK TC', sans-serif";
 const picture = ref('');
 const failed = ref(false);
@@ -64,103 +73,137 @@ async function draw() {
   canvas.width = SIZE;
   canvas.height = SIZE;
   const c = canvas.getContext('2d')!;
-  const brand = c.createLinearGradient(0, 0, SIZE, PHOTO_HEIGHT);
+  const brand = c.createLinearGradient(0, 0, SIZE, FRAME_HEIGHT);
   brand.addColorStop(0, '#1f5fd6');
   brand.addColorStop(1, '#0e9f9a');
   c.fillStyle = '#ffffff';
   c.fillRect(0, 0, SIZE, SIZE);
+  c.fillStyle = brand;
+  c.fillRect(0, 0, SIZE, FRAME_HEIGHT);
+  c.textBaseline = 'alphabetic';
 
-  // The top: the car photo cropped to fill, or the first character of the name on the brand colours.
+  // The band above: the white cloud M and 跨境師傅幫, centred.
+  const logo = await load(mark).catch(() => null);
+  c.font = `800 34px ${FONT}`;
+  const markText = t('跨境師傅幫');
+  const markWidth = 64 + c.measureText(markText).width;
+  const markX = (SIZE - markWidth) / 2;
+  if (logo) c.drawImage(logo, markX, BAND / 2 - 19, 50, 38);
+  c.fillStyle = '#ffffff';
+  c.fillText(markText, markX + 64, BAND / 2 + 12);
+
+  // The middle: the whole photo, as large as fits, never cut; or the first character of the name.
   const photo = props.photoUrl ? await load(props.photoUrl).catch(() => null) : null;
   if (photo) {
-    const scale = Math.max(SIZE / photo.width, PHOTO_HEIGHT / photo.height);
+    const scale = Math.min(SIZE / photo.width, PHOTO_HEIGHT / photo.height);
     const width = photo.width * scale;
     const height = photo.height * scale;
-    // Clipped to the top: a portrait photo scaled to the width is taller than the space, and would
-    // otherwise run down over the name and the QR code (seen in WeChat, 2026-10-15).
-    c.save();
-    c.beginPath();
-    c.rect(0, 0, SIZE, PHOTO_HEIGHT);
-    c.clip();
-    c.drawImage(photo, (SIZE - width) / 2, (PHOTO_HEIGHT - height) / 2, width, height);
-    c.restore();
-    const shade = c.createLinearGradient(0, PHOTO_HEIGHT * 0.6, 0, PHOTO_HEIGHT);
-    shade.addColorStop(0, 'rgba(10, 20, 35, 0)');
-    shade.addColorStop(1, 'rgba(10, 20, 35, 0.4)');
-    c.fillStyle = shade;
-    c.fillRect(0, PHOTO_HEIGHT * 0.6, SIZE, PHOTO_HEIGHT * 0.4);
+    c.drawImage(photo, (SIZE - width) / 2, BAND + (PHOTO_HEIGHT - height) / 2, width, height);
   } else {
-    c.fillStyle = brand;
-    c.fillRect(0, 0, SIZE, PHOTO_HEIGHT);
     c.beginPath();
-    c.arc(SIZE / 2, PHOTO_HEIGHT / 2, 170, 0, Math.PI * 2);
+    c.arc(SIZE / 2, FRAME_HEIGHT / 2, 150, 0, Math.PI * 2);
     c.fillStyle = 'rgba(255, 255, 255, 0.16)';
     c.fill();
     c.lineWidth = 6;
     c.strokeStyle = 'rgba(255, 255, 255, 0.6)';
     c.stroke();
     c.fillStyle = '#ffffff';
-    c.font = `800 190px ${FONT}`;
+    c.font = `800 170px ${FONT}`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.fillText([...props.name.trim()][0] ?? t('師'), SIZE / 2, PHOTO_HEIGHT / 2 + 8);
+    c.fillText([...props.name.trim()][0] ?? t('師'), SIZE / 2, FRAME_HEIGHT / 2 + 8);
     c.textAlign = 'left';
+    c.textBaseline = 'alphabetic';
   }
 
-  // The bottom left: who, their car and languages, how many they have done, and whose card this is.
+  // The band below: the plate places drawn like plates (Hong Kong gold, the others black), and 兩地牌・7座.
+  if (props.plateRegions.length || props.plateLabel) {
+    c.font = `800 32px ${FONT}`;
+    const tags = props.plateRegions.map((region) => ({ region, width: c.measureText(region).width + 40 }));
+    c.font = `700 30px ${FONT}`;
+    const label = props.plateLabel ? t(props.plateLabel) : '';
+    const labelWidth = label ? c.measureText(label).width : 0;
+    let x = (SIZE - (tags.reduce((sum, tag) => sum + tag.width + 16, 0) + labelWidth)) / 2;
+    const y = FRAME_HEIGHT - BAND / 2 - 28;
+    for (const tag of tags) {
+      const hk = tag.region === '香港';
+      roundRect(c, x, y, tag.width, 56, 10);
+      c.fillStyle = hk ? '#f5c518' : '#16191f';
+      c.fill();
+      c.lineWidth = 3;
+      c.strokeStyle = hk ? 'rgba(23, 23, 23, 0.55)' : 'rgba(255, 255, 255, 0.7)';
+      c.stroke();
+      c.fillStyle = hk ? '#171717' : '#ffffff';
+      c.font = `800 32px ${FONT}`;
+      c.fillText(t(tag.region), x + 20, y + 40);
+      x += tag.width + 16;
+    }
+    if (label) {
+      c.fillStyle = '#ffffff';
+      c.font = `700 30px ${FONT}`;
+      c.fillText(label, x, y + 39);
+    }
+  }
+
+  // The bottom left: who, the car and languages, how to reach them, how many they have done.
   // No routes: 名片頁 dropped them on 2026-10-14.
   const left = 56;
-  const column = 640;
-  c.textBaseline = 'alphabetic';
+  const column = 660;
   c.fillStyle = '#0e9f9a';
   c.font = `800 32px ${FONT}`;
-  c.fillText(t('司機名片'), left, 682);
+  c.fillText(t('司機名片'), left, 680);
   c.fillStyle = '#142033';
   c.font = `800 84px ${FONT}`;
-  c.fillText(fit(c, props.name, column), left, 776);
-  let y = 776;
+  c.fillText(fit(c, props.name, column), left, 774);
   const facts = [props.vehicle, props.languages.length ? `會說${props.languages.join('、')}` : null].filter(Boolean).join('・');
   if (facts) {
-    y += 56;
     c.fillStyle = '#34445a';
     c.font = `700 32px ${FONT}`;
-    c.fillText(fit(c, t(facts), column), left, y);
+    c.fillText(fit(c, t(facts), column), left, 834);
   }
-  if (props.completedTrips > 0) {
-    y += 30;
-    c.font = `700 30px ${FONT}`;
-    const label = t(`已在師傅幫完成 ${props.completedTrips} 張`);
-    const width = c.measureText(label).width + 40;
-    roundRect(c, left, y, width, 56, 28);
-    c.fillStyle = '#fff3d6';
+  const chips: { label: string; fill: string; ink: string }[] = [];
+  if (props.contacts.whatsapp) chips.push({ label: 'WhatsApp', fill: '#dcf5e6', ink: '#137044' });
+  if (props.contacts.wechat) chips.push({ label: t('微信'), fill: '#e5edfb', ink: '#1f5fd6' });
+  if (props.contacts.phone) chips.push({ label: t('電話'), fill: '#e5edfb', ink: '#1f5fd6' });
+  if (props.completedTrips > 0) chips.push({ label: t(`已完成 ${props.completedTrips} 張`), fill: '#fff3d6', ink: '#8a5a00' });
+  let chipX = left;
+  const chipY = 870;
+  c.font = `600 26px ${FONT}`;
+  if (chips.length && props.contacts) {
+    c.fillStyle = '#8f9db0';
+    c.fillText(t('可用'), chipX, chipY + 37);
+    chipX += c.measureText(t('可用')).width + 14;
+  }
+  c.font = `700 28px ${FONT}`;
+  for (const chip of chips) {
+    const width = c.measureText(chip.label).width + 36;
+    if (chipX + width > left + column) break;
+    roundRect(c, chipX, chipY, width, 52, 26);
+    c.fillStyle = chip.fill;
     c.fill();
-    c.fillStyle = '#8a5a00';
-    c.fillText(label, left + 20, y + 39);
+    c.fillStyle = chip.ink;
+    c.fillText(chip.label, chipX + 18, chipY + 36);
+    chipX += width + 12;
   }
-  roundRect(c, left, 976, 48, 48, 14);
-  c.fillStyle = brand;
-  c.fill();
-  const logo = await load(mark).catch(() => null);
-  if (logo) c.drawImage(logo, left + 8, 976 + 9, 32, 32 * (38 / 50));
-  c.fillStyle = '#556579';
-  c.font = `700 30px ${FONT}`;
-  c.fillText(`${t('跨境師傅幫')}・MasterDriver`, left + 64, 1011);
+  c.fillStyle = '#8f9db0';
+  c.font = `600 24px ${FONT}`;
+  c.fillText(`${t('跨境師傅幫')}・MasterDriver`, left, 1024);
 
   // The bottom right: the QR code to the 名片頁, with what scanning it does.
   const { toCanvas } = await import('qrcode');
   const qr = document.createElement('canvas');
   await toCanvas(qr, props.url, { width: 252, margin: 1, color: { dark: '#142033', light: '#ffffff' }, errorCorrectionLevel: 'M' });
-  roundRect(c, 776, 640, 268, 268, 20);
+  roundRect(c, 776, 646, 268, 268, 20);
   c.fillStyle = '#ffffff';
   c.fill();
   c.lineWidth = 2;
   c.strokeStyle = '#d3dce7';
   c.stroke();
-  c.drawImage(qr, 784, 648, 252, 252);
+  c.drawImage(qr, 784, 654, 252, 252);
   c.fillStyle = '#1f5fd6';
   c.font = `800 32px ${FONT}`;
   c.textAlign = 'center';
-  c.fillText(t('掃碼預約'), 910, 958);
+  c.fillText(t('掃碼預約'), 910, 964);
   c.textAlign = 'left';
 
   return canvas.toDataURL('image/png');

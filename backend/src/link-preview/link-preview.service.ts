@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { PROFILE_PHOTO_MAX } from '@masterdriver/shared';
+import { PROFILE_PHOTO_MAX, plateRegions } from '@masterdriver/shared';
 import sharp from 'sharp';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { PrismaService } from '../prisma.service';
 import { renderSeoTemplate } from '../site/seo-rules';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
-import { CARD_HEIGHT, PHOTO_WIDTH, cardSvg, type CardData, type PreviewMeta } from './preview-card';
+import { PHOTO_HEIGHT, PHOTO_WIDTH, cardSvg, type CardData, type PreviewMeta } from './preview-card';
 
 const PLATE_KIND = { SINGLE: '單牌', DUAL: '兩地牌', TRIPLE: '三地牌' } as const;
 /** The same as web/index.html, for any link that has no card of its own. */
@@ -26,6 +26,16 @@ interface Resolved {
   meta: PreviewMeta;
   /** Null: the link has no card of its own and shows the generic one. */
   card: (Omit<CardData, 'photo'> & { photoKey: string | null }) | null;
+}
+
+/** What a card may say about the car: no plate numbers are ever read out of these. */
+const CAR = { name: true, vehicleType: true, seats: true, color: true, plateType: true, hkPlate: true, macauPlate: true, mainlandPlate: true } as const;
+
+/** The band under the photo: 「香港」「粵Z」 drawn as plates, and 「兩地牌・7座」. */
+function platesBand(profile: { seats: number | null; plateType: keyof typeof PLATE_KIND | null; hkPlate: string | null; macauPlate: string | null; mainlandPlate: string | null } | null) {
+  if (!profile) return null;
+  const label = [profile.plateType ? PLATE_KIND[profile.plateType] : null, profile.seats ? `${profile.seats}座` : null].filter(Boolean).join('・');
+  return { regions: plateRegions(profile), label: label || null };
 }
 
 /** 「7座商務車 · 兩地牌」, never a plate number. */
@@ -123,13 +133,13 @@ export class LinkPreviewService {
       where: { code },
       include: {
         photos: { orderBy: { createdAt: 'asc' }, select: { storageKey: true } },
-        user: { select: { profile: { select: { name: true, vehicleType: true, seats: true, plateType: true } } } },
+        user: { select: { profile: { select: CAR } } },
       },
     });
     if (!page || !page.published || page.blockedAt) return null;
     const profile = page.user.profile;
     const name = profile?.name || '司機';
-    const vehicle = vehicleLine(profile);
+
     const settings = await this.prisma.seoPageSetting.findUnique({ where: { page: 'PROFILE' } });
     // 路線 and 地區 stay empty: old values are still stored, but the page no longer shows them.
     const values = { 司機: name, 路線: null, 車型: profile?.vehicleType ?? null, 地區: null };
@@ -141,7 +151,10 @@ export class LinkPreviewService {
     const card = {
       kind: 'profile' as const,
       name,
-      vehicle,
+      // The car's type and colour here; its plates and seats are in the band under the photo.
+      vehicle: [profile?.vehicleType, profile?.color].filter(Boolean).join('・') || null,
+      plates: platesBand(profile),
+      contacts: { whatsapp: Boolean(page.whatsapp), wechat: Boolean(page.wechatId), phone: true },
       languages: page.languages,
       intro: page.intro,
       completedTrips: await this.completedTrips(page.userId),
@@ -160,7 +173,7 @@ export class LinkPreviewService {
     const dispatcher = await this.prisma.user.findUnique({
       where: { id: order.dispatcherId },
       select: {
-        profile: { select: { name: true, vehicleType: true, seats: true, plateType: true } },
+        profile: { select: CAR },
         profilePage: { select: { published: true, blockedAt: true, photos: { orderBy: { createdAt: 'asc' }, select: { storageKey: true } } } },
       },
     });
@@ -173,6 +186,8 @@ export class LinkPreviewService {
       kind: 'confirm' as const,
       name: name || '司機',
       vehicle: drivesIt ? vehicleLine(dispatcher?.profile ?? null) : null,
+      // Their plates only with their own car: another driver's car would carry other plates.
+      plates: drivesIt ? platesBand(dispatcher?.profile ?? null) : null,
       completedTrips: await this.arrangedTrips(order.dispatcherId),
       photoKey: drivesIt && page && !page.blockedAt ? this.firstPhotoKey(page.photos) : null,
       // The customer stays the dispatcher's: they answer for the trip, and their 名片頁 is where to book next time.
@@ -186,12 +201,12 @@ export class LinkPreviewService {
     return { meta: { title, description: '點開確認行程時間與上車地點。', url, image: this.imageUrl('c', confirmCode, card) }, card };
   }
 
-  /** The stored photo cropped to the card's left side, as a data: URL the SVG can draw. */
+  /** The whole stored photo, fitted inside the frame's photo space (never cut), as a data: URL the SVG can draw. */
   private async photo(key: string): Promise<string | null> {
     const bytes = await this.storage.read(key).catch(() => null);
     if (!bytes) return null;
     try {
-      const jpeg = await sharp(bytes).rotate().resize(PHOTO_WIDTH, CARD_HEIGHT, { fit: 'cover' }).jpeg({ quality: 85 }).toBuffer();
+      const jpeg = await sharp(bytes).rotate().resize(PHOTO_WIDTH, PHOTO_HEIGHT, { fit: 'inside' }).jpeg({ quality: 85 }).toBuffer();
       return `data:image/jpeg;base64,${jpeg.toString('base64')}`;
     } catch {
       return null;
