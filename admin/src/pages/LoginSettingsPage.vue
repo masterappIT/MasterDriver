@@ -390,10 +390,11 @@ onMounted(async () => {
 
 <template>
   <section class="login-settings-admin">
-    <div class="login-settings-header">
-      <span class="eyebrow">ACCESS &amp; AUTHENTICATION</span>
-      <h2>登入配置</h2>
-      <p class="section-desc">司機以手機號碼和簡訊驗證碼登入。這裡設定驗證碼怎樣發出，以及開發、測試和上架審核時使用的指定驗證碼。</p>
+    <div class="page-head">
+      <div>
+        <h1>登入配置</h1>
+        <p class="page-head__desc">司機以手機號碼和簡訊驗證碼登入。這裡設定驗證碼怎樣發出，以及開發、測試和上架審核時使用的指定驗證碼。</p>
+      </div>
     </div>
 
     <div class="login-settings-scope">
@@ -414,7 +415,6 @@ onMounted(async () => {
     <section v-show="tab === 'development'" class="phone-login-development-settings login-settings-card" aria-labelledby="development-title">
       <div class="login-settings-card-header">
         <div>
-          <span class="section-kicker">DEVELOPMENT ACCESS</span>
           <h3 id="development-title">開發模式登入</h3>
           <p>獨立控制手機號碼登入的開發驗證模式，不會修改簡訊設定。</p>
         </div>
@@ -571,7 +571,6 @@ onMounted(async () => {
     <div v-show="tab === 'spug'" class="login-settings-card sms-settings-card">
       <div class="login-settings-card-header">
         <div>
-          <span class="section-kicker">SPUG PUSH</span>
           <h3>Spug 推送助手</h3>
           <p>用 Spug 自己已報備的簽名和官方驗證碼範本代發，不用報備我們的公司；簡訊文字不能自訂。國內、國際共用這一份設定；勾選的號碼區經這裡發送，沒勾選的用「簡訊登入」分頁裡各自的 253 帳號。</p>
         </div>

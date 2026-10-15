@@ -5,66 +5,16 @@
  * c902bb5a (docs/REUSE.md); the class names are this project's, prefixed mt-.
  */
 
-/* ---- A page: an eyebrow, the title and a line on what it is for, its main action on the right. */
+/* ---- A page: its heading (.page-head in base.css), then counts and lists, 20px apart. */
 .mt-page {
   display: grid;
   gap: 20px;
   min-width: 0;
 }
 
-.mt-eyebrow {
-  display: block;
-  color: #59708e;
-  font-size: 11px;
-  font-weight: 750;
-  letter-spacing: 0.16em;
-}
-
 .mt-muted {
   color: #7c8ca1;
   font-size: 12px;
-}
-
-.mt-heading {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.mt-heading h2 {
-  margin: 6px 0 5px;
-  color: #12243b;
-  font-size: 28px;
-  letter-spacing: -0.035em;
-}
-
-.mt-heading p {
-  max-width: 620px;
-  margin: 0;
-}
-
-.mt-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 11px 18px;
-  border: 0;
-  border-radius: 11px;
-  color: #fff;
-  background: linear-gradient(135deg, #155dcc, #2684f5);
-  box-shadow: 0 7px 16px rgba(23, 105, 224, 0.22);
-  font-size: 13px;
-  font-weight: 750;
-  white-space: nowrap;
-  transition: filter 0.16s ease, transform 0.16s ease;
-}
-
-.mt-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
 }
 
 /* ---- Counts above a list; on 用戶 each is also a filter. */
@@ -271,7 +221,7 @@ button.mt-stat.is-active {
 
 .mt-table th,
 .mt-table td {
-  padding: 16px 20px;
+  padding: 12px;
   border-bottom: 1px solid #edf1f6;
   vertical-align: middle;
 }
@@ -286,12 +236,12 @@ button.mt-stat.is-active {
 
 .mt-table th:first-child,
 .mt-table td:first-child {
-  padding-left: 28px;
+  padding-left: 24px;
 }
 
 .mt-table th:last-child,
 .mt-table td:last-child {
-  padding-right: 28px;
+  padding-right: 24px;
 }
 
 .mt-table tbody tr:last-child td {
@@ -368,8 +318,15 @@ button.mt-stat.is-active {
   color: #12243b;
 }
 
-/* The ID stays on one line; the column is wide enough for it. */
+/* The ID stays on one line, cut with an ellipsis so the table fits its card; the full ID is in its title. */
+.mt-identity > div {
+  min-width: 0;
+}
+
 .mt-identity small {
+  max-width: 13em;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -546,7 +503,7 @@ button.mt-stat.is-active {
 }
 
 .mt-form-heading h3 {
-  margin: 5px 0 4px;
+  margin: 0 0 4px;
   color: #12243b;
   font-size: 22px;
   letter-spacing: -0.025em;
@@ -721,6 +678,19 @@ button.mt-stat.is-active {
   box-shadow: 0 3px 8px rgba(220, 69, 69, 0.16);
 }
 
+.mt-button.danger-outline {
+  border: 1px solid #f0c4c4;
+  color: #b42d2d;
+  background: #fff;
+  box-shadow: none;
+}
+
+.mt-button.danger-outline:hover:not(:disabled) {
+  border-color: #dc4545;
+  background: #fff5f5;
+  filter: none;
+}
+
 .mt-button.restore {
   border: 0;
   color: #fff;
@@ -795,7 +765,7 @@ button.mt-stat.is-active {
 }
 
 .mt-drawer-head h2 {
-  margin: 5px 0 4px;
+  margin: 0 0 4px;
   color: #12243b;
   font-size: 24px;
   letter-spacing: -0.03em;
@@ -838,6 +808,10 @@ button.mt-stat.is-active {
   margin-top: 14px;
 }
 
+.mt-drawer-status__end {
+  margin-left: auto;
+}
+
 .mt-drawer-body {
   display: grid;
   gap: 14px;
@@ -865,13 +839,9 @@ button.mt-stat.is-active {
 }
 
 .mt-section-head h3 {
-  margin: 3px 0 0;
+  margin: 0;
   color: #233d5d;
   font-size: 15px;
-}
-
-.mt-section-head .mt-eyebrow {
-  font-size: 10px;
 }
 
 .mt-section > p {
@@ -1059,7 +1029,7 @@ button.mt-stat.is-active {
 }
 
 .mt-edit-head h3 {
-  margin: 5px 0 0;
+  margin: 0;
   color: #12243b;
   font-size: 18px;
 }
@@ -1124,16 +1094,6 @@ body.mt-overlay-open {
 }
 
 @media (max-width: 700px) {
-  .mt-heading {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  .mt-heading .mt-primary {
-    width: 100%;
-  }
-
   .mt-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
@@ -1203,4 +1163,9 @@ body.mt-overlay-open {
   .mt-inline-form {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+/* The page's heading is one item of the page's grid, which spaces it already. */
+.mt-page > .page-head {
+  margin-bottom: 0;
 }

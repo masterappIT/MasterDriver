@@ -43,6 +43,8 @@ interface UserDetail {
   } | null;
   profilePage: {
     code: string;
+    /** The address passengers open it at, the one the driver shares. */
+    url: string;
     published: boolean;
     blockedAt: string | null;
     blockedReason: string | null;
@@ -288,6 +290,15 @@ function loadImages(detail: UserDetail) {
 const photoPath = (photoId: string) => `${base.value}/page/photos/${photoId}`;
 const qrPath = (inviteId: string) => `${base.value}/group-invites/${inviteId}/qr`;
 
+async function copyPageUrl(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    notify('名片頁連結已複製');
+  } catch {
+    notify('複製失敗，請直接選取連結複製', true);
+  }
+}
+
 async function blockPage() {
   const reason = await ask({
     title: '下架名片頁',
@@ -444,7 +455,6 @@ onBeforeUnmount(() => {
   <div class="mt-drawer-backdrop" @click="emit('close')"></div>
   <aside class="mt-drawer" role="dialog" aria-modal="true" aria-labelledby="user-drawer-title">
     <header class="mt-drawer-head">
-      <span class="mt-eyebrow">DRIVER PROFILE</span>
       <h2 id="user-drawer-title">{{ user ? (user.profile?.name ?? '未填姓名') : '載入中…' }}</h2>
       <span v-if="user" class="mt-muted">{{ user.phone }} · {{ user.id }}</span>
       <button type="button" class="mt-close" aria-label="關閉" @click="emit('close')">×</button>
@@ -457,11 +467,12 @@ onBeforeUnmount(() => {
         <div class="mt-drawer-status">
           <span class="mt-status" :class="user.suspendedAt ? 'cancelled' : 'completed'">{{ user.suspendedAt ? '已停用' : '使用中' }}</span>
           <template v-if="can.write()">
-            <button v-if="user.suspendedAt" type="button" class="mt-button restore" @click="restore">恢復用戶</button>
-            <button v-else type="button" class="mt-button danger" @click="suspend">停用用戶</button>
             <button type="button" class="mt-button secondary" @click="contact">用客服聯絡</button>
+            <button v-if="user.suspendedAt" type="button" class="mt-button restore" @click="restore">恢復用戶</button>
+            <button v-else type="button" class="mt-button danger-outline" @click="suspend">停用用戶</button>
           </template>
-          <button v-if="can.superAdmin()" type="button" class="mt-button danger" @click="removeUser">刪除用戶</button>
+          <!-- Deleting cannot be undone: set apart at the end, the one solid red button. -->
+          <button v-if="can.superAdmin()" type="button" class="mt-button danger mt-drawer-status__end" @click="removeUser">刪除用戶</button>
         </div>
       </template>
     </header>
@@ -486,7 +497,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">POINTS &amp; PLAN</span><h3>點數與方案</h3></div>
+          <div><h3>點數與方案</h3></div>
         </div>
         <div class="mt-cards">
           <article>
@@ -551,7 +562,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">DRIVER DETAILS</span><h3>司機資料</h3></div>
+          <div><h3>司機資料</h3></div>
           <button v-if="can.write()" type="button" class="mt-action" @click="editProfile">代改司機資料</button>
         </div>
         <p v-if="!user.profile" class="mt-muted">尚未填寫（第一次搶單前會要求填寫）</p>
@@ -571,7 +582,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">SERVICE ACTIVITY</span><h3>訂單</h3></div>
+          <div><h3>訂單</h3></div>
           <div class="mt-segmented" role="group" aria-label="出的單或接的單">
             <button type="button" :class="{ 'is-active': orderRole === 'dispatcher' }" :aria-pressed="orderRole === 'dispatcher'" @click="orderRole = 'dispatcher'">
               出的單 {{ user.counts.dispatched }}
@@ -608,7 +619,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">PROFILE PAGE</span><h3>名片頁與派單群</h3></div>
+          <div><h3>名片頁與派單群</h3></div>
           <template v-if="can.write() && user.profilePage">
             <button v-if="user.profilePage.blockedAt" type="button" class="mt-action is-restore" @click="restorePage">恢復名片頁</button>
             <button v-else type="button" class="mt-action is-danger" @click="blockPage">下架名片頁</button>
@@ -617,6 +628,14 @@ onBeforeUnmount(() => {
         <p v-if="!user.profilePage" class="mt-muted">還沒有打開過名片頁設定。</p>
         <template v-else>
           <div v-if="user.profilePage.blockedAt" class="notice error">{{ dateTime(user.profilePage.blockedAt) }} 下架，原因：{{ user.profilePage.blockedReason ?? '—' }}</div>
+          <div class="user-drawer__page-link">
+            <span>名片頁連結</span>
+            <a :href="user.profilePage.url" target="_blank" rel="noopener noreferrer">{{ user.profilePage.url }}</a>
+            <button type="button" class="mt-action" @click="copyPageUrl(user.profilePage.url)">複製</button>
+            <small v-if="user.profilePage.blockedAt || !user.profilePage.published" class="mt-muted">
+              {{ user.profilePage.blockedAt ? '已下架' : '未公開' }}，乘客目前打不開。
+            </small>
+          </div>
           <dl class="mt-facts">
             <div>
               <dt>狀態</dt>
@@ -626,7 +645,6 @@ onBeforeUnmount(() => {
                 </span>
               </dd>
             </div>
-            <div><dt>代碼</dt><dd>{{ user.profilePage.code }}</dd></div>
             <div><dt>收到預約</dt><dd>{{ user.profilePage.bookings }} 個</dd></div>
             <div><dt>微信號</dt><dd>{{ user.profilePage.wechatId ?? '—' }}</dd></div>
             <div><dt>WhatsApp</dt><dd>{{ user.profilePage.whatsapp ?? '—' }}</dd></div>
@@ -670,7 +688,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">FINANCIAL ACTIVITY</span><h3>點數紀錄</h3></div>
+          <div><h3>點數紀錄</h3></div>
         </div>
         <p v-if="user.credits.entries.length === 0" class="mt-muted">沒有紀錄。</p>
         <div v-else class="mt-history-wrap">
@@ -691,7 +709,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">NOTIFICATIONS</span><h3>通知</h3></div>
+          <div><h3>通知</h3></div>
         </div>
         <p class="user-drawer__first">
           關掉的通知：{{ user.notifications.off.map((group) => NOTIFICATION_GROUP[group] ?? group).join('、') || '沒有' }}。
@@ -720,7 +738,6 @@ onBeforeUnmount(() => {
     <form class="mt-drawer mt-drawer--edit" role="dialog" aria-modal="true" aria-labelledby="user-edit-title" @submit.prevent="saveProfile">
       <div class="mt-edit-head">
         <div>
-          <span class="mt-eyebrow">EDIT DRIVER</span>
           <h3 id="user-edit-title">代改司機資料</h3>
           <p class="mt-muted">和司機自己填的表單同一套規則；修改會記在操作紀錄。</p>
         </div>
@@ -792,6 +809,36 @@ onBeforeUnmount(() => {
   color: #233d5d;
   font-size: 13px;
 }
+/* The page's address on one line of its own: the label, the link, and a way to copy it. */
+.user-drawer__page-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e1eaf4;
+  border-radius: 10px;
+  background: #f7fbff;
+  font-size: 13px;
+}
+
+.user-drawer__page-link > span {
+  color: #647892;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.user-drawer__page-link > a {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.user-drawer__page-link > small {
+  flex-basis: 100%;
+}
+
 .user-drawer__media {
   display: flex;
   flex-wrap: wrap;

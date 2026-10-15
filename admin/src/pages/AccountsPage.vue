@@ -111,13 +111,12 @@ onMounted(load);
 
 <template>
   <section class="mt-page">
-    <div class="mt-heading">
+    <div class="page-head">
       <div>
-        <span class="mt-eyebrow">ACCESS CONTROL</span>
-        <h2>後台帳號</h2>
-        <p class="mt-muted">管理後台登入帳號、權限角色與啟用狀態，確保每位管理員使用獨立帳號。</p>
+        <h1>後台帳號</h1>
+        <p class="page-head__desc">管理後台登入帳號、權限角色與啟用狀態，確保每位管理員使用獨立帳號。</p>
       </div>
-      <button type="button" class="mt-primary" @click="openForm">＋ 新增管理員</button>
+      <button type="button" class="button" @click="openForm">新增管理員</button>
     </div>
 
     <div v-if="loadError" class="notice error">
@@ -178,7 +177,6 @@ onMounted(load);
       <form class="mt-modal" role="dialog" aria-modal="true" aria-labelledby="administrator-form-title" @submit.prevent="create">
         <div class="mt-form-heading">
           <div>
-            <span class="mt-eyebrow">NEW ACCOUNT</span>
             <h3 id="administrator-form-title">新增管理員</h3>
             <p class="mt-muted">設定登入資訊及後台操作權限；密碼由系統產生，只顯示一次。</p>
           </div>
@@ -210,7 +208,6 @@ onMounted(load);
       <div class="mt-modal" role="dialog" aria-modal="true" aria-labelledby="one-time-title">
         <div class="mt-form-heading">
           <div>
-            <span class="mt-eyebrow">{{ oneTime.reset ? 'PASSWORD RESET' : 'ACCOUNT CREATED' }}</span>
             <h3 id="one-time-title">{{ oneTime.reset ? '密碼已重設' : '管理員已建立' }}</h3>
             <p class="mt-muted">「{{ oneTime.username }}」的一次性密碼只會顯示這一次。請以安全方式交給對方，並請對方登入後立即修改。</p>
           </div>

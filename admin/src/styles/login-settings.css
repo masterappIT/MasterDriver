@@ -4,10 +4,8 @@
  * admin's colour tokens; only the parts this page uses.
  */
 .login-settings-admin { display: flex; flex-direction: column; gap: 14px; }
-.login-settings-admin .eyebrow { color: var(--color-primary); font-size: 11px; font-weight: 800; letter-spacing: .14em; }
-.login-settings-admin .login-settings-header { display: flex; flex-direction: column; gap: 0; }
-.login-settings-admin .login-settings-header h2 { margin: 6px 0 5px; color: var(--color-text); font-size: 22px; line-height: 1.25; }
-.login-settings-admin .login-settings-header .section-desc { max-width: 760px; margin: 0; color: var(--color-text-secondary); font-size: 13px; line-height: 1.5; }
+/* The page's title: 20px below it like every page, less the column's 14px gap. */
+.login-settings-admin > .page-head { margin-bottom: 6px; }
 
 .login-settings-admin .login-settings-scope { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border: 1px solid #dce7f5; border-radius: 12px; background: #f8fbff; color: var(--color-text-secondary); font-size: 13px; }
 .login-settings-admin .login-settings-scope strong { color: var(--color-text); font-size: 14px; }
@@ -40,7 +38,6 @@
 .login-settings-admin .login-settings-card-header p { max-width: 680px; margin: 6px 0 0; color: var(--color-text-secondary); font-size: 12px; line-height: 1.5; }
 .login-settings-admin .login-settings-card-meta { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
 .login-settings-admin .sms-settings-card .login-settings-card-meta .badge-internal { font-size: 10px; letter-spacing: .04em; }
-.login-settings-admin .section-kicker { display: block; margin-bottom: 7px; color: var(--color-primary); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
 .login-settings-admin .login-method-count { padding: 7px 10px; border: 1px solid #dce7f5; border-radius: 999px; background: #fff; color: #647892; font-size: 12px; font-weight: 750; white-space: nowrap; }
 
 /* The on/off switch in a card's header. */
@@ -68,7 +65,8 @@
 .login-settings-admin .phone-login-development-toggle em.is-enabled { color: #198754; }
 .login-settings-admin .phone-login-development-toggle em.is-disabled { color: #7b8da4; }
 .login-settings-admin .phone-login-development-toggle input { width: 18px; height: 18px; accent-color: var(--color-primary); }
-.login-settings-admin .phone-login-development-code { display: grid; align-content: center; gap: 7px; }
+/* The code sits in a box like the switch beside it, so the two halves of the row match. */
+.login-settings-admin .phone-login-development-code { display: grid; align-content: center; gap: 7px; min-height: 72px; padding: 14px; border: 1px solid #dce7f5; border-radius: 12px; background: #fbfcfe; }
 .login-settings-admin .phone-login-development-code input { min-height: 42px; border: 1px solid #cbd9e9; border-radius: 9px; padding: 0 11px; color: var(--color-text); background: #fff; font: inherit; }
 .login-settings-admin .phone-login-development-code input:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(23, 105, 224, .12); }
 .login-settings-admin .phone-login-development-rules { margin: 10px 18px 0; padding: 12px 14px 12px 30px; border: 1px solid #edf1f6; border-radius: 10px; background: #fbfcfe; color: #647892; font-size: 12px; line-height: 1.7; }
@@ -131,7 +129,6 @@
 .login-settings-admin .login-settings-save-bar button.primary:disabled { cursor: not-allowed; opacity: .52; box-shadow: none; }
 
 @media (max-width: 760px) {
-  .login-settings-admin .login-settings-header h2 { font-size: 20px; }
   .login-settings-admin .login-settings-tabs,
   .login-settings-admin .platform-tabs { width: 100%; box-sizing: border-box; }
   .login-settings-admin .login-settings-tabs button,

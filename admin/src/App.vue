@@ -149,7 +149,7 @@ async function logout() {
       </div>
     </aside>
     <main class="admin-shell__main">
-      <span v-if="!route.meta.ownHeading" class="eyebrow admin-shell__eyebrow">{{ section }}</span>
+      <span class="eyebrow admin-shell__eyebrow">{{ section }}</span>
       <!-- 客服 keeps its inbox while switching conversations; a list keeps itself while its filters change in the address. -->
       <RouterView :key="route.path.startsWith('/support') ? '/support' : route.path" />
     </main>

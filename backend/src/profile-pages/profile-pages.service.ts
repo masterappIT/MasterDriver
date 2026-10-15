@@ -327,9 +327,14 @@ export class ProfilePagesService {
     };
   }
 
+  /** The address passengers open a 名片頁 at: what the driver shares, and what the admin opens. */
+  pageUrl(code: string): string {
+    return `${this.config.publicBaseUrl}/p/${code}`;
+  }
+
   private async ownerView(page: PageRow) {
     const view = await this.view(page);
-    const url = `${this.config.publicBaseUrl}/p/${page.code}`;
+    const url = this.pageUrl(page.code);
     return {
       ...view,
       published: page.published,

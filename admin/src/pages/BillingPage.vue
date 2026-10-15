@@ -123,21 +123,33 @@ onMounted(() => run(() => api('GET', '/billing'), ''));
           </tbody>
         </table>
       </div>
-      <form class="row" @submit.prevent="createPolicy">
-        <input v-model="policy.name" class="input" placeholder="名稱，例如：十月推廣" required />
-        <select v-model="policy.kind" class="select">
-          <option value="plan">全站享有方案</option>
-          <option value="feature">單一功能免費</option>
-        </select>
-        <select v-if="policy.kind === 'plan'" v-model="policy.planKey" class="select">
-          <option v-for="plan in data.plans" :key="plan.key" :value="plan.key">{{ plan.name }}</option>
-        </select>
-        <select v-else v-model="policy.featureKey" class="select" required>
-          <option v-for="feature in data.features" :key="feature.key" :value="feature.key">{{ feature.name }}</option>
-        </select>
-        <label class="field">開始（留空為現在）<input v-model="policy.startsAt" class="input" type="datetime-local" /></label>
-        <label class="field">結束（留空為不限）<input v-model="policy.endsAt" class="input" type="datetime-local" /></label>
-        <button class="button" type="submit">新增</button>
+      <form class="billing-page__new" @submit.prevent="createPolicy">
+        <h3>新增免費期</h3>
+        <div class="billing-page__new-fields">
+          <label class="field">名稱<input v-model="policy.name" class="input" placeholder="例如：十月推廣" required /></label>
+          <label class="field">
+            類型
+            <select v-model="policy.kind" class="select">
+              <option value="plan">全站享有方案</option>
+              <option value="feature">單一功能免費</option>
+            </select>
+          </label>
+          <label v-if="policy.kind === 'plan'" class="field">
+            方案
+            <select v-model="policy.planKey" class="select">
+              <option v-for="plan in data.plans" :key="plan.key" :value="plan.key">{{ plan.name }}</option>
+            </select>
+          </label>
+          <label v-else class="field">
+            功能
+            <select v-model="policy.featureKey" class="select" required>
+              <option v-for="feature in data.features" :key="feature.key" :value="feature.key">{{ feature.name }}</option>
+            </select>
+          </label>
+          <label class="field">開始（留空為現在）<input v-model="policy.startsAt" class="input" type="datetime-local" /></label>
+          <label class="field">結束（留空為不限）<input v-model="policy.endsAt" class="input" type="datetime-local" /></label>
+          <button class="button" type="submit">新增</button>
+        </div>
       </form>
     </div>
 
@@ -182,5 +194,36 @@ onMounted(() => run(() => api('GET', '/billing'), ''));
 <style scoped>
 .billing-page__quota {
   width: 90px;
+}
+
+/* Adding a free period: under the list it adds to, set off by a line; the fields in one even row. */
+.billing-page__new {
+  margin-top: 20px;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-divider);
+}
+
+.billing-page__new h3 {
+  margin: 0 0 var(--space-md);
+  font-size: var(--font-body);
+}
+
+.billing-page__new-fields {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  gap: var(--space-md);
+  align-items: end;
+}
+
+@media (max-width: 1100px) {
+  .billing-page__new-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .billing-page__new-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

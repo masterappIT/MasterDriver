@@ -184,6 +184,7 @@ test('a complaint about a 名片頁: found by its link, taken down until restore
 
   const detail = await ctx.adminData.getUser(owner);
   assert.equal(detail.profilePage?.intro, '十年經驗');
+  assert.equal(detail.profilePage?.url, `https://md.test/p/${page.code}`, 'the same link the driver shares');
   assert.deepEqual(detail.profilePage?.photoIds, [photoId]);
   assert.equal(detail.groupInvites[0].hasQr, true);
   assert.equal((await ctx.adminData.pagePhoto(owner, photoId)).mime, 'image/jpeg');

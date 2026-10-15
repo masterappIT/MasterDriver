@@ -102,10 +102,10 @@ onMounted(load);
           <td>
             <RouterLink v-if="entry.targetType === 'user'" :to="`/users/${entry.targetId}`">用戶</RouterLink>
             <RouterLink v-else-if="entry.targetType === 'order'" :to="`/orders/${entry.targetId}`">訂單</RouterLink>
-            <span v-else>{{ entry.targetId ?? '' }}</span>
+            <span v-else class="break">{{ entry.targetId ?? '' }}</span>
           </td>
-          <td class="hint">{{ entry.detail ? JSON.stringify(entry.detail) : '' }}</td>
-          <td class="hint">{{ entry.ip ?? '' }}</td>
+          <td class="hint break">{{ entry.detail ? JSON.stringify(entry.detail) : '' }}</td>
+          <td class="hint nowrap">{{ entry.ip ?? '' }}</td>
         </tr>
       </tbody>
     </table>

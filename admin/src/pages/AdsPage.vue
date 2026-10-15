@@ -77,22 +77,23 @@ onMounted(() => run(() => api('GET', '/ads'), ''));
   <div v-if="message" class="notice">{{ message }}</div>
   <div class="notice">廣告只出現在司機看到的頁面；乘客確認頁和名片頁<strong>不放廣告</strong>。每個位置最多同時顯示 3 則，依優先度排序。</div>
 
-  <form class="card ads-page__form" @submit.prevent="create">
+  <form class="card" @submit.prevent="create">
     <h2>新增廣告</h2>
-    <div class="row">
-      <select v-model="form.position" class="select">
-        <option v-for="(label, key) in POSITION" :key="key" :value="key">{{ label }}</option>
-      </select>
-      <input v-model="form.title" class="input" maxlength="60" placeholder="標題，例如：想要自己品牌的小程序？" required />
-      <input v-model.number="form.priority" class="input ads-page__number" type="number" min="0" max="1000" title="優先度" />
-    </div>
-    <input v-model="form.body" class="input" maxlength="200" placeholder="說明（選填）" />
-    <div class="row">
-      <input v-model="form.linkUrl" class="input ads-page__url" placeholder="連結 https://（例如 Master Travel 預約演示）" required />
-      <input v-model="form.imageUrl" class="input ads-page__url" placeholder="圖片網址 https://（選填）" />
+    <div class="ads-page__grid">
+      <label class="field">
+        位置
+        <select v-model="form.position" class="select">
+          <option v-for="(label, key) in POSITION" :key="key" :value="key">{{ label }}</option>
+        </select>
+      </label>
+      <label class="field ads-page__wide">標題<input v-model="form.title" class="input" maxlength="60" placeholder="例如：想要自己品牌的小程序？" required /></label>
+      <label class="field">優先度<input v-model.number="form.priority" class="input" type="number" min="0" max="1000" /></label>
+      <label class="field ads-page__full">說明（選填）<input v-model="form.body" class="input" maxlength="200" /></label>
+      <label class="field ads-page__wide">連結<input v-model="form.linkUrl" class="input" placeholder="https://（例如 Master Travel 預約演示）" required /></label>
+      <label class="field">圖片網址（選填）<input v-model="form.imageUrl" class="input" placeholder="https://" /></label>
       <label class="field">下架時間（留空為不限）<input v-model="form.endsAt" class="input" type="datetime-local" /></label>
     </div>
-    <div><button class="button" type="submit">新增</button></div>
+    <div class="form-foot"><button class="button" type="submit">新增</button></div>
   </form>
 
   <div class="card table-wrap">
@@ -136,18 +137,34 @@ onMounted(() => run(() => api('GET', '/ads'), ''));
 </template>
 
 <style scoped>
-.ads-page__form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+/* Four even columns: 標題 and 連結 take two, 說明 the whole line. */
+.ads-page__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-lg);
 }
 
-.ads-page__number {
-  width: 90px;
+.ads-page__wide {
+  grid-column: span 2;
 }
 
-.ads-page__url {
-  flex: 1;
-  min-width: 220px;
+.ads-page__full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 900px) {
+  .ads-page__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ads-page__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ads-page__wide {
+    grid-column: auto;
+  }
 }
 </style>

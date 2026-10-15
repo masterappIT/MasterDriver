@@ -402,11 +402,10 @@ const eventState = (event: LiveEvent) =>
 
 <template>
   <section class="project-observability">
-    <div class="observability-heading">
+    <div class="page-head">
       <div>
-        <span class="eyebrow">LIVE SYSTEM TELEMETRY</span>
-        <h2>項目數據流</h2>
-        <p>以 Mind Map 即時呈現整個項目的請求流動</p>
+        <h1>數據流監控</h1>
+        <p class="page-head__desc">以 Mind Map 即時呈現整個項目的請求流動</p>
       </div>
       <div class="stream-status"><span :class="['status-dot', { connected }]"></span>{{ connected ? 'LIVE' : 'RECONNECTING' }}</div>
     </div>
@@ -486,7 +485,7 @@ const eventState = (event: LiveEvent) =>
     <!-- MasterDriver: the day's business, from the records themselves. -->
     <div class="business-panel">
       <div class="panel-title">
-        <div><span class="eyebrow">BUSINESS TODAY</span><h3>今日業務</h3></div>
+        <h3>今日業務</h3>
         <span>{{ snapshot ? `UTC+8 ${snapshot.day}　全站` : '等待資料' }}</span>
       </div>
       <div class="business-grid">
@@ -506,7 +505,7 @@ const eventState = (event: LiveEvent) =>
         本頁連線的那台伺服器的即時事件；保留最近 {{ MAX_EVENTS }} 筆（排除健康檢查與資料庫查詢），不代表全站總量。節點數字為本頁連線期間收到的事件次數；資料庫節點計算每一次查詢。路徑顯示路由樣式，例如 /api/c/:confirmCode，不顯示乘客的連結。
       </p>
       <div class="panel-title">
-        <div><span class="eyebrow">EVENT STREAM</span><h3>即時事件</h3></div>
+        <h3>即時事件</h3>
         <span>最近 {{ events.length }} / {{ MAX_EVENTS }} 筆</span>
       </div>
       <p v-if="error" class="stream-error">{{ error }}</p>
@@ -530,7 +529,7 @@ const eventState = (event: LiveEvent) =>
     <!-- MasterDriver: speed and errors by area, the mainland first. -->
     <div class="area-panel">
       <div class="panel-title">
-        <div><span class="eyebrow">AREA PERFORMANCE</span><h3>地區速度與錯誤</h3></div>
+        <h3>地區速度與錯誤</h3>
         <span>今日全站，不含健康檢查</span>
       </div>
       <p class="observability-note">伺服器處理請求的時間，不含手機到伺服器的網路時間。錯誤指伺服器出錯（500 以上）；用戶端錯誤（400 到 499）多數是連結過期、未登入或資料不正確。</p>
@@ -558,7 +557,7 @@ const eventState = (event: LiveEvent) =>
     <!-- MasterDriver: where people open it, to see 紅線 2 (WeChat) in practice. -->
     <div class="client-panel">
       <div class="panel-title">
-        <div><span class="eyebrow">CLIENTS</span><h3>用甚麼打開</h3></div>
+        <h3>用甚麼打開</h3>
         <span>今日請求數</span>
       </div>
       <p class="observability-note">按瀏覽器識別。WhatsApp 常用手機自己的瀏覽器打開連結，所以部分 WhatsApp 用戶會算進「其他瀏覽器」。</p>
@@ -581,7 +580,7 @@ const eventState = (event: LiveEvent) =>
         }}<span v-if="snapshot?.write.at"> · {{ time(snapshot.write.at) }}</span>
       </p>
       <div class="panel-title">
-        <div><span class="eyebrow">REGION VISITS</span><h3>地區訪問</h3></div>
+        <h3>地區訪問</h3>
         <span>{{ regionStats.length }} regions</span>
       </div>
       <p class="region-data-credit">IP Geolocation by <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">DB-IP</a></p>
@@ -600,7 +599,7 @@ const eventState = (event: LiveEvent) =>
 
     <div class="presence-panel">
       <div class="panel-title">
-        <div><span class="eyebrow">LIVE PRESENCE</span><h3>即時在線用戶</h3></div>
+        <h3>即時在線用戶</h3>
         <span>活動 5 分鐘／連線中　全站</span>
       </div>
       <p class="region-data-credit">IP Geolocation by <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">DB-IP</a></p>
@@ -635,7 +634,7 @@ const eventState = (event: LiveEvent) =>
 
       <div v-if="can.superAdmin()" class="presence-identity-panel">
         <div class="panel-title">
-          <div><span class="eyebrow">USER ACCESS</span><h3>司機訪問明細</h3></div>
+          <h3>司機訪問明細</h3>
           <span>僅超級管理員可見 · 每 15 秒更新</span>
         </div>
         <p class="observability-note">只顯示近 5 分鐘有活動或目前連線的司機；乘客頁不用登入，不列個人。地區按最近一次請求或連線的 IP 推算，可能因內網、代理或定位資料顯示為未知。</p>
@@ -665,7 +664,7 @@ const eventState = (event: LiveEvent) =>
     <!-- MasterDriver: 通知 streams against what the API can hold. -->
     <div :class="['capacity-panel', `is-${streamLoad.level}`]">
       <div class="panel-title">
-        <div><span class="eyebrow">NOTIFICATION STREAMS</span><h3>通知即時連線</h3></div>
+        <h3>通知即時連線</h3>
         <span>全站</span>
       </div>
       <div class="capacity-numbers">
@@ -682,7 +681,7 @@ const eventState = (event: LiveEvent) =>
     <!-- MasterDriver: SMS and the services the platform depends on. -->
     <div class="services-panel">
       <div class="panel-title">
-        <div><span class="eyebrow">SERVICES</span><h3>簡訊與外部服務</h3></div>
+        <h3>簡訊與外部服務</h3>
         <span>{{ snapshot ? `最近檢查 ${time(snapshot.checkedAt)}` : '等待資料' }}</span>
       </div>
       <div class="services-grid">
@@ -723,7 +722,7 @@ const eventState = (event: LiveEvent) =>
 
     <div class="anomaly-panel">
       <div class="panel-title">
-        <div><span class="eyebrow">ANOMALY DETECTION</span><h3>警告與異常</h3></div>
+        <h3>警告與異常</h3>
         <span>{{ anomalies.length }} 類（最多 12 類，本頁連線期間）</span>
       </div>
       <div v-if="!anomalies.length" class="anomaly-empty">目前沒有偵測到警告或異常</div>

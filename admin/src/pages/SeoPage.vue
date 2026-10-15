@@ -98,14 +98,14 @@ onMounted(() => run(() => api('GET', '/seo'), ''));
       <label class="row"><input v-model="site.allowIndexing" type="checkbox" /> 開放搜尋引擎收錄（上線並確認網域後才開啟）</label>
       <label class="row"><input v-model="site.sitemapEnabled" type="checkbox" /> 提供 sitemap</label>
       <label class="field">正式網域<input v-model="site.canonicalOrigin" class="input" placeholder="https://example.com（結尾不要加 /）" /></label>
-      <div class="row">
+      <div class="form-grid">
         <label class="field">Google 驗證碼<input v-model="site.googleVerification" class="input" /></label>
         <label class="field">Bing 驗證碼<input v-model="site.bingVerification" class="input" /></label>
         <label class="field">百度驗證碼<input v-model="site.baiduVerification" class="input" /></label>
         <label class="field">百度統計 ID<input v-model="site.baiduTongjiId" class="input" /></label>
       </div>
       <p class="hint">只填驗證碼或 ID 本身，不要貼整段程式碼。Google Analytics 在內地無法使用，統計改用百度統計。</p>
-      <div><button class="button" type="submit">儲存網站設定</button></div>
+      <div class="form-foot"><button class="button" type="submit">儲存網站設定</button></div>
     </form>
 
     <form v-for="key in (['HOME', 'PROFILE'] as const)" :key="key" class="card seo-page__card" @submit.prevent="savePage(key)">
@@ -115,7 +115,7 @@ onMounted(() => run(() => api('GET', '/seo'), ''));
       <label class="field">描述<textarea v-model="pages[key].description" class="input" maxlength="300" /></label>
       <label class="field">關鍵字（以逗號分隔）<input v-model="pages[key].keywords" class="input" maxlength="200" placeholder="跨境包車, 中港車, 深圳灣接送" /></label>
       <label class="field">分享圖網址<input v-model="pages[key].shareImageUrl" class="input" placeholder="https://" /></label>
-      <div><button class="button secondary" type="submit">儲存</button></div>
+      <div class="form-foot"><button class="button" type="submit">儲存</button></div>
     </form>
   </div>
 </template>
@@ -125,5 +125,10 @@ onMounted(() => run(() => api('GET', '/seo'), ''));
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+}
+
+/* The card's gap already gives 12px; the save row's line sits 20px below the fields like elsewhere. */
+.seo-page__card > .form-foot {
+  margin-top: 8px;
 }
 </style>

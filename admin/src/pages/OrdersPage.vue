@@ -57,11 +57,12 @@ const list = useListQuery({ q: '', status: '', money: '', by: 'pickup', from: ''
 const { filters } = list;
 
 /** 收款與結清, as the dispatcher marked them. Nothing to say before a driver has the order. */
-function moneyMarks(order: OrderRow): string {
-  if (order.status === 'OPEN' || order.status === 'CANCELLED') return '—';
+/** One mark a line, so the column stays narrow. */
+function moneyMarks(order: OrderRow): string[] {
+  if (order.status === 'OPEN' || order.status === 'CANCELLED') return ['—'];
   const paid = order.paidAt ? '已收款' : '未收款';
-  if (order.selfDrive) return paid;
-  return order.status === 'COMPLETED' ? `${paid}・${order.settledAt ? '已結清' : '未結清'}` : paid;
+  if (order.selfDrive) return [paid];
+  return order.status === 'COMPLETED' ? [paid, order.settledAt ? '已結清' : '未結清'] : [paid];
 }
 </script>
 
@@ -124,26 +125,28 @@ function moneyMarks(order: OrderRow): string {
             <RouterLink :to="`/orders/${order.id}`" class="cell-title">{{ dateTime(order.pickupAt) }}</RouterLink>
             <div class="hint">單號 {{ order.code }}</div>
           </td>
-          <td class="wide">
+          <td class="orders__route">
             {{ order.origin }} 至 {{ order.destination }}
             <div v-if="order.legIndex" class="hint">接駁第 {{ order.legIndex }} 段</div>
           </td>
           <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
           <td class="nowrap">
-            <RouterLink :to="`/users/${order.dispatcher.id}`">{{ order.dispatcher.name ?? '未填姓名' }}</RouterLink>
+            <RouterLink :to="`/users/${order.dispatcher.id}`" class="clip" :title="order.dispatcher.name ?? undefined">{{ order.dispatcher.name ?? '未填姓名' }}</RouterLink>
             <div class="hint">{{ order.dispatcher.phone }}</div>
           </td>
           <td class="nowrap">
             <template v-if="order.selfDrive"><span class="muted">出單者自己做</span></template>
             <template v-else-if="order.claimedBy">
-              <RouterLink :to="`/users/${order.claimedBy.id}`">{{ order.claimedBy.name ?? '未填姓名' }}</RouterLink>
+              <RouterLink :to="`/users/${order.claimedBy.id}`" class="clip" :title="order.claimedBy.name ?? undefined">{{ order.claimedBy.name ?? '未填姓名' }}</RouterLink>
               <div class="hint">{{ order.claimedBy.phone }}</div>
             </template>
             <span v-else-if="order.driverDeleted" class="muted">司機已刪除</span>
             <span v-else class="muted">—</span>
           </td>
           <td class="num">{{ money(order.driverPrice) }}</td>
-          <td class="nowrap">{{ moneyMarks(order) }}</td>
+          <td class="nowrap">
+            <div v-for="mark in moneyMarks(order)" :key="mark">{{ mark }}</div>
+          </td>
           <td class="num">{{ hkd(order.serviceFee) }}</td>
           <td class="num">{{ order.claimAttempts }}</td>
         </tr>
@@ -159,3 +162,10 @@ function moneyMarks(order: OrderRow): string {
   <p v-else-if="loading" class="card muted">載入中…</p>
   <p class="hint">收款與結清是出單者自己的記號，平台不經手車費，也不核對。</p>
 </template>
+
+<style scoped>
+/* Wide enough that a route reads on two lines at most, narrow enough for nine columns in the card. */
+.orders__route {
+  min-width: 140px;
+}
+</style>

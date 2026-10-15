@@ -99,11 +99,10 @@ async function act(action: () => Promise<unknown>, done: string) {
 
 <template>
   <section class="mt-page">
-    <div class="mt-heading">
+    <div class="page-head">
       <div>
-        <span class="mt-eyebrow">DRIVER DIRECTORY</span>
-        <h2>用戶</h2>
-        <p class="mt-muted">查看司機資料、名片頁、訂單與點數，處理投訴與帳號狀態。</p>
+        <h1>用戶</h1>
+        <p class="page-head__desc">查看司機資料、名片頁、訂單與點數，處理投訴與帳號狀態。</p>
       </div>
     </div>
 
@@ -177,20 +176,23 @@ async function act(action: () => Promise<unknown>, done: string) {
                   <span class="mt-avatar" aria-hidden="true">{{ initial(user) }}</span>
                   <div>
                     <strong>{{ user.name ?? '未填姓名' }}</strong>
-                    <small>{{ user.id }}</small>
+                    <small :title="user.id">{{ user.id }}</small>
                   </div>
                 </div>
               </td>
               <td class="users__nowrap">{{ user.phone }}</td>
               <td>
-                {{ user.plates.join(' / ') || '—' }}
+                <span v-for="plate in user.plates" :key="plate" class="users__plate">{{ plate }}</span>
+                <template v-if="user.plates.length === 0">—</template>
                 <small v-if="user.vehicleType || user.plateType">{{ [user.vehicleType, user.plateType ? PLATE_TYPE[user.plateType] : null].filter(Boolean).join(' · ') }}</small>
               </td>
               <td class="num">{{ user.dispatched }} / {{ user.claimed }}</td>
               <td class="num">{{ hkd(user.credits) }}</td>
-              <td class="mt-nowrap">
-                <span class="mt-status" :class="user.suspended ? 'cancelled' : 'completed'">{{ user.suspended ? '已停用' : '使用中' }}</span>
-                <span v-if="user.pagePublished" class="mt-status confirmed">名片頁</span>
+              <td>
+                <div class="users__tags">
+                  <span class="mt-status" :class="user.suspended ? 'cancelled' : 'completed'">{{ user.suspended ? '已停用' : '使用中' }}</span>
+                  <span v-if="user.pagePublished" class="mt-status confirmed">名片頁</span>
+                </div>
               </td>
               <td class="users__nowrap">{{ dateTime(user.createdAt) }}</td>
               <td class="mt-actions" @click.stop>
@@ -228,6 +230,24 @@ async function act(action: () => Promise<unknown>, done: string) {
 <style scoped>
 .users__nowrap {
   white-space: nowrap;
+}
+
+/* One plate a line: a plate never breaks in the middle. */
+.users__plate {
+  display: block;
+  white-space: nowrap;
+}
+
+/* The state, and 名片頁 under it, so the column stays narrow. */
+.users__tags {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.users__tags .mt-status + .mt-status {
+  margin-left: 0;
 }
 .users__error {
   color: var(--color-danger-text);
