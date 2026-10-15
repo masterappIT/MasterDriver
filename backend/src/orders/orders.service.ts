@@ -15,6 +15,8 @@ import {
   type PoolQuery,
   type PoolUpdate,
   type UpdateOrderPricesInput,
+  type CarpoolSeatPayment,
+  type CarpoolSeatProgress,
 } from '@masterdriver/shared';
 import { Prisma, type NotificationKind, type OrderStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
@@ -29,8 +31,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { telemetry } from '../observability/telemetry';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { PrismaService } from '../prisma.service';
-import { contactRevealAt, orderInclude, legsOf, passengerPriceOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
-import { claimedShareText, dispatchShareText, passengerShareText, transferShareText } from './share-text';
+import { carpoolStopsOf, contactRevealAt, orderInclude, legsOf, passengerPriceOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
+import { carpoolShareText, claimedShareText, dispatchShareText, passengerShareText, transferShareText } from './share-text';
 
 const ORDER_CODE_LENGTH = 10;
 const CONFIRM_CODE_LENGTH = 12;
@@ -42,6 +44,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const CLEAR_TRIP_STATE = { departedAt: null, arrivedAt: null, pickedUpAt: null, changeSummary: null, changePendingAt: null } as const;
 /** 行程進度: the field each step sets. */
 const PROGRESS_FIELD = { DEPARTED: 'departedAt', ARRIVED: 'arrivedAt', PICKED_UP: 'pickedUpAt' } as const;
+/** 拼車: each party's 行程進度, gone with the driver who reported it (改派, 取消接單). */
+const CLEAR_PARTY_PROGRESS = { arrivedAt: null, pickedUpAt: null, noShowAt: null, droppedAt: null } as const;
+
+/** 拼車: what a carpool brings to the order made from it. */
+export interface FromCarpool {
+  id: string;
+}
 
 export type ClaimResult = 'WON' | 'LOST';
 
@@ -61,7 +70,7 @@ export class OrdersService {
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
 
-  async create(userId: string, input: CreateOrderInput, now = new Date()) {
+  async create(userId: string, input: CreateOrderInput, now = new Date(), carpool?: FromCarpool) {
     for (let attempt = 0; ; attempt += 1) {
       try {
         // Quota, order and service fee succeed or fail together: with too few
@@ -138,6 +147,7 @@ export class OrdersService {
           });
           if (fee > 0) await this.credits.charge(tx, userId, placed.id, fee);
           if (input.bookingId) await this.takeBooking(tx, userId, input.bookingId, placed.id);
+          if (carpool) return this.takeCarpool(tx, userId, carpool.id, placed.id, now);
           if (!second) return placed;
           await tx.order.update({ where: { id: placed.id }, data: { journeyId: placed.id, legIndex: 1 } });
           await tx.order.create({
@@ -183,7 +193,20 @@ export class OrdersService {
       select: { id: true, journeyId: true, status: true, pickupAt: true, origin: true, destination: true, passengerName: true, passengerContact: true },
     });
     const book = new Map<string, { contact: string; name: string | null; trips: Set<string>; lastPickupAt: string; lastRoute: string }>();
-    for (const order of orders) {
+    // 拼車: an order made from a carpool has no one passenger; its parties are each a passenger.
+    const parties = await this.prisma.carpoolSeat.findMany({
+      where: { status: 'CONFIRMED', carpool: { driverId: userId, order: { dispatcherId: userId } } },
+      select: { passengerName: true, passengerContact: true, carpool: { select: { orderId: true } } },
+    });
+    const partiesOf = new Map<string, { passengerName: string; passengerContact: string }[]>();
+    for (const party of parties) {
+      const id = party.carpool.orderId as string;
+      partiesOf.set(id, [...(partiesOf.get(id) ?? []), party]);
+    }
+    const passengersOf = (order: (typeof orders)[number]) =>
+      partiesOf.get(order.id)?.map((party) => ({ ...order, passengerName: party.passengerName, passengerContact: party.passengerContact })) ?? [order];
+    for (const order of orders.flatMap(passengersOf)) {
+      if (!order.passengerContact) continue;
       const entry =
         book.get(order.passengerContact) ??
         { contact: order.passengerContact, name: null, trips: new Set<string>(), lastPickupAt: order.pickupAt.toISOString(), lastRoute: `${order.origin} → ${order.destination}` };
@@ -338,9 +361,11 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { journeyId: true } });
     const journeyId = order?.journeyId;
     if (!journeyId) {
-      const view = await this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', (tx) =>
-        this.credits.refundOrder(tx, id),
-      );
+      const view = await this.transition(userId, id, ['OPEN', 'ASSIGNED'], { status: 'CANCELLED', cancelledAt: now }, 'dispatcher', async (tx) => {
+        await this.credits.refundOrder(tx, id);
+        // 拼車: the carpool goes with its order.
+        await tx.carpool.updateMany({ where: { orderId: id }, data: { status: 'CANCELLED', cancelledAt: now } });
+      });
       await this.tell(id, 'ORDER_CANCELLED', 'driver');
       telemetry.domain('order.cancel');
       return view;
@@ -374,6 +399,7 @@ export class OrdersService {
       ['ASSIGNED'],
       { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null, ...CLEAR_TRIP_STATE },
       'dispatcher',
+      (tx) => this.clearPartyProgress(tx, id),
     );
     await this.tell(id, 'ORDER_REOPENED', 'driver', before?.claimedById);
     return view;
@@ -400,6 +426,7 @@ export class OrdersService {
       });
       // 我的司機 counts how often a driver gave an order back: the claim they won is marked.
       if (moved.count === 1) {
+        await this.clearPartyProgress(tx, id);
         const won = await tx.orderClaim.findFirst({
           where: { orderId: id, driverId: userId, result: 'WON', releasedAt: null },
           orderBy: { createdAt: 'desc' },
@@ -421,6 +448,10 @@ export class OrdersService {
    */
   async progress(userId: string, id: string, input: OrderProgress, now = new Date()) {
     const field = PROGRESS_FIELD[input.step];
+    // 拼車: 已到上車點 and 已上車 are each party's, reported with partyProgress.
+    if (input.step !== 'DEPARTED' && (await this.prisma.carpool.count({ where: { orderId: id } })) > 0) {
+      throw apiError(HttpStatus.CONFLICT, 'CARPOOL_PROGRESS_BY_PARTY', 'Report each party of a carpool on its own');
+    }
     const moved = await this.prisma.order.updateMany({
       where: { id, claimedById: userId, status: 'ASSIGNED', [field]: null },
       data: { [field]: now },
@@ -445,6 +476,10 @@ export class OrdersService {
     const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true, journeyId: true } });
     if (!order) throw this.notFound();
     if (order.status !== 'OPEN' && order.status !== 'ASSIGNED') throw this.invalidStatus();
+    // 拼車: the parties' seats made the trip; to change it, the carpool is opened again.
+    if ((await this.prisma.carpool.count({ where: { orderId: id } })) > 0) {
+      throw apiError(HttpStatus.CONFLICT, 'CARPOOL_TRIP_FIXED', 'A carpool order keeps the trip its passengers asked for');
+    }
     if (input.transferPlace !== undefined && !order.journeyId) {
       throw apiError(HttpStatus.BAD_REQUEST, 'NOT_A_TRANSFER', 'Only a 接駁 order has a 接駁位置');
     }
@@ -808,6 +843,117 @@ export class OrdersService {
   }
 
   /**
+   * 拼車: ties the carpool to the order made from it, in the same transaction. The carpool must
+   * be the dispatcher's own and not yet made into an order; under its lock no seat changes
+   * meanwhile, so the order's load is its confirmed parties' at this moment. The parties already
+   * confirmed their seats, so the order counts as confirmed by its passengers.
+   */
+  private async takeCarpool(tx: Prisma.TransactionClient, userId: string, carpoolId: string, orderId: string, now: Date) {
+    await tx.$queryRaw`SELECT "id" FROM "Carpool" WHERE "id" = ${carpoolId} FOR UPDATE`;
+    const taken = await tx.carpool.updateMany({
+      where: { id: carpoolId, driverId: userId, orderId: null, status: { in: ['OPEN', 'CLOSED'] } },
+      data: { status: 'ORDERED', orderId },
+    });
+    if (taken.count === 0) throw apiError(HttpStatus.CONFLICT, 'CARPOOL_NOT_OPEN', 'The carpool is no longer open');
+    const load = await tx.carpoolSeat.aggregate({ where: { carpoolId, status: 'CONFIRMED' }, _sum: { passengers: true, luggage: true }, _count: true });
+    if (load._count === 0) throw apiError(HttpStatus.CONFLICT, 'CARPOOL_NO_PASSENGERS', 'No confirmed passengers');
+    return tx.order.update({
+      where: { id: orderId },
+      data: { passengers: load._sum.passengers ?? 0, luggage: load._sum.luggage ?? 0, passengerConfirmedAt: now },
+      include: orderInclude,
+    });
+  }
+
+  private async clearPartyProgress(tx: Prisma.TransactionClient, orderId: string) {
+    await tx.carpoolSeat.updateMany({ where: { carpool: { orderId } }, data: CLEAR_PARTY_PROGRESS });
+  }
+
+  /**
+   * 拼車: the driver of a carpool order reports one party's part of the trip. 乘客沒出現 waits for
+   * the carpool's 等候時間 after reaching that party's pickup; 已下車 follows 已上車. The order's
+   * own 已到上車點 is the first party reached, and 乘客已上車 is every party on board or not there.
+   */
+  async partyProgress(userId: string, id: string, seatId: string, input: CarpoolSeatProgress, now = new Date()) {
+    await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({ where: { id, claimedById: userId }, select: { status: true, arrivedAt: true, pickedUpAt: true } });
+      if (!order) throw this.notFound();
+      if (order.status !== 'ASSIGNED') throw this.invalidStatus();
+      const party = await tx.carpoolSeat.findFirst({
+        where: { id: seatId, status: 'CONFIRMED', carpool: { orderId: id } },
+        include: { carpool: { select: { waitMinutes: true } } },
+      });
+      if (!party) throw apiError(HttpStatus.NOT_FOUND, 'CARPOOL_SEAT_NOT_FOUND', 'Party not found');
+      const set = (data: Prisma.CarpoolSeatUncheckedUpdateInput) => tx.carpoolSeat.update({ where: { id: party.id }, data });
+      if (input.step === 'ARRIVED') {
+        if (!party.arrivedAt) await set({ arrivedAt: now });
+      } else if (input.step === 'PICKED_UP') {
+        if (party.noShowAt) throw apiError(HttpStatus.CONFLICT, 'CARPOOL_PARTY_NO_SHOW', 'This party was marked as not there');
+        if (!party.pickedUpAt) await set({ pickedUpAt: now, arrivedAt: party.arrivedAt ?? now });
+      } else if (input.step === 'NO_SHOW') {
+        if (party.pickedUpAt) throw apiError(HttpStatus.CONFLICT, 'CARPOOL_PARTY_ON_BOARD', 'This party is on board');
+        const waited = party.arrivedAt ? now.getTime() - party.arrivedAt.getTime() : -1;
+        if (waited < party.carpool.waitMinutes * 60_000) {
+          throw apiError(HttpStatus.CONFLICT, 'CARPOOL_WAIT_FIRST', 'Wait at the pickup first', {
+            from: party.arrivedAt ? new Date(party.arrivedAt.getTime() + party.carpool.waitMinutes * 60_000).toISOString() : null,
+          });
+        }
+        if (!party.noShowAt) await set({ noShowAt: now });
+      } else {
+        if (!party.pickedUpAt) throw apiError(HttpStatus.CONFLICT, 'CARPOOL_PARTY_NOT_ON_BOARD', 'This party is not on board yet');
+        if (!party.droppedAt) await set({ droppedAt: now });
+      }
+      const parties = await tx.carpoolSeat.findMany({ where: { carpool: { orderId: id }, status: 'CONFIRMED' }, select: { arrivedAt: true, pickedUpAt: true, noShowAt: true } });
+      const data: Prisma.OrderUncheckedUpdateInput = {};
+      if (!order.arrivedAt && parties.some((one) => one.arrivedAt)) data.arrivedAt = now;
+      if (!order.pickedUpAt && parties.every((one) => one.pickedUpAt || one.noShowAt) && parties.some((one) => one.pickedUpAt)) data.pickedUpAt = now;
+      if (Object.keys(data).length > 0) await tx.order.update({ where: { id }, data });
+    });
+    telemetry.domain('carpool.progress');
+    return this.getForParticipant(userId, id);
+  }
+
+  /** 拼車: 已收款 for one party, marked by the dispatcher after checking their own account. */
+  async partyPayment(userId: string, id: string, seatId: string, input: CarpoolSeatPayment, now = new Date()) {
+    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true } });
+    if (!order) throw this.notFound();
+    if (order.status === 'CANCELLED') throw this.invalidStatus();
+    const marked = await this.prisma.carpoolSeat.updateMany({
+      where: { id: seatId, status: 'CONFIRMED', carpool: { orderId: id } },
+      data: { paidAt: input.paid ? now : null },
+    });
+    if (marked.count === 0) throw apiError(HttpStatus.NOT_FOUND, 'CARPOOL_SEAT_NOT_FOUND', 'Party not found');
+    return this.getForParticipant(userId, id);
+  }
+
+  /**
+   * 拼車: a party left a carpool that is already an order. The order's load follows its parties,
+   * and a driver who took it confirms the change with 知道了, as with 修改行程.
+   */
+  async carpoolPartiesChanged(orderId: string, now = new Date()) {
+    const told = await this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { status: true, claimedById: true, dispatcherId: true, changePendingAt: true, changeSummary: true },
+      });
+      if (!order || (order.status !== 'OPEN' && order.status !== 'ASSIGNED')) return false;
+      const load = await tx.carpoolSeat.aggregate({ where: { carpool: { orderId }, status: 'CONFIRMED' }, _sum: { passengers: true, luggage: true } });
+      const driverHasIt = order.status === 'ASSIGNED' && order.claimedById !== null && order.claimedById !== order.dispatcherId;
+      const pending = order.changePendingAt && order.changeSummary ? order.changeSummary.split('、') : [];
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          // An order keeps at least one passenger; the dispatcher cancels it when nobody is left.
+          passengers: Math.max(1, load._sum.passengers ?? 0),
+          luggage: load._sum.luggage ?? 0,
+          ...(driverHasIt ? { changeSummary: [...new Set([...pending, '乘客'])].join('、'), changePendingAt: now } : {}),
+        },
+      });
+      return driverHasIt;
+    });
+    if (told) await this.tell(orderId, 'ORDER_CHANGED', 'driver');
+  }
+
+  /**
    * Claiming and cancelling the legs of one 接駁 order take turns on the first leg's row, so one
    * driver never ends up with both legs and a cancel never misses a leg claimed at that moment.
    */
@@ -880,8 +1026,9 @@ export class OrdersService {
     return {
       ...toOrderView(order, 'dispatcher', this.config.publicBaseUrl, new Date(), order.dispatcherId),
       share: {
-        dispatch:
-          legs && legs.length > 1
+        dispatch: order.carpool
+          ? carpoolShareText(order, { partyCount: order.carpool.seatsList.length, stops: carpoolStopsOf(order.carpool.seatsList) }, links.dispatch)
+          : legs && legs.length > 1
             ? transferShareText(
                 legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId })),
                 head.dispatch,

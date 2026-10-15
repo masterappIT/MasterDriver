@@ -12,6 +12,7 @@ import type {
   SeoSiteUpdate,
 } from '@masterdriver/shared';
 import { apiError } from '../common/errors';
+import { retryFirstWrite } from '../common/first-write';
 import { readLimits } from '../common/limits';
 import { decodeQrImage } from '../groups/qr-image';
 import { PrismaService } from '../prisma.service';
@@ -41,7 +42,7 @@ export class SiteService {
   // ---------------------------------------------------------- general settings
 
   appSetting() {
-    return this.prisma.appSetting.upsert({ where: { id: DEFAULT_ID }, update: {}, create: { id: DEFAULT_ID } });
+    return retryFirstWrite(() => this.prisma.appSetting.upsert({ where: { id: DEFAULT_ID }, update: {}, create: { id: DEFAULT_ID } }));
   }
 
   async updateAppSetting(input: AppSettingUpdate, actor: string) {
@@ -75,7 +76,7 @@ export class SiteService {
     const image = decodeQrImage(dataUrl);
     if (!image) throw apiError(HttpStatus.BAD_REQUEST, 'LOGO_IMAGE_INVALID', 'Upload a PNG, JPEG or WebP image up to 400 KB');
     const data = { mime: image.mime, image: image.bytes, updatedBy: actor };
-    await this.prisma.siteLogo.upsert({ where: { id: DEFAULT_ID }, update: data, create: { id: DEFAULT_ID, ...data } });
+    await retryFirstWrite(() => this.prisma.siteLogo.upsert({ where: { id: DEFAULT_ID }, update: data, create: { id: DEFAULT_ID, ...data } }));
     return this.logoStatus();
   }
 
@@ -124,13 +125,13 @@ export class SiteService {
   // ----------------------------------------------------------------------- SEO
 
   seoSite() {
-    return this.prisma.seoSiteSetting.upsert({ where: { id: DEFAULT_ID }, update: {}, create: { id: DEFAULT_ID } });
+    return retryFirstWrite(() => this.prisma.seoSiteSetting.upsert({ where: { id: DEFAULT_ID }, update: {}, create: { id: DEFAULT_ID } }));
   }
 
   async seoPages() {
     const pages = await Promise.all(
       (['HOME', 'PROFILE'] as const).map((page) =>
-        this.prisma.seoPageSetting.upsert({ where: { page }, update: {}, create: { page } }),
+        retryFirstWrite(() => this.prisma.seoPageSetting.upsert({ where: { page }, update: {}, create: { page } })),
       ),
     );
     return Object.fromEntries(pages.map((page) => [page.page, page]));
@@ -148,7 +149,7 @@ export class SiteService {
   }
 
   async updateSeoPage(page: SeoPageKey, input: SeoPageUpdate) {
-    await this.prisma.seoPageSetting.upsert({ where: { page }, update: input, create: { page, ...input } });
+    await retryFirstWrite(() => this.prisma.seoPageSetting.upsert({ where: { page }, update: input, create: { page, ...input } }));
     return this.seoAll();
   }
 
@@ -250,11 +251,13 @@ export class SiteService {
     const day = hongKongDay(now);
     await Promise.all(
       existing.map(({ id }) =>
-        this.prisma.adStat.upsert({
-          where: { adId_day: { adId: id, day } },
-          create: { adId: id, day, impressions: 1 },
-          update: { impressions: { increment: 1 } },
-        }),
+        retryFirstWrite(() =>
+          this.prisma.adStat.upsert({
+            where: { adId_day: { adId: id, day } },
+            create: { adId: id, day, impressions: 1 },
+            update: { impressions: { increment: 1 } },
+          }),
+        ),
       ),
     );
   }
@@ -264,11 +267,13 @@ export class SiteService {
     const ad = await this.prisma.adSlot.findUnique({ where: { id }, select: { linkUrl: true } });
     if (!ad) return null;
     const day = hongKongDay(now);
-    await this.prisma.adStat.upsert({
-      where: { adId_day: { adId: id, day } },
-      create: { adId: id, day, clicks: 1 },
-      update: { clicks: { increment: 1 } },
-    });
+    await retryFirstWrite(() =>
+      this.prisma.adStat.upsert({
+        where: { adId_day: { adId: id, day } },
+        create: { adId: id, day, clicks: 1 },
+        update: { clicks: { increment: 1 } },
+      }),
+    );
     return ad.linkUrl;
   }
 

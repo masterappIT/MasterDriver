@@ -27,9 +27,20 @@ export const orderInclude = {
   tripGroup: tripGroupSelect,
   // 預約: whether the order was made from a passenger's booking request.
   booking: { select: { id: true } },
+  // 拼車: the parties on board, the ones still on (confirmed) in the order they asked.
+  carpool: {
+    select: {
+      id: true,
+      waitMinutes: true,
+      seatPriceMinor: true,
+      seatCurrency: true,
+      seatsList: { where: { status: 'CONFIRMED' }, orderBy: { createdAt: 'asc' } },
+    },
+  },
 } satisfies Prisma.OrderInclude;
 
 export type OrderWithPeople = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
+export type CarpoolParty = NonNullable<OrderWithPeople['carpool']>['seatsList'][number];
 export type JourneyLeg = NonNullable<OrderWithPeople['journeyHead']>['journeyLegs'][number];
 
 /** 行程進度 as the driver reported it: when they set out, reached the pickup and had the passenger on board. */
@@ -210,6 +221,57 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
   };
 }
 
+/** The 上車點 of a carpool's parties, each once, in the order the parties asked. */
+export function carpoolStopsOf(parties: Pick<CarpoolParty, 'pickupPoint'>[]) {
+  return [...new Set(parties.map((party) => party.pickupPoint))];
+}
+
+/**
+ * 拼車: the parties of a carpool order. Anyone sees how many parties, where they get on and off
+ * and how many they are, so a driver knows the stops before claiming; the dispatcher and the
+ * driver who took it also see each party's name, their progress, and from the time the driver
+ * may see passengers' contacts, their phone. Only the dispatcher sees what each party pays and
+ * whether it was received.
+ */
+function carpoolOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boolean) {
+  const carpool = order.carpool;
+  if (!carpool) return null;
+  const parties = carpool.seatsList;
+  return {
+    partyCount: parties.length,
+    stops: carpoolStopsOf(parties),
+    waitMinutes: carpool.waitMinutes,
+    parties: parties.map((party) => ({
+      passengers: party.passengers,
+      luggage: party.luggage,
+      pickupPoint: party.pickupPoint,
+      dropoff: party.dropoff ?? order.destination,
+      ...(viewer !== 'other'
+        ? {
+            id: party.id,
+            passengerName: party.passengerName,
+            passengerContact: contactVisible ? party.passengerContact : null,
+            passengerWechat: contactVisible ? party.passengerWechat : null,
+            notes: party.notes,
+            arrivedAt: party.arrivedAt?.toISOString() ?? null,
+            pickedUpAt: party.pickedUpAt?.toISOString() ?? null,
+            noShowAt: party.noShowAt?.toISOString() ?? null,
+            droppedAt: party.droppedAt?.toISOString() ?? null,
+            // 乘客沒出現 may be marked once the driver has waited this long at the pickup.
+            noShowFrom: party.arrivedAt ? new Date(party.arrivedAt.getTime() + carpool.waitMinutes * 60_000).toISOString() : null,
+          }
+        : {}),
+      ...(viewer === 'dispatcher'
+        ? {
+            price: carpool.seatPriceMinor === null ? null : money(carpool.seatPriceMinor * party.passengers, carpool.seatCurrency),
+            paidAt: party.paidAt?.toISOString() ?? null,
+          }
+        : {}),
+    })),
+    ...(viewer === 'dispatcher' ? { id: carpool.id } : {}),
+  };
+}
+
 /**
  * The order as one viewer may see it. Passenger details and the driver's
  * contact stay hidden from everyone except the dispatcher and the driver who
@@ -243,6 +305,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     // 先給常用司機: until when only the dispatcher's 常用司機 may claim it.
     favoritesOnlyUntil: order.favoritesUntil && order.favoritesUntil > now ? order.favoritesUntil.toISOString() : null,
     journey: journeyOf(order, viewer, contactVisible, userId),
+    carpool: carpoolOf(order, viewer, contactVisible),
     dispatcherName: order.dispatcher.profile?.name ?? null,
     // Before claiming, a driver can look at who put the order out: their 名片頁, when it is public.
     dispatcherPageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,

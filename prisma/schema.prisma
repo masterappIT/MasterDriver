@@ -52,6 +52,8 @@ model User {
   supportConversation  SupportConversation?
   profilePage          ProfilePage?
   notifications        Notification[]
+  /// 拼車 this user opened.
+  carpools             Carpool[]
 
   @@unique([countryCode, phone])
 }
@@ -257,6 +259,8 @@ model Order {
   booking     BookingRequest?
   journeyLegs Order[]         @relation("Journey")
   tripGroup   TripGroup?
+  /// 拼車: the carpool this order was made from; its seats are the order's passengers.
+  carpool     Carpool?
 
   @@unique([journeyId, legIndex])
   @@index([dispatcherId, createdAt])
@@ -1084,7 +1088,7 @@ enum NotificationGroup {
   DISPATCHED
   /// Orders the user claimed.
   CLAIMED
-  /// Booking requests from the user's 名片頁.
+  /// Booking requests from the user's 名片頁, and seats asked for on their 拼車.
   BOOKINGS
   /// 客服 replies.
   SUPPORT
@@ -1119,6 +1123,15 @@ enum NotificationKind {
   BOOKING_NEW
   BOOKING_ACCEPTED
   BOOKING_CANCELLED
+  /// To the driver who opened a 拼車: a passenger asked for seats (confirmed at once, or waiting for them).
+  CARPOOL_SEAT_NEW
+  CARPOOL_SEAT_WAITING
+  /// To the driver: a passenger cancelled their seats.
+  CARPOOL_SEAT_CANCELLED
+  /// To the driver: confirmed passengers reached the least the carpool goes with.
+  CARPOOL_FORMED
+  /// To the driver: the time to ask for seats ran out.
+  CARPOOL_CLOSED
   /// 客服 answered; one line until the user reads it, however many messages.
   SUPPORT_REPLY
 }
@@ -1130,6 +1143,7 @@ model Notification {
   /// Where tapping it goes. Kept as plain ids: the line stays even if what it points to is gone.
   orderId   String?
   bookingId String?
+  carpoolId String?
   /// The trip it is about, copied when sent ("深圳灣口岸 至 香港國際機場") with its pickup time.
   summary   String           @default("")
   pickupAt  DateTime?
@@ -1187,4 +1201,121 @@ model ObservabilityInstance {
   streams   Int      @default(0)
 
   @@index([updatedAt])
+}
+
+enum CarpoolStatus {
+  /// Taking seats until closesAt (past it, the carpool reads as closed).
+  OPEN
+  /// The driver stopped taking seats; it can open again with a later closesAt.
+  CLOSED
+  /// Made into an order (driven by the driver, or put out for others); the order carries it on.
+  ORDERED
+  CANCELLED
+}
+
+/// 拼車: a trip a driver opens for several parties of passengers, who ask for seats through the
+/// link the driver gives them (/r/{code}). Nobody else lists or matches it: the platform only
+/// keeps the seats. Closed, it becomes one order the driver drives or puts out.
+model Carpool {
+  id                 String        @id @default(cuid())
+  /// Unguessable code of the link the driver gives passengers (/r/{code}).
+  code               String        @unique
+  driverId           String
+  status             CarpoolStatus @default(OPEN)
+  pickupAt           DateTime
+  origin             String
+  destination        String
+  /// 上車點 the passenger chooses from; empty: each passenger types theirs.
+  pickupPoints       String[]      @default([])
+  /// Seats for passengers: no more than the car's seats less the driver's.
+  seats              Int
+  /// 最少成行人數: confirmed passengers it goes with; null: any.
+  minPassengers      Int?
+  /// 每位價錢, set by the driver; the platform neither suggests nor takes it. Null: 私訊報價.
+  seatPriceMinor     Int?
+  seatCurrency       Currency      @default(HKD)
+  /// 每位行李 the driver allows; null: not said.
+  luggagePerSeat     Int?
+  /// The driver's own words on cancelling; shown to passengers, never enforced.
+  cancelPolicy       String?
+  notes              String?
+  /// 報位截止: seats are asked for until then.
+  closesAt           DateTime
+  /// Seats are confirmed as soon as they are asked for; otherwise the driver confirms each.
+  autoConfirm        Boolean       @default(false)
+  /// 等候時間: how long after reaching a pickup the driver may mark its passengers as not there.
+  waitMinutes        Int           @default(15)
+  /// 收款方式: passengers' links show the driver's own ways to be paid.
+  showPaymentMethods Boolean       @default(false)
+  /// 成行: when confirmed passengers last reached minPassengers (told once); cleared when they drop below.
+  formedAt           DateTime?
+  closedAt           DateTime?
+  cancelledAt        DateTime?
+  /// The order it was made into.
+  orderId            String?       @unique
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  driver    User          @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  order     Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  seatsList CarpoolSeat[]
+
+  @@index([driverId, createdAt])
+  @@index([status, closesAt])
+}
+
+enum CarpoolSeatStatus {
+  /// Waiting for the driver; holds its seats until expiresAt.
+  PENDING
+  CONFIRMED
+  /// The driver said no.
+  DECLINED
+  /// The driver did not answer in time.
+  EXPIRED
+  /// The passenger withdrew.
+  CANCELLED
+  /// The driver took it off the carpool after confirming it.
+  REMOVED
+}
+
+/// One party of passengers on a 拼車, and how their part of the trip went.
+model CarpoolSeat {
+  id               String            @id @default(cuid())
+  carpoolId        String
+  /// Unguessable code of the passenger's own link (/s/{code}); the link is their credential.
+  code             String            @unique
+  status           CarpoolSeatStatus @default(PENDING)
+  passengers       Int
+  luggage          Int               @default(0)
+  pickupPoint      String
+  /// Where they get off; null: the carpool's destination.
+  dropoff          String?
+  passengerName    String
+  /// A phone with its country code, as on an order.
+  passengerContact String
+  passengerWechat  String?
+  notes            String?
+  ip               String?
+  /// A PENDING seat stops holding its seats then.
+  expiresAt        DateTime?
+  /// The driver changed the time or the price after this seat was asked for; the passenger has not accepted yet.
+  reconfirmAt      DateTime?
+  confirmedAt      DateTime?
+  cancelledAt      DateTime?
+  /// 行程進度 of this party, as the driver reports it.
+  arrivedAt        DateTime?
+  pickedUpAt       DateTime?
+  noShowAt         DateTime?
+  droppedAt        DateTime?
+  /// 已收款: the driver (dispatcher) checked their own account and marked this party's fare received.
+  paidAt           DateTime?
+  /// Something the driver has not opened yet.
+  driverUnread     Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  carpool Carpool @relation(fields: [carpoolId], references: [id], onDelete: Cascade)
+
+  @@index([carpoolId, status])
+  @@index([ip, createdAt])
 }

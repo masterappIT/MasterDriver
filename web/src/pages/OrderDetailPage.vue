@@ -5,6 +5,7 @@ import { api, errorText } from '../api';
 import BottomSheet from '../components/BottomSheet.vue';
 import ContactLines from '../components/ContactLines.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
+import CarpoolParties, { type CarpoolOnOrder } from '../components/CarpoolParties.vue';
 import OrderMoneyMarks from '../components/OrderMoneyMarks.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
@@ -60,6 +61,8 @@ interface Detail {
   immediate?: boolean;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
+  /** 拼車: the order's parties of passengers, each with its own progress (and, for the dispatcher, fare). */
+  carpool?: CarpoolOnOrder | null;
   /** 行程進度 the driver reported. */
   progress?: TripProgress;
   /** 修改行程 the driver has not confirmed yet: what changed and when. */
@@ -132,12 +135,13 @@ const doneForDriver = computed(() => !isDispatcher.value && order.value?.status 
 /** Over, either way: the driver keeps only the trip and the dispatcher's name and call button. */
 const endedForDriver = computed(() => cancelledForDriver.value || doneForDriver.value);
 /** 接駁: the passenger's one price for the whole order is kept on, and changed from, the first leg. */
-const tripPriceHere = computed(() => !order.value?.journey || order.value.journey.legIndex === 1);
+const tripPriceHere = computed(() => !order.value?.carpool && (!order.value?.journey || order.value.journey.legIndex === 1));
 /** A driver is set and the passenger has not confirmed: remind the dispatcher to send the link. */
 /** Someone else has the order: the group now needs 已派出, not the order again. */
 const taken = computed(() => order.value?.status === 'ASSIGNED' && !selfDriven.value && Boolean(order.value.share?.claimed));
+// 拼車: each party has its own link already, and confirmed their seats there.
 const remindPassenger = computed(
-  () => isDispatcher.value && order.value?.status === 'ASSIGNED' && !order.value.passengerConfirmedAt && !order.value.fromBooking,
+  () => isDispatcher.value && order.value?.status === 'ASSIGNED' && !order.value.passengerConfirmedAt && !order.value.fromBooking && !order.value.carpool,
 );
 
 /** 接駁 is cancelled whole; one leg's driver is replaced with 改派 instead. */
@@ -154,6 +158,8 @@ const drivesIt = computed(() => order.value?.status === 'ASSIGNED' && (!isDispat
 const nextProgress = computed(() => {
   const progress = order.value?.progress;
   if (!drivesIt.value || !progress) return null;
+  // 拼車: after 已出發, each party is reported on its own in 拼車乘客.
+  if (order.value?.carpool) return progress.departedAt ? null : PROGRESS_STEPS[0];
   return PROGRESS_STEPS.find((one) => !progress[one.field]) ?? null;
 });
 
@@ -205,6 +211,31 @@ function checkProgressPrompt() {
     // Without storage the sheet may come again next time; the card asks anyway.
   }
   progressPrompt.value = step;
+}
+
+/** 拼車: one party's 已到上車點, 已上車, 乘客沒出現 or 已下車. */
+async function reportParty(seatId: string, step: string, label: string) {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('POST', `/orders/${id.value}/carpool-seats/${seatId}/progress`, { step });
+    toast(`已回報：${label}`);
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function setPartyPaid(seatId: string, paid: boolean) {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/carpool-seats/${seatId}/payment`, { paid });
+    toast(paid ? '已記為已收款' : '已改回未收款');
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function reportProgress(step: string, label: string) {
@@ -281,6 +312,7 @@ const tripSummary = computed(() => {
 const passengerSummary = computed(() => {
   const o = order.value;
   if (!o) return '';
+  if (o.carpool) return `拼車 ${o.carpool.partyCount} 組 · ${o.passengers} 人`;
   return [o.passengerName ?? '乘客', o.passengerContact, o.passengerConfirmedAt ? '已確認' : '還沒確認'].filter(Boolean).join(' · ');
 });
 const moneySummary = computed(() => {
@@ -289,7 +321,7 @@ const moneySummary = computed(() => {
   return [
     `出單價 ${money(o.driverPrice) || '未填'}`,
     tripPriceHere.value && o.passengerPrice ? `乘客價 ${money(o.passengerPrice)}` : '',
-    o.status === 'CANCELLED' ? '' : o.paidAt ? '已收款' : '未收款',
+    o.status === 'CANCELLED' || o.carpool ? '' : o.paidAt ? '已收款' : '未收款',
     canSettle.value ? (o.settledAt ? '已結清' : '未結清') : '',
   ]
     .filter(Boolean)
@@ -435,7 +467,8 @@ async function setPayment(body: { showPaymentMethods?: boolean; paid?: boolean }
 /** Done or due and not marked received: remind the dispatcher to check their account. */
 const remindPayment = computed(() => {
   const o = order.value;
-  if (!o || !isDispatcher.value || o.paidAt || o.status === 'CANCELLED' || o.status === 'OPEN') return false;
+  // 拼車: each party's fare is marked in 拼車乘客.
+  if (!o || !isDispatcher.value || o.carpool || o.paidAt || o.status === 'CANCELLED' || o.status === 'OPEN') return false;
   // A 即時單's time is when it was put out: the fare is due once the passenger is on board.
   if (o.immediate) return o.status === 'COMPLETED' || Boolean(o.progress?.pickedUpAt);
   return o.status === 'COMPLETED' || new Date(o.pickupAt).getTime() <= Date.now();
@@ -743,7 +776,8 @@ watch(id, () => {
         <p v-if="order.flightNo" class="detail__line">{{ t(`航班：${order.flightNo}`) }}</p>
         <p v-if="order.notes" class="detail__note">{{ t(order.notes) }}</p>
         <p v-if="progressText && !endedForDriver" class="detail__progress">{{ t(progressText) }}</p>
-        <button v-if="isDispatcher && live" class="chip detail__edit-trip" type="button" :disabled="busy" @click="editTrip">{{ t('修改行程') }}</button>
+        <button v-if="isDispatcher && live && !order.carpool" class="chip detail__edit-trip" type="button" :disabled="busy" @click="editTrip">{{ t('修改行程') }}</button>
+        <RouterLink v-if="isDispatcher && order.carpool?.id" class="chip detail__edit-trip" :to="`/app/carpools/${order.carpool.id}`">{{ t('打開拼車') }}</RouterLink>
       </component>
 
       <!-- 接駁: both legs of the order; the dispatcher opens a leg to manage its driver. -->
@@ -761,6 +795,17 @@ watch(id, () => {
           </span>
           <AppIcon name="chevron" class="detail__fold-arrow" />
         </summary>
+        <CarpoolParties
+          v-if="order.carpool"
+          :carpool="order.carpool"
+          :destination="order.destination"
+          :drives="drivesIt"
+          :dispatcher="isDispatcher"
+          :busy="busy"
+          @progress="reportParty"
+          @paid="setPartyPaid"
+        />
+        <template v-else>
         <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
         <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
         <p v-else-if="order.contactEnded" class="detail__waiting">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
@@ -772,6 +817,7 @@ watch(id, () => {
           <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電乘客') }}</a>
           <button class="button secondary" type="button" @click="copy(order.passengerContact, '已複製')">{{ t('複製號碼') }}</button>
         </div>
+        </template>
         <div v-if="isDispatcher && !ownTrip" class="detail__divided detail__reveal">
           <template v-if="!editingReveal">
             <span class="detail__reveal-text">{{ order.contactRevealMinutes == null ? t('接單司機搶到就看到乘客電話') : t(`接單司機${revealLabel(order.contactRevealMinutes)}看到乘客電話`) }}</span>
@@ -810,7 +856,7 @@ watch(id, () => {
         </summary>
         <!-- 自己做: what the passenger's page shows, kept here instead of on cards of their own. -->
         <template v-if="ownTrip">
-          <label v-if="live" class="detail__switch">
+          <label v-if="live && !order.carpool" class="detail__switch">
             <span>{{ t('乘客確認頁顯示價錢') }}</span>
             <input
               class="switch"
@@ -820,7 +866,7 @@ watch(id, () => {
               @change="patchPrices({ showPassengerPrice: !order.showPassengerPrice }, '已更新')"
             />
           </label>
-          <label class="detail__switch detail__divided">
+          <label v-if="!order.carpool" class="detail__switch detail__divided">
             <span>
               {{ t('乘客確認頁顯示收款方式') }}
               <small>{{ order.journey ? t('整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示價錢') }}</small>
@@ -896,7 +942,7 @@ watch(id, () => {
             <input class="switch" type="checkbox" :checked="order.inPool" :disabled="busy" @change="setPool(!order.inPool)" />
           </label>
         </template>
-        <div class="detail__divided">
+        <div v-if="!order.carpool" class="detail__divided">
           <span class="section-label">{{ t('傳給乘客') }}</span>
           <button class="detail__link" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
             <AppIcon name="copy" :size="18" />{{ t('複製給乘客的確認訊息') }}
@@ -922,7 +968,7 @@ watch(id, () => {
           <AppIcon name="chevron" class="detail__fold-arrow" />
         </summary>
         <!-- 自己做: one price, what the passenger pays, and whether it came in. -->
-        <template v-if="ownTrip && !editingPrices">
+        <template v-if="ownTrip && !editingPrices && !order.carpool">
           <div class="detail__paid">
             <span class="detail__price">
               <span class="section-label">{{ t('價錢') }}</span>
@@ -949,6 +995,7 @@ watch(id, () => {
             <p v-if="tripPriceHere" class="detail__line">
               {{ t(`乘客價 ${money(order.passengerPrice) || '未填'}`) }}<template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
             </p>
+            <p v-else-if="order.carpool" class="detail__line">{{ t('拼車沒有整張單的乘客價：每組按每位價錢乘人數，在「拼車乘客」查看') }}</p>
             <p v-else class="detail__line">{{ t('乘客價整張單一個，在第 1 段查看和修改') }}</p>
             <p v-if="order.serviceFee" class="hint detail__fee">
               {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整張接駁單只收一次，取消會退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
@@ -964,7 +1011,7 @@ watch(id, () => {
                   @change="patchPrices({ showPassengerPrice: !order.showPassengerPrice }, '已更新')"
                 />
               </label>
-              <button class="button secondary block detail__gap" type="button" @click="editPrices">{{ t('修改價格') }}</button>
+              <button v-if="!(order.carpool && order.selfDrive)" class="button secondary block detail__gap" type="button" @click="editPrices">{{ t('修改價格') }}</button>
             </template>
           </template>
         </template>

@@ -27,6 +27,29 @@
         "dev:admin"
       ],
       "port": 5181
+    },
+    {
+      "name": "carpool-api",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:api"
+      ],
+      "port": 3030
+    },
+    {
+      "name": "carpool-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--workspace",
+        "web",
+        "exec",
+        "--",
+        "vite",
+        "--config",
+        "vite.carpool-local.config.ts"
+      ],
+      "port": 5190
     }
   ]
 }

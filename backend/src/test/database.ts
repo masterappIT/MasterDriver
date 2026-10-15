@@ -21,6 +21,7 @@ import { NotificationStreams } from '../notifications/notification-streams';
 import { ObservabilityService } from '../observability/observability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
+import { CarpoolsService } from '../carpools/carpools.service';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { SiteService } from '../site/site.service';
@@ -36,6 +37,8 @@ const TABLES = [
   'ObservabilityRequestStat',
   'ObservabilityInstance',
   'Notification',
+  'CarpoolSeat',
+  'Carpool',
   'DriverNote',
   'BookingRequest',
   'ProfilePhoto',
@@ -128,9 +131,12 @@ export async function setupDatabase() {
   const notifications = new NotificationsService(prisma, streams);
   const profilePages = new ProfilePagesService(prisma, mediaStorage, config, notifications);
   const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config, notifications);
+  const paymentMethods = new PaymentMethodsService(prisma);
+  const carpools = new CarpoolsService(prisma, orders, notifications, paymentMethods, mediaStorage, config);
   return {
     prisma,
     sms,
+    carpools,
     developmentLogin,
     auth: new AuthService(prisma, config, sms, developmentLogin),
     entitlements,

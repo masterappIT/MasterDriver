@@ -19,6 +19,11 @@ export type NotificationKind =
   | 'BOOKING_NEW'
   | 'BOOKING_ACCEPTED'
   | 'BOOKING_CANCELLED'
+  | 'CARPOOL_SEAT_NEW'
+  | 'CARPOOL_SEAT_WAITING'
+  | 'CARPOOL_SEAT_CANCELLED'
+  | 'CARPOOL_FORMED'
+  | 'CARPOOL_CLOSED'
   | 'SUPPORT_REPLY';
 
 export interface NotificationItem {
@@ -26,6 +31,8 @@ export interface NotificationItem {
   kind: NotificationKind;
   orderId: string | null;
   bookingId: string | null;
+  /** 拼車 */
+  carpoolId?: string | null;
   summary: string;
   pickupAt: string | null;
   read: boolean;
@@ -48,6 +55,11 @@ const TITLES: Record<NotificationKind, string> = {
   BOOKING_NEW: '名片頁有新預約',
   BOOKING_ACCEPTED: '乘客同意了你的報價',
   BOOKING_CANCELLED: '乘客取消了預約',
+  CARPOOL_SEAT_NEW: '有人報了你的拼車',
+  CARPOOL_SEAT_WAITING: '有人報了你的拼車，等你確認',
+  CARPOOL_SEAT_CANCELLED: '乘客取消了拼車報位',
+  CARPOOL_FORMED: '你的拼車已成行',
+  CARPOOL_CLOSED: '你的拼車已截止報位',
   SUPPORT_REPLY: '客服回覆了你',
 };
 
@@ -59,6 +71,8 @@ export function describe(item: NotificationItem) {
       ? '/support'
       : item.bookingId
         ? `/app/bookings/${item.bookingId}`
+        : item.carpoolId
+          ? `/app/carpools/${item.carpoolId}`
         : item.orderId && item.kind !== 'ORDER_REOPENED'
           ? `/app/orders/${item.orderId}`
           : null;

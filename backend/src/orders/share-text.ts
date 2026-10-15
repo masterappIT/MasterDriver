@@ -174,3 +174,28 @@ export function passengerShareText(order: ShareOrder, confirmUrl: string, legs?:
   }
   return `您好，您的行程 ${formatPickup(order.pickupAt)} ${route(order)} 已安排${shownPassengerPrice([order])}，請按連結查看並確認：${confirmUrl}`;
 }
+
+/** 拼車: the parties on a carpool order, as drivers need them before claiming. */
+export interface ShareCarpool {
+  partyCount: number;
+  /** 上車點, each once, in the order the parties asked. */
+  stops: string[];
+}
+
+/**
+ * A carpool order in one text: where the parties get on, how many parties and people, and the
+ * driver price. Never a passenger's name, phone or fare.
+ */
+export function carpoolShareText(order: ShareOrder, carpool: ShareCarpool, dispatchUrl: string) {
+  const heading = `【有單・拼車】${formatPickup(order.pickupAt)}`;
+  const load = [`${carpool.partyCount}組`, `${order.passengers}人`, `${order.luggage}件行李`, order.vehicleType].filter(Boolean).join('｜');
+  const body = [
+    route(order),
+    carpool.stops.length > 0 ? `上車點：${carpool.stops.join('、')}` : null,
+    `拼車：${load}`,
+    order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
+    order.notes ? `備註：${order.notes}` : null,
+    `搶單：${dispatchUrl}`,
+  ].filter((line): line is string => line !== null);
+  return { wechat: [heading, ...body].join('\n'), whatsapp: [`*${heading}*`, ...body].join('\n') };
+}

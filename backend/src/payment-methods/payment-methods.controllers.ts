@@ -12,7 +12,7 @@ import { apiError } from '../common/errors';
 import { ZodPipe } from '../common/zod-pipe';
 import { PaymentMethodsService } from './payment-methods.service';
 
-function sendQr(response: Response, image: { mime: string; bytes: Buffer } | null) {
+export function sendQr(response: Response, image: { mime: string; bytes: Buffer } | null) {
   if (!image) throw apiError(HttpStatus.NOT_FOUND, 'PAYMENT_METHOD_NOT_FOUND', 'QR not available');
   response
     .set({

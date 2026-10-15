@@ -128,3 +128,13 @@ test('即時單 reads 現在出發 in the group instead of a time', () => {
   assert.ok(text.wechat.includes('深圳灣口岸 → 香港國際機場'));
   assert.ok(!text.wechat.includes('14:30'));
 });
+
+test('a carpool order lists its pickups and parties for drivers, never a passenger', async () => {
+  const { carpoolShareText } = await import('./share-text');
+  const text = carpoolShareText({ ...order, waypoints: [], passengers: 3, luggage: 2 }, { partyCount: 2, stops: ['深圳灣口岸', '南山海岸城'] }, 'https://x.test/o/abc');
+  assert.equal(
+    text.wechat,
+    ['【有單・拼車】10/15（四）14:30', '深圳灣口岸 → 香港國際機場', '上車點：深圳灣口岸、南山海岸城', '拼車：2組｜3人｜2件行李｜7座', 'HK$850', '備註：需要兒童座椅', '搶單：https://x.test/o/abc'].join('\n'),
+  );
+  assert.ok(text.whatsapp.startsWith('*【有單・拼車】10/15（四）14:30*\n'));
+});

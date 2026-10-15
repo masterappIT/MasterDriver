@@ -32,6 +32,8 @@ export interface NotificationInput {
   group: NotificationGroup;
   order?: TripRef;
   booking?: TripRef;
+  /** 拼車: the carpool it is about. */
+  carpool?: TripRef;
   dedupeKey?: string;
 }
 
@@ -63,7 +65,7 @@ export class NotificationsService {
         });
         if (moved.count > 0) return this.streams.poke(input.userId, now);
       }
-      const trip = input.order ?? input.booking;
+      const trip = input.order ?? input.booking ?? input.carpool;
       const created = await this.prisma.notification.createMany({
         data: [
           {
@@ -71,6 +73,7 @@ export class NotificationsService {
             kind: input.kind,
             orderId: input.order?.id ?? null,
             bookingId: input.booking?.id ?? null,
+            carpoolId: input.carpool?.id ?? null,
             summary: trip ? `${trip.origin} 至 ${trip.destination}` : '',
             pickupAt: trip?.pickupAt ?? null,
             dedupeKey: input.dedupeKey ?? null,
@@ -93,6 +96,7 @@ export class NotificationsService {
   async list(userId: string, now = new Date()) {
     await this.revealDue(userId, now);
     await this.unclaimedDue(userId, now);
+    await this.carpoolClosedDue(userId, now);
     await this.prisma.notification.deleteMany({ where: { userId, createdAt: { lt: new Date(now.getTime() - NOTIFICATION_KEEP_DAYS * DAY_MS) } } });
     const [rows, unread] = await Promise.all([
       this.prisma.notification.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: NOTIFICATION_PAGE_SIZE }),
@@ -105,6 +109,7 @@ export class NotificationsService {
         kind: row.kind,
         orderId: row.orderId,
         bookingId: row.bookingId,
+        carpoolId: row.carpoolId,
         summary: row.summary,
         pickupAt: row.pickupAt?.toISOString() ?? null,
         read: row.readAt !== null,
@@ -205,6 +210,25 @@ export class NotificationsService {
       await this.send(
         { userId, kind: 'ORDER_UNCLAIMED', group: 'DISPATCHED', order, dedupeKey: `unclaimed:${order.id}:now` },
         new Date(order.pickupAt.getTime() + waited),
+      );
+    }
+  }
+
+  /**
+   * 拼車 報位已截止: nothing happens when the time to ask for seats runs out, so the line is
+   * written the next time the driver's notifications are read, dated when it ran out, like
+   * 還沒人接. Once for each closing time: a carpool opened again and closing later is told again.
+   */
+  async carpoolClosedDue(userId: string, now = new Date()) {
+    const carpools = await this.prisma.carpool.findMany({
+      where: { driverId: userId, status: 'OPEN', closesAt: { lte: now, gt: new Date(now.getTime() - NOTIFICATION_KEEP_DAYS * DAY_MS) } },
+      select: { ...tripSelect, closesAt: true, createdAt: true },
+    });
+    for (const carpool of carpools) {
+      if (carpool.closesAt < carpool.createdAt) continue;
+      await this.send(
+        { userId, kind: 'CARPOOL_CLOSED', group: 'BOOKINGS', carpool, dedupeKey: `carpool-closed:${carpool.id}:${carpool.closesAt.getTime()}` },
+        carpool.closesAt,
       );
     }
   }

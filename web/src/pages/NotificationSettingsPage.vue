@@ -15,7 +15,7 @@ type Group = 'DISPATCHED' | 'CLAIMED' | 'BOOKINGS' | 'SUPPORT';
 const GROUPS: { key: Group; title: string; detail: string }[] = [
   { key: 'DISPATCHED', title: '我出的單', detail: '有司機接單、乘客確認行程、行程完成' },
   { key: 'CLAIMED', title: '我接的單', detail: '被取消、被改派、已結清、可以看乘客電話了' },
-  { key: 'BOOKINGS', title: '名片頁預約', detail: '新預約、乘客同意報價、乘客取消' },
+  { key: 'BOOKINGS', title: '名片頁預約與拼車', detail: '新預約、乘客同意報價、乘客取消；拼車有人報位、取消、成行、截止' },
   { key: 'SUPPORT', title: '客服', detail: '客服回覆你' },
 ];
 

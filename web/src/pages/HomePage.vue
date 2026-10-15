@@ -78,7 +78,7 @@ const sent = computed(() => {
   };
 });
 const sentTotal = computed(() => sent.value.open + sent.value.taken + sent.value.confirmed);
-const waiting = computed(() => unread.bookings + unread.support);
+const waiting = computed(() => unread.bookings + unread.support + unread.carpools);
 
 /** "今天 10/14（二）" under the greeting. */
 const today = computed(() => pickup(now.value.toISOString()).replace(/\s?\d{2}:\d{2}$/, ''));
@@ -129,6 +129,10 @@ onBeforeUnmount(() => clearInterval(clock));
         <span>{{ t(`${unread.bookings} 個新預約等你回覆`) }}</span>
         <span class="home__go">{{ t('查看') }}</span>
       </RouterLink>
+      <RouterLink v-if="unread.carpools" to="/app/carpools" class="home__row">
+        <span>{{ t(`${unread.carpools} 個拼車報位等你確認`) }}</span>
+        <span class="home__go">{{ t('查看') }}</span>
+      </RouterLink>
       <RouterLink v-if="unread.support" to="/support" class="home__row">
         <span>{{ t('客服回覆了你') }}</span>
         <span class="home__go">{{ t('查看') }}</span>
@@ -164,6 +168,7 @@ onBeforeUnmount(() => clearInterval(clock));
     </section>
     <!-- Sharing the 名片頁 is an occasional thing: one quiet line, not a button above the trips. -->
     <RouterLink to="/app/profile-page" class="home__share">{{ t('分享名片，讓客人直接約你') }}</RouterLink>
+    <RouterLink to="/app/carpools" class="home__share">{{ t('開拼車，讓乘客報位') }}</RouterLink>
 
     <RouterLink v-if="sentTotal" to="/app/orders?tab=dispatched" class="card home__summary">
       <span class="home__label">{{ t('我出的單') }}</span>
@@ -269,6 +274,10 @@ onBeforeUnmount(() => clearInterval(clock));
   margin: calc(var(--space-sm) * -1) var(--space-xs) var(--space-lg);
   font-size: var(--font-label);
   font-weight: 600;
+}
+/* 拼車 sits just under the 名片頁 line, as quiet as it. */
+.home__share + .home__share {
+  margin-top: calc(var(--space-md) * -1);
 }
 .home__fee {
   margin: 0 0 var(--space-lg);

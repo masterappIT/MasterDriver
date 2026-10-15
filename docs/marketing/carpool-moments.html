@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>拼車朋友圈圖</title>
+<style>
+  /* 拼車 introduction for WeChat Moments, 1080×1440 (3:4). Colours from docs/DESIGN.md 通關玻璃. */
+  :root {
+    --bg: #edf2f7;
+    --text: #142033;
+    --text-2: #556579;
+    --muted: #8f9db0;
+    --primary: #1f5fd6;
+    --teal: #0e9f9a;
+    --gold: #e6a206;
+    --gold-ink: #8a5a00;
+    --gold-tint: #fff3d6;
+    --tint: #e5edfb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1440px; overflow: hidden; }
+  body {
+    position: relative;
+    background:
+      radial-gradient(900px 700px at -10% -5%, rgba(31, 95, 214, 0.22), transparent 70%),
+      radial-gradient(800px 800px at 115% 45%, rgba(14, 159, 154, 0.18), transparent 70%),
+      radial-gradient(700px 500px at 30% 110%, rgba(230, 162, 6, 0.10), transparent 70%),
+      var(--bg);
+    font-family: 'PingFang TC', 'PingFang HK', 'Hiragino Sans GB', sans-serif;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    padding: 64px 96px 56px;
+  }
+  .brand { display: flex; align-items: center; gap: 18px; }
+  .brand__mark {
+    width: 64px; height: 64px; border-radius: 18px;
+    display: grid; place-items: center;
+    background: linear-gradient(135deg, #1f5fd6, #0e9f9a);
+  }
+  .brand__name { font-size: 30px; font-weight: 700; letter-spacing: 1px; }
+  .brand__new {
+    margin-left: auto; padding: 10px 24px; border-radius: 100px;
+    background: var(--gold-tint); color: var(--gold-ink); font-size: 26px; font-weight: 700;
+  }
+  h1 { margin-top: 44px; font-size: 108px; line-height: 1.1; font-weight: 800; letter-spacing: 2px; }
+  h1 em { font-style: normal; color: var(--primary); }
+  .lede { margin-top: 22px; font-size: 33px; line-height: 1.5; color: var(--text-2); }
+
+  /* The carpool as passengers see its link: the trip and the seats left. */
+  .card {
+    position: relative; margin-top: 40px; padding: 34px 44px 30px;
+    border-radius: 40px; background: rgba(255, 255, 255, 0.84);
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 24px 60px rgba(20, 32, 51, 0.10);
+  }
+  .card__top { display: flex; align-items: center; justify-content: space-between; }
+  .tag { padding: 8px 22px; border-radius: 100px; background: var(--tint); color: var(--primary); font-size: 26px; font-weight: 700; }
+  .time { font-size: 30px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .route { margin-top: 26px; display: flex; align-items: center; gap: 16px; }
+  .dot { width: 22px; height: 22px; border-radius: 50%; justify-self: center; }
+  .dot--from { background: var(--teal); box-shadow: 0 0 0 7px rgba(14, 159, 154, 0.16); }
+  .dot--to { background: var(--gold); box-shadow: 0 0 0 7px rgba(230, 162, 6, 0.18); }
+  .dot { flex-shrink: 0; }
+  .place { font-size: 40px; font-weight: 800; white-space: nowrap; }
+  .line { flex: 1; height: 3px; min-width: 40px; background: repeating-linear-gradient(90deg, var(--muted) 0 8px, transparent 8px 16px); }
+  .seats { margin-top: 30px; display: flex; gap: 22px; }
+  .seat { flex: 1; text-align: center; }
+  .seat svg { display: block; margin: 0 auto 6px; }
+  .seat span { font-size: 24px; font-weight: 700; color: var(--muted); }
+  .seat--taken span { color: var(--primary); }
+  .seat--free span { color: var(--gold-ink); }
+  .card__foot { margin-top: 22px; padding-top: 22px; border-top: 2px solid #e2e8ef; display: flex; align-items: baseline; justify-content: space-between; }
+  .price { font-size: 40px; font-weight: 800; color: var(--gold-ink); }
+  .left { font-size: 32px; font-weight: 800; color: var(--gold-ink); }
+
+  .steps { margin-top: 36px; margin-bottom: 30px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .step__no { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: #fff; font-size: 28px; font-weight: 800; }
+  .step strong { display: block; margin-top: 18px; font-size: 34px; font-weight: 800; }
+  .step p { margin-top: 10px; font-size: 25px; line-height: 1.5; color: var(--text-2); }
+
+  footer { margin-top: auto; padding-top: 24px; border-top: 2px solid rgba(20, 32, 51, 0.08); }
+  .free { font-size: 32px; font-weight: 700; color: var(--teal); }
+  .note { margin-top: 12px; font-size: 22px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="brand">
+    <div class="brand__mark">
+      <svg width="40" height="31" viewBox="0 0 50 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M33.9404 28.3711V29.5554L34.919 30.1218L35.949 29.5554V28.3711L34.919 27.8047L33.9404 28.3711Z" fill="white"/>
+        <path d="M30.1289 0C23.6396 0 17.9743 3.24391 14.5237 8.13551C6.43779 8.34147 0 14.9323 0 23.0678C0 31.3062 6.6953 38 14.9357 38C15.0387 38 15.1417 38 15.2447 38H29.9743C30.0258 38 30.0774 38 30.1289 38C30.1804 38 30.2319 38 30.2834 38H30.4379C40.7898 37.8455 49.1332 29.4011 49.1332 19C49.1332 8.49595 40.6353 0 30.1289 0ZM13.0816 27.8049L8.9614 26.5176L17.2533 12.3577L21.3735 13.645L13.0816 27.8049ZM16.2232 26.5176L24.5151 12.3577L28.6353 13.645L20.3434 27.8049L16.2232 26.5176ZM37.6482 30.5339L34.9186 32.0786L32.1889 30.5339V27.393L33.7855 26.4661V17.0949L27.5537 27.8049L23.4336 26.5176L31.7254 12.3577L35.8456 13.645H36.1031V26.5176L37.6997 27.4444V30.5339H37.6482Z" fill="white"/>
+      </svg>
+    </div>
+    <span class="brand__name">MasterDriver 跨境師傅幫</span>
+    <span class="brand__new">新功能・拼車</span>
+  </div>
+
+  <h1>一條連結<br><em>湊滿一車</em></h1>
+  <p class="lede">開一趟拼車，把連結發給乘客，<br>他們打開就能自己報位。</p>
+
+  <section class="card">
+    <div class="card__top">
+      <span class="tag">拼車</span>
+      <span class="time">10/16（五）15:00</span>
+    </div>
+    <div class="route">
+      <span class="dot dot--from"></span><span class="place">深圳灣口岸</span>
+      <span class="line"></span>
+      <span class="dot dot--to"></span><span class="place">香港國際機場</span>
+    </div>
+    <div class="seats">
+      <!-- A car seat, filled for a seat asked for, outlined for one still free. -->
+      <div class="seat seat--taken"><svg width="72" height="72" viewBox="0 0 48 48"><path d="M14 6h20a4 4 0 0 1 4 4v16H10V10a4 4 0 0 1 4-4z" fill="#1f5fd6"/><rect x="6" y="26" width="36" height="10" rx="5" fill="#1f5fd6"/><rect x="11" y="36" width="5" height="7" rx="2" fill="#1749a8"/><rect x="32" y="36" width="5" height="7" rx="2" fill="#1749a8"/></svg><span>已報</span></div>
+      <div class="seat seat--taken"><svg width="72" height="72" viewBox="0 0 48 48"><path d="M14 6h20a4 4 0 0 1 4 4v16H10V10a4 4 0 0 1 4-4z" fill="#1f5fd6"/><rect x="6" y="26" width="36" height="10" rx="5" fill="#1f5fd6"/><rect x="11" y="36" width="5" height="7" rx="2" fill="#1749a8"/><rect x="32" y="36" width="5" height="7" rx="2" fill="#1749a8"/></svg><span>已報</span></div>
+      <div class="seat seat--taken"><svg width="72" height="72" viewBox="0 0 48 48"><path d="M14 6h20a4 4 0 0 1 4 4v16H10V10a4 4 0 0 1 4-4z" fill="#1f5fd6"/><rect x="6" y="26" width="36" height="10" rx="5" fill="#1f5fd6"/><rect x="11" y="36" width="5" height="7" rx="2" fill="#1749a8"/><rect x="32" y="36" width="5" height="7" rx="2" fill="#1749a8"/></svg><span>已報</span></div>
+      <div class="seat seat--free"><svg width="72" height="72" viewBox="0 0 48 48"><path d="M14 7.5h20a2.5 2.5 0 0 1 2.5 2.5v15.5h-25V10A2.5 2.5 0 0 1 14 7.5z" fill="#fff3d6" stroke="#e6a206" stroke-width="3"/><rect x="7.5" y="27.5" width="33" height="7" rx="3.5" fill="#fff3d6" stroke="#e6a206" stroke-width="3"/><rect x="11" y="36" width="5" height="7" rx="2" fill="#e6a206"/><rect x="32" y="36" width="5" height="7" rx="2" fill="#e6a206"/></svg><span>空位</span></div>
+    </div>
+    <div class="card__foot">
+      <span class="price">每位 HK$200</span>
+      <span class="left">剩 1 位</span>
+    </div>
+  </section>
+
+  <section class="steps">
+    <div class="step"><span class="step__no">1</span><strong>開拼車</strong><p>填時間、路線<br>座位和每位價錢</p></div>
+    <div class="step"><span class="step__no">2</span><strong>乘客報位</strong><p>打開連結就能報<br>不用註冊、不用下載</p></div>
+    <div class="step"><span class="step__no">3</span><strong>湊夠出發</strong><p>自己開<br>或派給群裡的師傅</p></div>
+  </section>
+
+  <footer>
+    <p class="free">免費使用｜微信內直接打開</p>
+    <p class="note">車費由你和乘客自行約定並直接收取，平台不經手。by MasterApp</p>
+  </footer>
+</body>
+</html>

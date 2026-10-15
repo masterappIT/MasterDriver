@@ -24,6 +24,10 @@ import {
   type PoolQuery,
   type PoolUpdate,
   type UpdateOrderPricesInput,
+  carpoolSeatPaymentSchema,
+  carpoolSeatProgressSchema,
+  type CarpoolSeatPayment,
+  type CarpoolSeatProgress,
 } from '@masterdriver/shared';
 import type { Response } from 'express';
 import { AuthGuard, CurrentUser, OptionalAuthGuard } from '../auth/auth.guard';
@@ -159,6 +163,29 @@ export class OrdersController {
   @HttpCode(200)
   progress(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(orderProgressSchema)) body: OrderProgress) {
     return this.orders.progress(user.id, id, body);
+  }
+
+  /** 拼車: one party's 已到上車點, 已上車, 乘客沒出現 or 已下車, from whoever drives the order. */
+  @Post(':id/carpool-seats/:seatId/progress')
+  @HttpCode(200)
+  partyProgress(
+    @CurrentUser() user: SessionUser,
+    @Param('id') id: string,
+    @Param('seatId') seatId: string,
+    @Body(new ZodPipe(carpoolSeatProgressSchema)) body: CarpoolSeatProgress,
+  ) {
+    return this.orders.partyProgress(user.id, id, seatId, body);
+  }
+
+  /** 拼車: 已收款 for one party. */
+  @Patch(':id/carpool-seats/:seatId/payment')
+  partyPayment(
+    @CurrentUser() user: SessionUser,
+    @Param('id') id: string,
+    @Param('seatId') seatId: string,
+    @Body(new ZodPipe(carpoolSeatPaymentSchema)) body: CarpoolSeatPayment,
+  ) {
+    return this.orders.partyPayment(user.id, id, seatId, body);
   }
 
   @Post(':id/release')

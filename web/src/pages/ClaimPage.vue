@@ -9,6 +9,7 @@ import ContactLines from '../components/ContactLines.vue';
 import InlineStatus from '../components/InlineStatus.vue';
 import JoinGroups, { type OfferedGroup } from '../components/JoinGroups.vue';
 import JourneyLegs from '../components/JourneyLegs.vue';
+import CarpoolParties, { type CarpoolOnOrder } from '../components/CarpoolParties.vue';
 import BottomSheet from '../components/BottomSheet.vue';
 import PlateTag from '../components/PlateTag.vue';
 import RoutePoints from '../components/RoutePoints.vue';
@@ -44,6 +45,8 @@ interface ClaimView {
   favoritesOnlyUntil: string | null;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
+  /** 拼車: the parties on board; before claiming, only where they get on and off. */
+  carpool?: CarpoolOnOrder | null;
   dispatcherName: string | null;
   passengerConfirmedAt: string | null;
   viewer: 'dispatcher' | 'driver' | 'other';
@@ -303,6 +306,11 @@ onBeforeUnmount(() => {
         <RouterLink v-if="order.dispatcherPageCode && order.viewer === 'other'" class="claim-page__card-link" :to="`/p/${order.dispatcherPageCode}`">{{ t('看名片') }}</RouterLink>
         <span v-if="order.dispatcherCompletedTrips">{{ t(`已在師傅幫完成 ${order.dispatcherCompletedTrips} 張單`) }}</span>
       </p>
+
+      <!-- 拼車: the stops a driver makes, before they claim. -->
+      <section v-if="order.carpool" class="card">
+        <CarpoolParties :carpool="order.carpool" :destination="order.destination" />
+      </section>
 
       <!-- 接駁 from the group: each leg with its own time, plates, price and button. -->
       <section v-if="offering && trip" class="card claim-page__legs">

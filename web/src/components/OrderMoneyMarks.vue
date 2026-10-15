@@ -8,7 +8,7 @@ import { t } from '../i18n';
  * takes no money and checks nothing.
  */
 defineProps<{
-  order: { status: string; paidAt?: string | null; settledAt?: string | null; showPaymentMethods?: boolean; journey: unknown };
+  order: { status: string; paidAt?: string | null; settledAt?: string | null; showPaymentMethods?: boolean; journey: unknown; carpool?: unknown };
   isDispatcher: boolean;
   canSettle: boolean;
   busy: boolean;
@@ -18,7 +18,9 @@ defineEmits<{ payment: [body: { showPaymentMethods?: boolean; paid?: boolean }, 
 
 <template>
   <!-- 收款: the dispatcher's own mark, after checking their account. -->
-  <div v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__paid detail__divided">
+  <!-- 拼車: each party pays on its own; marked in 拼車乘客, and the ways to pay are set on the carpool. -->
+  <p v-if="isDispatcher && order.carpool && order.status !== 'CANCELLED'" class="hint detail__divided">{{ t('拼車每組各自付款：在「拼車乘客」逐組標記已收款；收款方式在拼車頁開關。') }}</p>
+  <div v-if="isDispatcher && !order.carpool && order.status !== 'CANCELLED'" class="detail__paid detail__divided">
     <span class="detail__paid-state" :class="{ 'detail__paid-state--yes': order.paidAt }">
       {{ order.paidAt ? t(`${shortTime(order.paidAt)} 已收款`) : t('未收款') }}
     </span>
@@ -26,7 +28,7 @@ defineEmits<{ payment: [body: { showPaymentMethods?: boolean; paid?: boolean }, 
       {{ order.paidAt ? t('改回未收款') : t('標記已收款') }}
     </button>
   </div>
-  <label v-if="isDispatcher && order.status !== 'CANCELLED'" class="detail__switch detail__divided">
+  <label v-if="isDispatcher && !order.carpool && order.status !== 'CANCELLED'" class="detail__switch detail__divided">
     <span>
       {{ t('乘客確認頁顯示收款方式') }}
       <small>{{ order.journey ? t('整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>

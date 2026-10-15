@@ -83,16 +83,17 @@ export class PaymentMethodsService {
 
   /**
    * What the passenger's confirmation page lists: the dispatcher's methods, but only for an
-   * order that shows them and is not cancelled. QR links go through the confirmation code.
+   * order that shows them and is not cancelled. QR links go through the confirmation code, or
+   * for a 拼車 party through their own link (`link` 's').
    */
-  async forPassenger(ownerId: string, confirmCode: string) {
+  async forPassenger(ownerId: string, confirmCode: string, link: 'c' | 's' = 'c') {
     const methods = await this.prisma.paymentMethod.findMany({ where: { ownerId }, orderBy: { createdAt: 'asc' } });
     return methods.map((method) => ({
       id: method.id,
       kind: method.kind,
       label: method.label,
       account: method.account,
-      qrUrl: method.qrImage ? `/api/c/${confirmCode}/payment-methods/${method.id}/qr?v=${method.updatedAt.getTime()}` : null,
+      qrUrl: method.qrImage ? `/api/${link}/${confirmCode}/payment-methods/${method.id}/qr?v=${method.updatedAt.getTime()}` : null,
     }));
   }
 

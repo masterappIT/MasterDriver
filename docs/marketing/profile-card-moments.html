@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>名片頁朋友圈圖</title>
+<style>
+  /* 名片頁 introduction for WeChat Moments, 1080×1440 (3:4): a promotion in the manner of travel-app ads
+     (a bold blue panel, a white product card, a yellow tag, big figures), in docs/DESIGN.md colours. */
+  :root {
+    --text: #142033;
+    --text-2: #556579;
+    --muted: #8f9db0;
+    --primary: #1f5fd6;
+    --primary-dark: #1749a8;
+    --teal: #0e9f9a;
+    --gold: #e6a206;
+    --gold-ink: #8a5a00;
+    --gold-tint: #fff3d6;
+    --tint: #e5edfb;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1440px; overflow: hidden; }
+  body {
+    position: relative;
+    background: #edf2f7;
+    font-family: 'PingFang TC', 'PingFang HK', 'Hiragino Sans GB', sans-serif;
+    color: var(--text);
+  }
+  /* The blue panel across the top, curving at its foot. */
+  .panel {
+    position: absolute; inset: 0 0 auto 0; height: 860px;
+    background:
+      radial-gradient(600px 500px at 100% 0%, rgba(14, 159, 154, 0.55), transparent 70%),
+      linear-gradient(160deg, #2a6be6 0%, #1f5fd6 45%, #1749a8 100%);
+    border-radius: 0 0 50% 50% / 0 0 90px 90px;
+  }
+  .content { position: relative; padding: 64px 88px 0; }
+  .brand { display: flex; align-items: center; gap: 16px; color: #fff; }
+  .brand__mark { width: 60px; height: 60px; border-radius: 17px; display: grid; place-items: center; background: rgba(255, 255, 255, 0.18); }
+  .brand__name { font-size: 29px; font-weight: 700; letter-spacing: 1px; }
+  .sticker {
+    position: absolute; top: 64px; right: 88px;
+    padding: 12px 28px; border-radius: 100px;
+    background: #ffd447; color: #5a3b00; font-size: 28px; font-weight: 800;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  }
+  h1 { margin-top: 44px; color: #fff; font-size: 96px; line-height: 1.12; font-weight: 800; letter-spacing: 2px; }
+  h1 em { font-style: normal; color: #ffd447; }
+  .lede { margin-top: 20px; color: rgba(255, 255, 255, 0.88); font-size: 31px; line-height: 1.5; }
+
+  /* The 名片頁 as a passenger opens it. */
+  .phone {
+    position: relative; margin: 40px 0 0 0; width: 560px;
+    border-radius: 44px; background: #fff; padding: 22px;
+    box-shadow: 0 30px 70px rgba(10, 30, 70, 0.30);
+  }
+  .photo {
+    height: 190px; border-radius: 28px; overflow: hidden;
+    background: linear-gradient(180deg, #dfe9f7 0%, #c9d8ee 100%);
+    display: grid; place-items: end center;
+  }
+  .phone__body { padding: 18px 12px 4px; }
+  .name { font-size: 36px; font-weight: 800; }
+  .car { margin-top: 6px; font-size: 24px; color: var(--text-2); }
+  .trips { display: inline-block; margin-top: 12px; padding: 6px 16px; border-radius: 100px; background: var(--gold-tint); color: var(--gold-ink); font-size: 22px; font-weight: 700; }
+  .routes { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .routes span { padding: 6px 16px; border-radius: 100px; background: var(--tint); color: var(--primary); font-size: 22px; font-weight: 700; }
+  .book { margin-top: 18px; height: 68px; border-radius: 100px; background: var(--primary); color: #fff; display: grid; place-items: center; font-size: 30px; font-weight: 800; }
+
+  /* A booking arriving, beside the page. */
+  .ping {
+    position: absolute; top: 600px; right: 64px; width: 420px;
+    padding: 26px 28px; border-radius: 28px; background: #fff;
+    box-shadow: 0 20px 50px rgba(10, 30, 70, 0.22);
+  }
+  .ping__head { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 700; color: var(--teal); }
+  .ping__head i { width: 14px; height: 14px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 6px rgba(14, 159, 154, 0.18); }
+  .ping strong { display: block; margin-top: 12px; font-size: 30px; font-weight: 800; }
+  .ping p { margin-top: 6px; font-size: 23px; color: var(--text-2); line-height: 1.45; }
+  .ping__quote { margin-top: 16px; display: flex; align-items: baseline; justify-content: space-between; padding-top: 14px; border-top: 2px solid #e2e8ef; }
+  .ping__quote span { font-size: 24px; color: var(--text-2); }
+  .ping__quote b { font-size: 36px; color: var(--gold-ink); }
+  .ping__then { margin-top: 8px; font-size: 22px; color: var(--teal); font-weight: 700; }
+
+  /* What it costs: the big figures. */
+  .costs { position: absolute; left: 88px; right: 88px; top: 1124px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .cost { padding: 22px 24px; border-radius: 28px; background: rgba(255, 255, 255, 0.86); border: 2px solid rgba(255, 255, 255, 0.95); }
+  .cost b { display: block; font-size: 46px; line-height: 1; font-weight: 800; color: var(--primary); }
+  .cost span { display: block; margin-top: 10px; font-size: 23px; line-height: 1.4; color: var(--text-2); }
+
+  footer { position: absolute; left: 88px; right: 88px; bottom: 56px; display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+  .how { font-size: 27px; font-weight: 700; line-height: 1.5; }
+  .how small { display: block; margin-top: 6px; font-size: 21px; font-weight: 400; color: var(--muted); }
+  .site { text-align: right; font-size: 21px; color: var(--muted); line-height: 1.5; }
+  .site b { display: block; font-size: 24px; color: var(--primary); }
+</style>
+</head>
+<body>
+  <div class="panel"></div>
+  <span class="sticker">免費開通</span>
+
+  <div class="content">
+    <div class="brand">
+      <div class="brand__mark">
+        <svg width="38" height="29" viewBox="0 0 50 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M33.9404 28.3711V29.5554L34.919 30.1218L35.949 29.5554V28.3711L34.919 27.8047L33.9404 28.3711Z" fill="white"/>
+          <path d="M30.1289 0C23.6396 0 17.9743 3.24391 14.5237 8.13551C6.43779 8.34147 0 14.9323 0 23.0678C0 31.3062 6.6953 38 14.9357 38C15.0387 38 15.1417 38 15.2447 38H29.9743C30.0258 38 30.0774 38 30.1289 38C30.1804 38 30.2319 38 30.2834 38H30.4379C40.7898 37.8455 49.1332 29.4011 49.1332 19C49.1332 8.49595 40.6353 0 30.1289 0ZM13.0816 27.8049L8.9614 26.5176L17.2533 12.3577L21.3735 13.645L13.0816 27.8049ZM16.2232 26.5176L24.5151 12.3577L28.6353 13.645L20.3434 27.8049L16.2232 26.5176ZM37.6482 30.5339L34.9186 32.0786L32.1889 30.5339V27.393L33.7855 26.4661V17.0949L27.5537 27.8049L23.4336 26.5176L31.7254 12.3577L35.8456 13.645H36.1031V26.5176L37.6997 27.4444V30.5339H37.6482Z" fill="white"/>
+        </svg>
+      </div>
+      <span class="brand__name">MasterDriver 跨境師傅幫</span>
+    </div>
+
+    <h1>一條連結<br>就是你的<em>接單門面</em></h1>
+    <p class="lede">放朋友圈、小紅書，傳給熟客，<br>客人打開就能直接向你預約。</p>
+
+    <div class="phone">
+      <div class="photo">
+        <!-- A seven-seater from the side, as the car photo on the page. -->
+        <svg width="330" height="150" viewBox="0 0 420 190">
+          <ellipse cx="210" cy="176" rx="190" ry="10" fill="rgba(20,32,51,.12)"/>
+          <path d="M30 140 L36 96 Q42 70 70 64 L150 52 Q176 30 214 28 L318 30 Q350 32 370 62 L392 98 Q400 112 398 140 Z" fill="#142033"/>
+          <path d="M160 58 Q182 40 214 39 L300 40 Q326 42 340 66 L350 84 L150 86 Z" fill="#9fb6d8"/>
+          <rect x="240" y="40" width="8" height="46" fill="#142033"/>
+          <rect x="30" y="122" width="368" height="10" rx="5" fill="#2a3a52"/>
+          <circle cx="104" cy="146" r="30" fill="#0b1626"/><circle cx="104" cy="146" r="13" fill="#8f9db0"/>
+          <circle cx="320" cy="146" r="30" fill="#0b1626"/><circle cx="320" cy="146" r="13" fill="#8f9db0"/>
+          <rect x="370" y="100" width="22" height="10" rx="5" fill="#ffd447"/>
+        </svg>
+      </div>
+      <div class="phone__body">
+        <div class="name">陳師傅</div>
+        <div class="car">埃爾法・7座・黑・兩地牌</div>
+        <span class="trips">已在師傅幫完成 128 張單</span>
+        <div class="routes"><span>香港往返深圳灣</span><span>機場接送</span><span>粵語・普通話</span></div>
+        <div class="book">預約行程</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ping">
+    <div class="ping__head"><i></i>名片頁有新預約</div>
+    <strong>王小姐・3人2件行李</strong>
+    <p>10/18（日）10:00<br>香港國際機場 至 深圳灣口岸</p>
+    <div class="ping__quote"><span>你的報價</span><b>HK$950</b></div>
+    <p class="ping__then">客人同意，就成為你的單</p>
+  </div>
+
+  <section class="costs">
+    <div class="cost"><b>0 元</b><span>開通名片頁<br>個人用免費</span></div>
+    <div class="cost"><b>不用</b><span>自己做 App<br>或小程序</span></div>
+    <div class="cost"><b>直接收</b><span>車費歸你自己<br>平台不經手</span></div>
+  </section>
+
+  <footer>
+    <p class="how">在「我的」打開名片頁，填好就能分享<small>客人預約不用註冊・微信內直接打開</small></p>
+    <p class="site"><b>masterdriverapp.masterappinc.com</b>by MasterApp</p>
+  </footer>
+</body>
+</html>

@@ -118,3 +118,22 @@ test('busy, growing, paying dispatchers rank first; sales notes stick', async ()
   assert.deepEqual(contacted.items.map((lead) => [lead.name, lead.note]), [['大車隊', '已約下週演示']]);
   assert.deepEqual((await ctx.site.leads({ days: 30, status: 'NEW' })).items.map((lead) => lead.name), ['個體戶']);
 });
+
+test('on a new database, settings asked for by several pages at once are made once and every read succeeds', async () => {
+  // Opening the site the first time asks for the general settings and the SEO from several requests together.
+  const reads = await Promise.allSettled(
+    Array.from({ length: 8 }, (_, index) =>
+      index % 3 === 0 ? ctx.site.publicSettings() : index % 3 === 1 ? ctx.site.legalText('terms') : ctx.site.publicSeo('HOME'),
+    ),
+  );
+  assert.deepEqual(reads.filter((read) => read.status === 'rejected').map((read) => (read as PromiseRejectedResult).reason?.code), []);
+  assert.equal(await ctx.prisma.appSetting.count(), 1);
+  assert.equal(await ctx.prisma.seoSiteSetting.count(), 1);
+  assert.equal(await ctx.prisma.seoPageSetting.count(), 2);
+
+  // An ad's first impressions and clicks of the day, counted from several pages at once, all count.
+  const id = await ctx.site.createAd({ position: 'HOME', title: '新', body: '', imageUrl: '', linkUrl: 'https://mt.example/n', priority: 1, active: true });
+  await Promise.all([...Array.from({ length: 5 }, () => ctx.site.recordImpressions([id])), ...Array.from({ length: 3 }, () => ctx.site.click(id))]);
+  const listed = (await ctx.site.listAds()).find((ad) => ad.id === id)!;
+  assert.deepEqual(listed.last30Days, { impressions: 5, clicks: 3 });
+});

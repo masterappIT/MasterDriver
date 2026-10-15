@@ -22,6 +22,9 @@ const routes: RouteRecordRaw[] = [
   // 名片頁 and the passenger's booking link: public, no account.
   { path: '/p/:code', component: () => import('./pages/ProfilePublicPage.vue'), meta: { copyright: true, sessionLater: true } },
   { path: '/b/:code', component: () => import('./pages/BookingStatusPage.vue'), meta: { copyright: true } },
+  // 拼車: the link a driver gives passengers, and a passenger's own seats. Public, no account.
+  { path: '/r/:code', component: () => import('./pages/CarpoolPublicPage.vue'), meta: { copyright: true, sessionLater: true } },
+  { path: '/s/:code', component: () => import('./pages/CarpoolSeatPage.vue'), meta: { copyright: true } },
   { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { copyright: true } },
   // 客服: for signed-in users and for guests, so it sits outside the signed-in app.
   { path: '/support', component: () => import('./pages/SupportPage.vue') },
@@ -42,6 +45,9 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/payment-methods', component: () => import('./pages/PaymentMethodsPage.vue'), meta: { app: true } },
   { path: '/app/bookings', component: () => import('./pages/BookingsPage.vue'), meta: { app: true } },
   { path: '/app/bookings/:id', component: () => import('./pages/BookingDetailPage.vue'), meta: { app: true } },
+  { path: '/app/carpools', component: () => import('./pages/CarpoolsPage.vue'), meta: { app: true } },
+  { path: '/app/carpools/new', component: () => import('./pages/CarpoolNewPage.vue'), meta: { app: true } },
+  { path: '/app/carpools/:id', component: () => import('./pages/CarpoolDetailPage.vue'), meta: { app: true } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 
@@ -53,7 +59,7 @@ export const router = createRouter({
 
 router.beforeEach(async (to) => {
   // The passenger page never needs the driver's session.
-  if (to.path.startsWith('/c/') || to.path.startsWith('/b/')) return true;
+  if (to.path.startsWith('/c/') || to.path.startsWith('/b/') || to.path.startsWith('/s/')) return true;
   // The pages opened from a group or by passengers show at once, even while the server wakes up.
   if (to.meta.sessionLater) {
     void ensureSession();
