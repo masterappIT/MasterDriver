@@ -165,7 +165,7 @@ onMounted(async () => {
 
 <template>
   <div class="page my-page">
-    <!-- Opened from 首頁, 我的, 預約, the guide and the share page: 返回 goes back to whichever it was. -->
+    <!-- Opened from 首頁, 我的, 等我報價, the guide and the share page: 返回 goes back to whichever it was. -->
     <PageBack :title="t('我的名片頁')" fallback="/app/me" history />
     <div v-if="error" class="notice error">{{ error }}</div>
     <RouterLink class="my-page__guide" to="/app/guide/customers">{{ t('名片頁可以做什麼？連結放在哪裡？看教學') }}</RouterLink>

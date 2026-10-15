@@ -45,9 +45,9 @@ const TITLES: Record<NotificationKind, string> = {
   ORDER_CHANGE_ACKED: '接單司機確認了行程修改',
   ORDER_SETTLED: '出單者標記了已結清',
   CONTACT_REVEALED: '現在可以看乘客電話了',
-  BOOKING_NEW: '名片頁有新預約',
+  BOOKING_NEW: '名片頁有客人詢價',
   BOOKING_ACCEPTED: '乘客同意了你的報價',
-  BOOKING_CANCELLED: '乘客取消了預約',
+  BOOKING_CANCELLED: '乘客取消了詢價',
   SUPPORT_REPLY: '客服回覆了你',
 };
 

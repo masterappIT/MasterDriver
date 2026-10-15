@@ -65,11 +65,11 @@ async function run(action: () => Promise<DriverBooking>, done: string) {
 const sendQuote = () =>
   run(
     () => api<DriverBooking>('POST', `/me/bookings/${id}/quote`, { amount: Number(quote.amount), currency: quote.currency, note: quote.note }),
-    '報價已送出，乘客打開預約連結就看得到',
+    '報價已送出，乘客打開自己的連結就看得到',
   );
 
 function decline() {
-  if (!confirm(t('確定婉拒這個預約？乘客會在預約連結看到。'))) return;
+  if (!confirm(t('確定婉拒這個詢價？乘客會在自己的連結看到。'))) return;
   return run(() => api<DriverBooking>('POST', `/me/bookings/${id}/decline`), '已婉拒');
 }
 
@@ -156,7 +156,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <PageBack :title="t('預約詳情')" fallback="/app/bookings" />
+    <PageBack :title="t('詢價詳情')" fallback="/app/bookings" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="booking">
@@ -187,7 +187,7 @@ onBeforeUnmount(() => {
         </div>
         <button class="button secondary" type="button" @click="copy(booking.passengerWechat)">{{ t('複製') }}</button>
       </section>
-      <p class="hint booking-detail__tip">{{ t('乘客不一定會回來看預約連結，報價後最好也直接聯絡對方。') }}</p>
+      <p class="hint booking-detail__tip">{{ t('乘客不一定會回來看自己的連結，報價後最好也直接聯絡對方。') }}</p>
 
       <form v-if="quotable" class="card" @submit.prevent="sendQuote">
         <span class="section-label">{{ booking.quote ? t('修改報價') : t('你的報價') }}</span>
@@ -237,7 +237,7 @@ onBeforeUnmount(() => {
             {{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}
           </p>
         </template>
-        <button class="booking-detail__decline" type="button" :disabled="busy" @click="decline">{{ t('婉拒這個預約') }}</button>
+        <button class="booking-detail__decline" type="button" :disabled="busy" @click="decline">{{ t('婉拒這個詢價') }}</button>
       </template>
       <RouterLink v-else-if="booking.orderId" class="button block" :to="`/app/orders/${booking.orderId}`">{{ t('查看這張單') }}</RouterLink>
     </template>

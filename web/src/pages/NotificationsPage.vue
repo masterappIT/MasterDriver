@@ -32,7 +32,7 @@ onMounted(() => void refreshInbox());
     </PageBack>
 
     <p v-if="inbox.loaded && inbox.items.length === 0" class="notices__empty">
-      {{ t('還沒有通知。有人接了你出的單、乘客確認行程、名片頁有新預約、客服回覆你時，會在這裡出現。') }}
+      {{ t('還沒有通知。有人接了你出的單、乘客確認行程、名片頁有客人詢價、客服回覆你時，會在這裡出現。') }}
     </p>
 
     <section v-if="inbox.items.length" class="card notices">

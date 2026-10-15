@@ -29,7 +29,7 @@ const SAMPLE = {
 type Point = 'link' | 'booking' | 'phone' | 'price' | 'data' | 'transfer';
 const POINT_TABS: { value: Point; label: string }[] = [
   { value: 'link', label: '一條連結' },
-  { value: 'booking', label: '客人預約' },
+  { value: 'booking', label: '客人詢價' },
   { value: 'phone', label: '客人電話' },
   { value: 'price', label: '兩個價錢' },
   { value: 'data', label: '資料安全' },
@@ -42,11 +42,11 @@ const GROUPS = ['微信群 A', '微信群 B', 'WhatsApp 群'];
 const linkTaken = ref(false);
 
 /**
- * 客人預約: the driver's own 名片頁 takes bookings from their own customers. The driver quotes,
+ * 客人詢價: the driver's own 名片頁 takes bookings from their own customers. The driver quotes,
  * the passenger agrees, and one tap makes it the driver's trip.
  */
 const BOOKING_STEPS = [
-  { label: '乘客預約', note: '乘客在你的名片頁填', shows: '10/15 深圳灣 至 機場' },
+  { label: '客人詢價', note: '乘客在你的名片頁填', shows: '10/15 深圳灣 至 機場' },
   { label: '你報價', note: '你回一個價錢', shows: 'HK$1,000' },
   { label: '成單', note: '乘客同意，你按一下', shows: '成為你的行程' },
 ];
@@ -244,9 +244,9 @@ onMounted(async () => {
           <button class="landing__try" type="button" @click="linkTaken = !linkTaken">{{ linkTaken ? t('再來一次') : t('一位司機搶到') }}</button>
         </div>
 
-        <!-- 客人預約 -->
+        <!-- 客人詢價 -->
         <div v-else-if="point === 'booking'" class="landing__stage">
-          <p class="landing__claim">{{ t('你的名片頁，客人直接預約') }}</p>
+          <p class="landing__claim">{{ t('你的名片頁，客人直接向你詢價、約車') }}</p>
           <div class="landing__reveal landing__reveal--open">
             <small>{{ t(BOOKING_STEPS[bookingStep].note) }}</small>
             <strong :class="{ 'landing__done': bookingStep === 2 }">{{ t(BOOKING_STEPS[bookingStep].shows) }}</strong>

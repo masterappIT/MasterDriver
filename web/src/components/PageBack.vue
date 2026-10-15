@@ -8,7 +8,7 @@ import AppIcon from './AppIcon.vue';
  * The top bar of a page one step inside the tool: a clear 返回 on the left, the page's title,
  * and room on the right for the page's own action.
  *
- * 返回 goes up, to the page this one belongs under (`fallback`): 訂單詳情 to 訂單, 預約詳情 to 預約,
+ * 返回 goes up, to the page this one belongs under (`fallback`): 訂單詳情 to 訂單, 詢價詳情 to 等我報價,
  * 收款方式 and the like to 我的. Where the driver came from does not matter, so the same button always
  * leads to the same place. Pages that are opened from several places (我的名片頁, its guide, 通知,
  * 通知設定, 客服, the terms, a link from a group) set `history` and go back to wherever the driver
