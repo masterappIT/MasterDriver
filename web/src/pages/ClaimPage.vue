@@ -22,6 +22,7 @@ import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
+import LinkProblem from '../components/LinkProblem.vue';
 
 interface ClaimView {
   id?: string;
@@ -189,10 +190,7 @@ onBeforeUnmount(() => {
     <PageBack fallback="/app/pool" history only-in-app />
     <BrandHeader />
 
-    <div v-if="error && !order" class="card claim-page__state">
-      <AppIcon name="error" :size="40" />
-      <p>{{ error }}</p>
-    </div>
+    <LinkProblem v-if="error && !order" :message="error" :brand="false" next="回到群裡看看這張單還在不在，或請出單者重新分享連結。" />
     <InlineStatus v-else-if="error" icon="error" tone="error">{{ error }}</InlineStatus>
     <div v-else-if="!order" class="claim-page__state claim-page__state--loading" role="status">{{ t('載入中…') }}</div>
 

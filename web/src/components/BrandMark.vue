@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import mark from '../assets/brand/masterapp-mark.svg';
+import { t } from '../i18n';
 
 /**
- * The brand: the white cloud M (supplied by the owner, 2026-10-14) on a harbour-blue tile,
- * with the MasterDriver name beside it. `light` drops the tile for a dark or coloured
- * background, where the white mark stands on its own.
+ * The brand: the white cloud M (supplied by the owner, 2026-10-14) on a harbour-blue tile, with
+ * the name beside it. 跨境師傅幫 leads and MasterDriver sits under it, smaller (docs/DESIGN.md,
+ * 品牌區隔: the Chinese name is what sets us apart from Master Travel's 「Master App Driver」).
+ * `light` drops the tile for a dark or coloured background, where the white mark stands on its own.
  */
 withDefaults(defineProps<{ light?: boolean; size?: number; name?: boolean }>(), { light: false, size: 32, name: true });
 </script>
@@ -12,7 +14,10 @@ withDefaults(defineProps<{ light?: boolean; size?: number; name?: boolean }>(), 
 <template>
   <span class="brand-mark" :class="{ 'brand-mark--light': light }" :style="{ '--brand-size': `${size}px` }">
     <span class="brand-mark__tile"><img :src="mark" alt="" /></span>
-    <span v-if="name" class="brand-mark__name">MasterDriver</span>
+    <span v-if="name" class="brand-mark__name">
+      <b>{{ t('跨境師傅幫') }}</b>
+      <small>MasterDriver</small>
+    </span>
   </span>
 </template>
 
@@ -39,10 +44,30 @@ withDefaults(defineProps<{ light?: boolean; size?: number; name?: boolean }>(), 
   width: 68%;
   height: auto;
 }
+/* Two lines as tall as the tile: the Chinese name, then MasterDriver in small spaced letters. */
 .brand-mark__name {
-  font-size: calc(var(--brand-size) * 0.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.1;
+}
+.brand-mark__name b {
+  font-size: calc(var(--brand-size) * 0.52);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.brand-mark__name small {
+  margin-top: calc(var(--brand-size) * 0.06);
+  color: var(--color-text-secondary);
+  font-size: calc(var(--brand-size) * 0.3);
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+.brand-mark--light .brand-mark__name small {
+  color: inherit;
+  opacity: 0.8;
 }
 .brand-mark--light {
   color: var(--color-on-primary);

@@ -25,7 +25,8 @@ function done() {
     </BrandPanel>
 
     <main class="login__body">
-      <h1>{{ t('跨境師傅幫') }}</h1>
+      <!-- The brand mark in the panel names us; the heading says what this page is for. -->
+      <h1>{{ t('用手機號碼登入') }}</h1>
       <p class="login__lead">{{ t('有單就派，有空就接') }}</p>
       <p class="login__points">{{ POINTS.map((point) => t(point)).join(' · ') }}</p>
 

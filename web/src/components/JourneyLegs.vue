@@ -15,7 +15,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
 <template>
   <ol class="journey-legs">
     <li v-for="leg in legs" :key="leg.legIndex" class="journey-legs__item">
-      <p v-if="leg.legIndex > 1" class="journey-legs__handoff">{{ t(`接駁位置：${leg.origin}`) }}</p>
+      <p v-if="leg.legIndex > 1" class="journey-legs__handoff"><span>{{ t(`接駁位置：${leg.origin}`) }}</span></p>
       <component
         :is="leg.id && leg.legIndex !== current ? 'RouterLink' : 'div'"
         :to="leg.id ? `/app/orders/${leg.id}` : undefined"
@@ -48,10 +48,30 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
   margin: 0;
   padding: 0;
 }
+/*
+ * Where one leg hands over to the next, usually a 口岸: drawn as the border it is, a dashed line
+ * across with the place in a teal pill, so a cross-border trip reads as two sides of a crossing.
+ */
 .journey-legs__handoff {
-  margin: var(--space-xs) 0 var(--space-xs) var(--space-md);
-  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0;
+  color: var(--color-teal);
   font-size: var(--font-label);
+  font-weight: 700;
+  text-align: center;
+}
+.journey-legs__handoff::before,
+.journey-legs__handoff::after {
+  content: '';
+  flex: 1 1 0;
+  border-top: 2px dashed rgba(14, 159, 154, 0.45);
+}
+.journey-legs__handoff > span {
+  padding: 2px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(14, 159, 154, 0.1);
 }
 .journey-legs__leg {
   display: block;

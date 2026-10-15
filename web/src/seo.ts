@@ -29,7 +29,8 @@ function meta(attribute: 'name' | 'property', key: string) {
  */
 export function usePageSeo(page: 'HOME', fallback: { title: string; description: string }) {
   const original = { title: document.title, robots: meta('name', 'robots').content };
-  const added: HTMLMetaElement[] = [];
+  /** Tags this page set: those it made are removed on leaving, those index.html had get their text back. */
+  const touched: { element: HTMLMetaElement; before: string | null }[] = [];
 
   onMounted(async () => {
     const seo = await api<PageSeo>('GET', `/public/seo/${page}`).catch(() => null);
@@ -38,9 +39,10 @@ export function usePageSeo(page: 'HOME', fallback: { title: string; description:
     document.title = title;
     meta('name', 'robots').content = seo?.robots ?? original.robots;
     const set = (attribute: 'name' | 'property', key: string, content: string) => {
+      const existing = document.head.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`);
       const element = meta(attribute, key);
+      touched.push({ element, before: existing ? existing.content : null });
       element.content = content;
-      added.push(element);
     };
     set('name', 'description', description);
     if (seo?.keywords) set('name', 'keywords', seo.keywords);
@@ -52,6 +54,9 @@ export function usePageSeo(page: 'HOME', fallback: { title: string; description:
   onBeforeUnmount(() => {
     document.title = original.title;
     meta('name', 'robots').content = original.robots;
-    for (const element of added) element.remove();
+    for (const { element, before } of touched) {
+      if (before === null) element.remove();
+      else element.content = before;
+    }
   });
 }

@@ -8,6 +8,7 @@ import { copyText } from '../device';
 import { loadLine, money, pickup } from '../format';
 import { t } from '../i18n';
 import { toast } from '../toast';
+import LinkProblem from '../components/LinkProblem.vue';
 
 interface PassengerBooking extends Booking {
   driverName: string | null;
@@ -78,7 +79,8 @@ onBeforeUnmount(() => {
 <template>
   <div class="page">
     <h1>{{ t('我的預約') }}</h1>
-    <div v-if="error" class="notice error">{{ error }}</div>
+    <LinkProblem v-if="error && !booking" :message="error" next="請聯絡你詢價的司機，或回到司機的名片頁重新詢價。" />
+    <div v-else-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="booking">
       <div v-if="justSent" class="notice booking__sent">

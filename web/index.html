@@ -5,8 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Trip pages and the driver app are never indexed (docs/PLAN.md, SEO). -->
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#3568e8" />
+    <meta name="theme-color" content="#1f5fd6" />
     <title>MasterDriver 跨境師傅幫</title>
+    <!--
+      The preview a link gets when pasted into WhatsApp. The app sets its tags only after it runs, and
+      a link preview never runs it, so every link (a 搶單 link, a 名片頁, a confirmation) shows this.
+      It names us, never the trip or the passenger (docs/PLAN.md, SEO). The image needs a full address.
+      WeChat's own chat previews do not read these tags.
+    -->
+    <meta name="description" content="跨境司機在微信群和 WhatsApp 群裡派單、搶單、請乘客確認的工具。免費使用。" />
+    <meta property="og:site_name" content="跨境師傅幫 MasterDriver" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="跨境師傅幫｜有單就派，有空就接" />
+    <meta property="og:description" content="跨境司機在微信群和 WhatsApp 群裡派單、搶單、請乘客確認的工具。免費使用。" />
+    <meta property="og:image" content="https://masterdriverapp.masterappinc.com/share-card.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
     <!-- The loading screen: shown before any code arrives, so a slow connection never shows a blank page. -->
     <style>
       body {

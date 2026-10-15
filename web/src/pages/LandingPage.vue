@@ -164,7 +164,8 @@ onMounted(async () => {
     <main class="landing__body">
       <!-- The one thing to do on this page: the only button. -->
       <section class="landing__hero">
-        <p class="landing__name">{{ t('跨境師傅幫') }}</p>
+        <!-- The brand mark above already names us; this line says who it is for. -->
+        <p class="landing__name">{{ t('跨境司機的派單工具') }}</p>
         <h1>{{ t('有單就派，') }}<br />{{ t('有空就接') }}</h1>
         <p class="landing__lead">
           {{ t('跨境司機在微信群和 WhatsApp 群裡派單、搶單、請乘客確認的工具。') }}
