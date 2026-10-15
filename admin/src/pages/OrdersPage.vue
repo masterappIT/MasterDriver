@@ -23,6 +23,8 @@ interface OrderRow {
   serviceFee: number | null;
   dispatcher: Person;
   claimedBy: Person | null;
+  /** Taken by a driver whose account was deleted since. */
+  driverDeleted: boolean;
   claimAttempts: number;
   passengerConfirmed: boolean;
   selfDrive: boolean;
@@ -137,6 +139,7 @@ function moneyMarks(order: OrderRow): string {
               <RouterLink :to="`/users/${order.claimedBy.id}`">{{ order.claimedBy.name ?? '未填姓名' }}</RouterLink>
               <div class="hint">{{ order.claimedBy.phone }}</div>
             </template>
+            <span v-else-if="order.driverDeleted" class="muted">司機已刪除</span>
             <span v-else class="muted">—</span>
           </td>
           <td class="num">{{ money(order.driverPrice) }}</td>

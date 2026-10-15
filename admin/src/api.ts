@@ -26,6 +26,7 @@ const ERROR_TEXT: Record<string, string> = {
   USER_NOT_FOUND: '找不到這個用戶',
   USER_ALREADY_SUSPENDED: '這個帳號已經停用',
   USER_NOT_SUSPENDED: '這個帳號沒有被停用',
+  USER_HAS_ACTIVE_ORDERS: '還有進行中的單，處理完才能刪除',
   INVALID_ORDER_STATUS: '這張單已經完成或取消，不能再取消',
   ORDER_NOT_FOUND: '找不到這張單',
   PLAN_NOT_FOUND: '找不到這個方案',

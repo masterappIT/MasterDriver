@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { api, apiFetch, can } from '../api';
+import { api, apiFetch, can, type ApiError } from '../api';
 import StatusBadge from './StatusBadge.vue';
 import { ask, notify } from '../feedback';
 import { CREDIT_ENTRY, dateTime, fromLocalInput, hkd, money, PLAN_NAME, PLATE_TYPE } from '../format';
@@ -161,6 +161,59 @@ async function suspend() {
     danger: true,
   });
   if (reason) await run(() => api('POST', `${base.value}/suspend`, { reason }), '帳號已停用');
+}
+
+/** A trip with someone else still under way, which stops 刪除用戶 until it is dealt with. */
+interface DeletionBlocker {
+  id: string;
+  role: 'DISPATCHED' | 'CLAIMED';
+  pickupAt: string;
+  origin: string;
+  destination: string;
+  legIndex: number | null;
+}
+const deletionBlockers = ref<DeletionBlocker[]>([]);
+
+/**
+ * 刪除用戶 (超級管理員 only), for good: the orders the user put out and everything else of theirs
+ * go; another dispatcher's order they took stays with that dispatcher and reads 司機已刪除. While a
+ * trip with someone else is under way nothing is deleted and those orders are listed instead.
+ */
+async function removeUser() {
+  let preview: { dispatchedOrders: number; claimedOrdersKept: number; blocking: DeletionBlocker[] };
+  try {
+    preview = await api('GET', `${base.value}/deletion`);
+  } catch (e) {
+    notify((e as Error).message, true);
+    return;
+  }
+  deletionBlockers.value = preview.blocking;
+  if (preview.blocking.length > 0) {
+    notify('還有進行中的單，處理完才能刪除', true);
+    return;
+  }
+  const kept = preview.claimedOrdersKept > 0 ? `他接過的 ${preview.claimedOrdersKept} 張別人的單會留給出單者，單上顯示「司機已刪除」。` : '';
+  const reason = await ask({
+    title: '刪除這個用戶',
+    text: `帳號、他出的 ${preview.dispatchedOrders} 張單（連同搶單紀錄和相關通知）、名片頁與預約、照片、客服對話、點數紀錄、收款方式和派單群都會刪除。${kept}刪除後無法復原。`,
+    reason: '原因（會記在操作紀錄）',
+    confirm: '刪除用戶',
+    danger: true,
+  });
+  if (!reason) return;
+  try {
+    await api('DELETE', base.value, { reason });
+  } catch (e) {
+    notify((e as Error).message, true);
+    // Someone took one of the user's orders meanwhile: show what stops it now.
+    if ((e as ApiError).code === 'USER_HAS_ACTIVE_ORDERS') {
+      deletionBlockers.value = (await api<{ blocking: DeletionBlocker[] }>('GET', `${base.value}/deletion`).catch(() => ({ blocking: [] }))).blocking;
+    }
+    return;
+  }
+  notify('用戶已刪除');
+  emit('changed');
+  emit('close');
 }
 
 async function restore() {
@@ -325,6 +378,7 @@ interface OrderRow {
   selfDrive: boolean;
   dispatcher: { id: string; name: string | null; phone: string };
   claimedBy: { id: string; name: string | null; phone: string } | null;
+  driverDeleted: boolean;
 }
 const orderRole = ref<'dispatcher' | 'driver'>('dispatcher');
 const orders = ref<{ total: number; items: OrderRow[] } | null>(null);
@@ -367,6 +421,7 @@ watch(
     editing.value = false;
     crediting.value = false;
     gifting.value = false;
+    deletionBlockers.value = [];
     void load();
     void loadOrders();
   },
@@ -406,6 +461,7 @@ onBeforeUnmount(() => {
             <button v-else type="button" class="mt-button danger" @click="suspend">停用用戶</button>
             <button type="button" class="mt-button secondary" @click="contact">用客服聯絡</button>
           </template>
+          <button v-if="can.superAdmin()" type="button" class="mt-button danger" @click="removeUser">刪除用戶</button>
         </div>
       </template>
     </header>
@@ -416,6 +472,17 @@ onBeforeUnmount(() => {
 
     <div v-if="user" class="mt-drawer-body">
       <div v-if="user.suspendedAt" class="notice error">{{ dateTime(user.suspendedAt) }} 停用，原因：{{ user.suspendedReason ?? '—' }}</div>
+      <div v-if="deletionBlockers.length > 0" class="notice error">
+        還不能刪除：以下的單還在進行中，先處理（例如代為取消，或等行程完成）再刪除。
+        <ul>
+          <li v-for="order in deletionBlockers" :key="order.id">
+            <RouterLink :to="`/orders/${order.id}`">
+              {{ dateTime(order.pickupAt) }} {{ order.origin }} 至 {{ order.destination }}{{ order.legIndex ? `（接駁第 ${order.legIndex} 段）` : '' }}
+            </RouterLink>
+            · {{ order.role === 'DISPATCHED' ? '他出的單，別的司機接了' : '他接了別人的單' }}
+          </li>
+        </ul>
+      </div>
 
       <section class="mt-section">
         <div class="mt-section-head">
@@ -527,7 +594,7 @@ onBeforeUnmount(() => {
                 <td>{{ dateTime(order.pickupAt) }}<br /><span class="mt-muted">{{ order.code }}</span></td>
                 <td>{{ order.origin }} 至 {{ order.destination }}</td>
                 <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
-                <td>{{ otherSide(order)?.name ?? (order.selfDrive ? (orderRole === 'dispatcher' ? '自己做' : '自己出的單') : '—') }}</td>
+                <td>{{ otherSide(order)?.name ?? (order.selfDrive ? (orderRole === 'dispatcher' ? '自己做' : '自己出的單') : order.driverDeleted ? '司機已刪除' : '—') }}</td>
                 <td class="num">{{ money(order.driverPrice) }}</td>
               </tr>
             </tbody>

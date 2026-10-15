@@ -21,6 +21,7 @@ import { GroupInvitesService } from '../groups/group-invites.service';
 import { OrdersService } from '../orders/orders.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { PrismaService } from '../prisma.service';
+import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import type { AdminUser } from './admin-auth.service';
 import { AuditService, PAGE_SIZE } from './audit.service';
 
@@ -48,6 +49,7 @@ export class AdminDataService {
     @Inject(OrdersService) private readonly orders: OrdersService,
     @Inject(ProfilePagesService) private readonly profilePages: ProfilePagesService,
     @Inject(GroupInvitesService) private readonly groupInvites: GroupInvitesService,
+    @Inject(MEDIA_STORAGE) private readonly storage: MediaStorage,
   ) {}
 
   // -------------------------------------------------------------- dashboard
@@ -367,6 +369,110 @@ export class AdminDataService {
     return this.getUser(id, now);
   }
 
+  /**
+   * 刪除用戶, before it is done: what would go, and the trips under way with someone else that
+   * stop it (an order the user put out that another driver has, or another dispatcher's order
+   * the user has and has not finished). Those are dealt with first, for example 代為取消.
+   */
+  async userDeletion(id: string) {
+    const user = await this.prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!user) throw apiError(HttpStatus.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+    return this.deletionOf(this.prisma, id);
+  }
+
+  /**
+   * 刪除用戶 (超級管理員 only), for good. Everything of the user goes: the orders they put out,
+   * with every leg, claim and 行程群 and the notifications others got about them; their 名片頁
+   * and its bookings and photos, 客服 conversation and its files, credits, 收款方式, 派單群,
+   * other dispatchers' notes on them, sessions, sign-in codes and SMS records. Another
+   * dispatcher's order they took stays with that dispatcher, without them: the order keeps when
+   * it was taken, so it reads 司機已刪除. Refused while a trip with someone else is under way.
+   * The files go first, as with 刪除對話; the audit trail keeps who deleted which number and how
+   * many orders, nothing else of the user.
+   */
+  async deleteUser(id: string, input: AdminReason, admin: AdminUser, ip?: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        countryCode: true,
+        phone: true,
+        profile: { select: { name: true } },
+        profilePage: { select: { photos: { select: { storageKey: true } } } },
+        supportConversation: { select: { media: { select: { storageKey: true } } } },
+      },
+    });
+    if (!user) throw apiError(HttpStatus.NOT_FOUND, 'USER_NOT_FOUND', 'User not found');
+    const before = await this.deletionOf(this.prisma, id);
+    if (before.blocking.length > 0) throw this.activeOrders(before.blocking);
+
+    const files = [...(user.profilePage?.photos ?? []), ...(user.supportConversation?.media ?? [])];
+    for (const file of files) await this.storage.remove(file.storageKey);
+
+    const counts = await this.prisma.$transaction(async (tx) => {
+      // Holds the user row: a claim of theirs still running waits, then fails on the missing user.
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`;
+      const now = await this.deletionOf(tx, id);
+      if (now.blocking.length > 0) throw this.activeOrders(now.blocking);
+      const dispatched = (await tx.order.findMany({ where: { dispatcherId: id }, select: { id: true } })).map((order) => order.id);
+      await tx.notification.deleteMany({ where: { orderId: { in: dispatched } } });
+      await tx.orderClaim.deleteMany({ where: { driverId: id } });
+      const kept = await tx.order.updateMany({ where: { claimedById: id, dispatcherId: { not: id } }, data: { claimedById: null } });
+      // A claim that came in after the check moves its order out of this delete; then nothing is deleted.
+      const removed = await tx.order.deleteMany({ where: { id: { in: dispatched }, OR: [{ status: { not: 'ASSIGNED' } }, { claimedById: id }] } });
+      if (removed.count !== dispatched.length) throw this.activeOrders((await this.deletionOf(tx, id)).blocking);
+      await tx.verificationCode.deleteMany({ where: { countryCode: user.countryCode, phone: user.phone } });
+      await tx.smsMessage.deleteMany({ where: { countryCode: user.countryCode, phone: user.phone } });
+      await tx.user.delete({ where: { id } });
+      const detail = {
+        phone: `${user.countryCode} ${user.phone}`,
+        name: user.profile?.name ?? null,
+        dispatchedOrders: removed.count,
+        claimedOrdersKept: kept.count,
+        reason: input.reason,
+      };
+      await this.audit.log({ adminId: admin.id, action: 'user.delete', targetType: 'user', targetId: id, detail, ip }, tx);
+      return { dispatchedOrders: removed.count, claimedOrdersKept: kept.count };
+    }, { timeout: 30_000 });
+    return { deleted: true, ...counts };
+  }
+
+  private async deletionOf(db: Prisma.TransactionClient, id: string) {
+    const [blocking, dispatched, claimedKept] = await Promise.all([
+      db.order.findMany({
+        where: {
+          status: 'ASSIGNED',
+          OR: [
+            { dispatcherId: id, claimedById: { not: id } },
+            { claimedById: id, dispatcherId: { not: id } },
+          ],
+        },
+        orderBy: { pickupAt: 'asc' },
+        select: { id: true, dispatcherId: true, pickupAt: true, origin: true, destination: true, legIndex: true },
+      }),
+      db.order.count({ where: { dispatcherId: id } }),
+      db.order.count({ where: { claimedById: id, dispatcherId: { not: id } } }),
+    ]);
+    return {
+      /** Orders put out by the user, every leg counted; all of them are deleted. */
+      dispatchedOrders: dispatched,
+      /** Other dispatchers' orders the user took; they stay, without the user. */
+      claimedOrdersKept: claimedKept,
+      blocking: blocking.map((order) => ({
+        id: order.id,
+        /** DISPATCHED: the user put it out and another driver has it. CLAIMED: the user has another dispatcher's order. */
+        role: order.dispatcherId === id ? ('DISPATCHED' as const) : ('CLAIMED' as const),
+        pickupAt: order.pickupAt.toISOString(),
+        origin: order.origin,
+        destination: order.destination,
+        legIndex: order.legIndex,
+      })),
+    };
+  }
+
+  private activeOrders(blocking: { id: string }[]) {
+    return apiError(HttpStatus.CONFLICT, 'USER_HAS_ACTIVE_ORDERS', 'Trips with someone else are under way', { orders: blocking });
+  }
+
   // ------------------------------------------------- complaints about content
 
   /** 下架 a 名片頁 after a complaint; see ProfilePagesService.staffBlock. */
@@ -537,6 +643,8 @@ export class AdminDataService {
         serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
         dispatcher: person(order.dispatcher),
         claimedBy: person(order.claimedBy),
+        /** Taken by a driver whose account was deleted since (刪除用戶 keeps when it was taken). */
+        driverDeleted: order.claimedAt !== null && order.claimedById === null,
         claimAttempts: order._count.claims,
         passengerConfirmed: Boolean(order.passengerConfirmedAt),
         selfDrive: isSelfDriven(order),
@@ -602,6 +710,7 @@ export class AdminDataService {
         name: order.dispatcher.profile?.name ?? null,
         phone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
       },
+      driverDeleted: order.claimedAt !== null && order.claimedById === null,
       driver: claimer && order.claimedById && { id: order.claimedById, name: claimer.profile?.name ?? null, phone: `${claimer.countryCode} ${claimer.phone}`, profile: claimer.profile },
       timeline: {
         createdAt: order.createdAt.toISOString(),

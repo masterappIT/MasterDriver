@@ -141,7 +141,7 @@ export async function setupDatabase() {
     orders,
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
-    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders, profilePages, new GroupInvitesService(prisma)),
+    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders, profilePages, new GroupInvitesService(prisma), mediaStorage),
     profilePages,
     site: new SiteService(prisma),
     mediaStorage,
