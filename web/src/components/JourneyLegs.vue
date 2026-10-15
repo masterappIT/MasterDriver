@@ -36,6 +36,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
           <a v-if="leg.driver.phone" :href="`tel:${leg.driver.phone.replace(/\s/g, '')}`" @click.stop>{{ leg.driver.phone }}</a>
         </div>
         <div v-else-if="leg.driver === null && leg.status === 'OPEN'" class="hint">{{ t('等待司機搶單') }}</div>
+        <div v-else-if="leg.driverDeleted" class="hint">{{ t('接單司機：司機已刪除') }}</div>
       </component>
     </li>
   </ol>

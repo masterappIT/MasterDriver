@@ -33,7 +33,7 @@ const shown = computed(() => {
     (order) =>
       statuses.includes(statusOf(order)) &&
       (phase.value !== 'unpaid' || !order.paidAt) &&
-      (phase.value !== 'unsettled' || (!order.settledAt && !order.selfDrive)),
+      (phase.value !== 'unsettled' || (!order.settledAt && !order.selfDrive && !order.driverDeleted)),
   );
 });
 

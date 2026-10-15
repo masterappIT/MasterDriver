@@ -44,6 +44,13 @@ function progressOf(order: { departedAt: Date | null; arrivedAt: Date | null; pi
 /** The legs of the trip this order belongs to, or null when it is a single order. */
 export const legsOf = (order: OrderWithPeople): JourneyLeg[] | null => order.journeyHead?.journeyLegs ?? null;
 
+/**
+ * Taken by a driver whose account was deleted since: 刪除用戶 keeps when it was taken and takes
+ * the driver off. Nothing else leaves an order with a time taken and no driver.
+ */
+export const isDriverDeleted = (order: Pick<OrderWithPeople, 'claimedAt' | 'claimedById'>) =>
+  order.claimedAt !== null && order.claimedById === null;
+
 /** Whether the dispatcher drives this order themselves (這單我自己做). */
 export const isSelfDriven = (order: Pick<OrderWithPeople, 'dispatcherId' | 'claimedById'>) =>
   order.claimedById === order.dispatcherId;
@@ -201,7 +208,9 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         driverPrice: driverPriceOf(leg),
         mine: Boolean(userId && leg.claimedById === userId),
         selfDrive: leg.claimedById === order.dispatcherId,
-        ...(viewer === 'dispatcher' ? { id: leg.id, progress: progressOf(leg), changePending: Boolean(leg.changePendingAt) } : {}),
+        ...(viewer === 'dispatcher'
+          ? { id: leg.id, progress: progressOf(leg), changePending: Boolean(leg.changePendingAt), driverDeleted: isDriverDeleted(leg) }
+          : {}),
         ...(viewer !== 'other'
           ? { driver: driver && (contactVisible ? driver : { ...driver, phone: null, phones: [], wechatId: null, whatsapp: null }) }
           : {}),
@@ -281,6 +290,8 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
           contactRevealMinutes: order.contactRevealMinutes,
           inPool: order.inPool,
           selfDrive: isSelfDriven(order),
+          // 司機已刪除: shown in the driver's place; there is no one left to settle with.
+          driverDeleted: isDriverDeleted(order),
           passengerPrice: passengerPriceOf(order),
           serviceFee: order.commissionMinor === null ? null : order.commissionMinor / 100,
           showPassengerPrice: order.showPassengerPrice,

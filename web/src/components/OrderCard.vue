@@ -22,6 +22,8 @@ export interface OrderSummary {
   dispatcherName: string | null;
   driver?: { name: string | null } | null;
   selfDrive?: boolean;
+  /** 司機已刪除 (dispatcher only): the driver who took it was deleted by the platform since. */
+  driverDeleted?: boolean;
   requiredPlates?: PlateRegion[];
   /** 收款 (dispatcher only): when the fare was marked received. */
   paidAt?: string | null;
@@ -74,7 +76,7 @@ function legState(leg: Journey['legs'][number]) {
       <span v-if="whole" class="leg-tag">{{ t('接駁（中途換車）') }}</span>
       <span v-else-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
       <span v-if="role === 'dispatched' && status === 'COMPLETED' && !order.paidAt" class="gold-tag">{{ t('未收款') }}</span>
-      <span v-if="!whole && order.status === 'COMPLETED' && !order.settledAt && !order.selfDrive" class="gold-tag">{{ t('未結清') }}</span>
+      <span v-if="!whole && order.status === 'COMPLETED' && !order.settledAt && !order.selfDrive && !order.driverDeleted" class="gold-tag">{{ t('未結清') }}</span>
     </div>
     <!-- 接駁: one line per leg, so the card says which leg still needs a driver. -->
     <ul v-if="whole" class="order-card__legs">
@@ -86,7 +88,15 @@ function legState(leg: Journey['legs'][number]) {
     </ul>
     <div v-if="!(whole && role === 'dispatched')" class="order-card__foot">
       <template v-if="role === 'dispatched'">
-        {{ order.selfDrive && order.status === 'ASSIGNED' ? t('你自己做') : order.driver?.name ? t(`${order.driver.name} 接了`) : t('等司機搶') }}
+        {{
+          order.selfDrive && order.status === 'ASSIGNED'
+            ? t('你自己做')
+            : order.driverDeleted
+              ? t('接單司機：司機已刪除')
+              : order.driver?.name
+                ? t(`${order.driver.name} 接了`)
+                : t('等司機搶')
+        }}
         <span v-if="order.driverPrice" class="order-card__foot-price">{{ money(order.driverPrice) }}</span>
       </template>
       <template v-else-if="mineInPool">{{ t('你出的單，其他司機看到的就是這樣') }}</template>
