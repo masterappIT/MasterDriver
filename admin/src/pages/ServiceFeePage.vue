@@ -48,7 +48,7 @@ onMounted(() => load().catch((e) => (error.value = (e as Error).message)));
     <div v-if="error" class="notice error">{{ error }}</div>
     <div v-if="message" class="notice">{{ message }}</div>
     <div v-if="status" class="card">
-      <dl class="facts facts--numbers">
+      <dl class="facts facts--numbers service-fee__facts">
         <div><dt>狀態</dt><dd><span class="tag" :class="status.enabled ? 'tag--info' : ''">{{ status.enabled ? '開啟' : '關閉' }}</span></dd></div>
         <div><dt>每單</dt><dd>{{ money(status.fee) }}</dd></div>
       </dl>
@@ -70,6 +70,11 @@ onMounted(() => load().catch((e) => (error.value = (e as Error).message)));
 </template>
 
 <style scoped>
+/* Two facts read together on the left, not spread across the card. */
+.service-fee__facts {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
 /* The amount with its button on the left; turning the fee on or off is a different act, on the right. */
 .service-fee__amount {
   width: 200px;

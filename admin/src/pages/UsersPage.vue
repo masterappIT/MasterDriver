@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { api, can } from '../api';
 import UserDrawer from '../components/UserDrawer.vue';
 import { ask, notify } from '../feedback';
 import { dateTime, hkd, PLATE_TYPE } from '../format';
 import { useDrawer, useListQuery } from '../list-query';
+import PagerBar from '../components/PagerBar.vue';
 
 /**
  * 用戶. The layout is Master Travel's user management (admin/src/pages/users/UsersPage.js and
@@ -61,7 +62,6 @@ const list = useListQuery({ q: '', status: '' }, async (query) => {
 const { filters } = list;
 const drawer = useDrawer();
 
-const pages = computed(() => (result.value ? Math.max(1, Math.ceil(result.value.total / result.value.pageSize)) : 1));
 const initial = (user: UserRow) => (user.name || user.phone.replace(/\D/g, '').slice(-2) || '?').slice(0, 1).toUpperCase();
 
 /** A card above the list: its count, and the filter it stands for (clicking the one on takes it off). */
@@ -101,7 +101,10 @@ async function act(action: () => Promise<unknown>, done: string) {
   <section class="mt-page">
     <div class="page-head">
       <div>
-        <h1>用戶</h1>
+        <div class="page-head__title">
+          <h1>用戶</h1>
+          <span v-if="result" class="muted">{{ list.filtered.value ? '符合' : '共' }} {{ result.total }} 位</span>
+        </div>
         <p class="page-head__desc">查看司機資料、名片頁、訂單與點數，處理投訴與帳號狀態。</p>
       </div>
     </div>
@@ -123,10 +126,6 @@ async function act(action: () => Promise<unknown>, done: string) {
 
     <div class="mt-panel">
       <div class="mt-toolbar">
-        <div>
-          <h3>用戶清單</h3>
-          <p class="mt-muted">點擊用戶列查看司機資料、訂單與點數紀錄。</p>
-        </div>
         <form class="mt-filters" @submit.prevent="list.apply()">
           <label class="mt-search">
             <span aria-hidden="true">⌕</span>
@@ -144,10 +143,6 @@ async function act(action: () => Promise<unknown>, done: string) {
         <span class="users__error">{{ error }}</span>
         <button type="button" class="mt-action" @click="list.reload()">重試</button>
       </div>
-      <div v-else-if="result" class="mt-summary">
-        <span>{{ list.filtered.value ? `符合 ${result.total} 位用戶` : `共 ${result.total} 位用戶` }}</span>
-        <span>每頁 {{ result.pageSize }} 位 · 第 {{ list.page.value }} / {{ pages }} 頁</span>
-      </div>
 
       <div class="mt-table-wrap" :class="{ 'is-loading': loading && result }">
         <table class="mt-table">
@@ -157,9 +152,9 @@ async function act(action: () => Promise<unknown>, done: string) {
               <th>聯絡電話</th>
               <th>車輛</th>
               <th class="num">派單／接單</th>
-              <th class="num">點數</th>
+              <th class="num col-wide">點數</th>
               <th>狀態</th>
-              <th>加入日期</th>
+              <th class="col-wide">加入日期</th>
               <th>操作</th>
             </tr>
           </thead>
@@ -180,21 +175,27 @@ async function act(action: () => Promise<unknown>, done: string) {
                   </div>
                 </div>
               </td>
-              <td class="users__nowrap">{{ user.phone }}</td>
+              <td class="users__nowrap">
+                {{ user.phone }}
+                <small class="narrow-only">{{ dateTime(user.createdAt) }} 加入</small>
+              </td>
               <td>
                 <span v-for="plate in user.plates" :key="plate" class="users__plate">{{ plate }}</span>
                 <template v-if="user.plates.length === 0">—</template>
-                <small v-if="user.vehicleType || user.plateType">{{ [user.vehicleType, user.plateType ? PLATE_TYPE[user.plateType] : null].filter(Boolean).join(' · ') }}</small>
+                <small v-if="user.vehicleType || user.plateType" class="users__nowrap">{{ [user.vehicleType, user.plateType ? PLATE_TYPE[user.plateType] : null].filter(Boolean).join(' · ') }}</small>
               </td>
-              <td class="num">{{ user.dispatched }} / {{ user.claimed }}</td>
-              <td class="num">{{ hkd(user.credits) }}</td>
+              <td class="num">
+                {{ user.dispatched }} / {{ user.claimed }}
+                <small class="narrow-only">點數 {{ hkd(user.credits) }}</small>
+              </td>
+              <td class="num col-wide">{{ hkd(user.credits) }}</td>
               <td>
                 <div class="users__tags">
                   <span class="mt-status" :class="user.suspended ? 'cancelled' : 'completed'">{{ user.suspended ? '已停用' : '使用中' }}</span>
                   <span v-if="user.pagePublished" class="mt-status confirmed">名片頁</span>
                 </div>
               </td>
-              <td class="users__nowrap">{{ dateTime(user.createdAt) }}</td>
+              <td class="users__nowrap col-wide">{{ dateTime(user.createdAt) }}</td>
               <td class="mt-actions" @click.stop>
                 <button type="button" @click="drawer.open(user.id)">查看</button>
                 <template v-if="can.write()">
@@ -216,11 +217,7 @@ async function act(action: () => Promise<unknown>, done: string) {
         </table>
       </div>
 
-      <div v-if="result && result.total > result.pageSize" class="mt-pagination">
-        <span>第 {{ list.page.value }} / {{ pages }} 頁</span>
-        <button type="button" :disabled="list.page.value <= 1" @click="list.goTo(list.page.value - 1)">上一頁</button>
-        <button type="button" :disabled="list.page.value >= pages" @click="list.goTo(list.page.value + 1)">下一頁</button>
-      </div>
+      <PagerBar v-if="result" :page="list.page.value" :page-size="result.pageSize" :total="result.total" @change="list.goTo" />
     </div>
 
     <UserDrawer v-if="drawer.openId.value" :user-id="drawer.openId.value" @close="drawer.close()" @changed="list.reload()" />

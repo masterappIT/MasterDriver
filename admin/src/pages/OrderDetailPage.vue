@@ -173,7 +173,7 @@ onMounted(async () => {
       </dl>
     </div>
 
-    <div class="split">
+    <div class="split order-detail__split">
       <div class="card">
         <h2>相關人員</h2>
         <dl class="facts order-detail__people">
@@ -275,6 +275,11 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* 相關人員 and 時間線 side by side are as tall as each other. */
+.order-detail__split {
+  align-items: stretch;
+}
+
 .order-detail__contact {
   margin-left: var(--space-sm);
   padding: 1px 8px;

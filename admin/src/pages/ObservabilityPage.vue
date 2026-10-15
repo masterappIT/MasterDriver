@@ -501,13 +501,13 @@ const eventState = (event: LiveEvent) =>
     </div>
 
     <div class="telemetry-panel">
-      <p class="observability-note">
-        本頁連線的那台伺服器的即時事件；保留最近 {{ MAX_EVENTS }} 筆（排除健康檢查與資料庫查詢），不代表全站總量。節點數字為本頁連線期間收到的事件次數；資料庫節點計算每一次查詢。路徑顯示路由樣式，例如 /api/c/:confirmCode，不顯示乘客的連結。
-      </p>
       <div class="panel-title">
         <h3>即時事件</h3>
         <span>最近 {{ events.length }} / {{ MAX_EVENTS }} 筆</span>
       </div>
+      <p class="observability-note">
+        本頁連線的那台伺服器的即時事件；保留最近 {{ MAX_EVENTS }} 筆（排除健康檢查與資料庫查詢），不代表全站總量。節點數字為本頁連線期間收到的事件次數；資料庫節點計算每一次查詢。路徑顯示路由樣式，例如 /api/c/:confirmCode，不顯示乘客的連結。
+      </p>
       <p v-if="error" class="stream-error">{{ error }}</p>
       <div v-if="!events.length" class="stream-empty">等待下一個 API 事件</div>
       <div v-for="event in pagedEvents" :key="event.id" class="event-row">
@@ -573,16 +573,16 @@ const eventState = (event: LiveEvent) =>
     </div>
 
     <div class="region-visit-panel">
+      <div class="panel-title">
+        <h3>地區訪問</h3>
+        <span>{{ regionStats.length }} 個地區</span>
+      </div>
       <p class="observability-note">UTC+8 {{ snapshot?.day ?? '當日' }} 請求完成次數（含健康檢查）；非人數或獨立 IP。約每 15 秒讀取一次；IP 只用來查地區，不保存。</p>
       <p class="observability-health">
         地區讀取：{{ snapshotState }}<span v-if="snapshot"> · 最近檢查 {{ time(snapshot.checkedAt) }}</span>；這台伺服器最近一次寫入統計：{{
           snapshot?.write.status === 'ok' ? '正常' : snapshot?.write.status === 'error' ? '失敗' : '尚未確認'
         }}<span v-if="snapshot?.write.at"> · {{ time(snapshot.write.at) }}</span>
       </p>
-      <div class="panel-title">
-        <h3>地區訪問</h3>
-        <span>{{ regionStats.length }} regions</span>
-      </div>
       <p class="region-data-credit">IP Geolocation by <a href="https://db-ip.com" target="_blank" rel="noopener noreferrer">DB-IP</a></p>
       <div class="region-visit-orbit">
         <span v-for="particle in regionParticles" :key="particle.region + '-' + particle.index" class="region-particle" :style="{ '--particle-delay': particle.index * -0.35 + 's' }"></span>

@@ -113,7 +113,10 @@ onMounted(load);
   <section class="mt-page">
     <div class="page-head">
       <div>
-        <h1>後台帳號</h1>
+        <div class="page-head__title">
+          <h1>後台帳號</h1>
+          <span v-if="accounts" class="muted">共 {{ accounts.length }} 個</span>
+        </div>
         <p class="page-head__desc">管理後台登入帳號、權限角色與啟用狀態，確保每位管理員使用獨立帳號。</p>
       </div>
       <button type="button" class="button" @click="openForm">新增管理員</button>
@@ -123,12 +126,14 @@ onMounted(load);
       {{ loadError }} <button class="button secondary" type="button" @click="load">重試</button>
     </div>
 
+    <!-- The same counts as 用戶 shows above its list. -->
+    <div class="mt-stats">
+      <div class="mt-stat"><span>管理員帳號</span><strong>{{ accounts?.length ?? '—' }}</strong><small>全部帳號</small></div>
+      <div class="mt-stat"><span>啟用中</span><strong>{{ accounts ? enabledCount : '—' }}</strong><small>可以登入</small></div>
+      <div class="mt-stat"><span>超級管理員</span><strong>{{ accounts ? superCount : '—' }}</strong><small>可以管理帳號</small></div>
+    </div>
+
     <div class="mt-panel">
-      <div class="mt-counts">
-        <div><strong>{{ accounts?.length ?? 0 }}</strong><span>個管理員帳號</span></div>
-        <div><strong>{{ enabledCount }}</strong><span>個啟用中</span></div>
-        <div><strong>{{ superCount }}</strong><span>位超級管理員</span></div>
-      </div>
       <div class="mt-table-wrap">
         <table class="mt-table accounts__table">
           <thead>
@@ -136,7 +141,7 @@ onMounted(load);
               <th>帳號</th>
               <th>名稱</th>
               <th>角色</th>
-              <th>狀態</th>
+              <th class="col-wide">狀態</th>
               <th>最後登入</th>
               <th>操作</th>
             </tr>
@@ -147,12 +152,17 @@ onMounted(load);
                 <strong>{{ item.username }}</strong>
                 <small class="mt-muted">ID {{ item.id }}</small>
               </td>
-              <td>{{ item.displayName }}</td>
-              <td><span class="mt-status" :class="ROLE_TONE[item.role]">{{ roleLabel(item.role) }}</span></td>
+              <td class="mt-nowrap">{{ item.displayName }}</td>
               <td>
+                <span class="mt-status" :class="ROLE_TONE[item.role]">{{ roleLabel(item.role) }}</span>
+                <span class="narrow-only accounts__state">
+                  <span class="mt-status" :class="item.disabled ? 'cancelled' : 'completed'">{{ item.disabled ? '已停用' : '已啟用' }}</span>
+                </span>
+              </td>
+              <td class="col-wide">
                 <span class="mt-status" :class="item.disabled ? 'cancelled' : 'completed'">{{ item.disabled ? '已停用' : '已啟用' }}</span>
               </td>
-              <td>{{ item.lastLoginAt ? dateTime(item.lastLoginAt) : '—' }}</td>
+              <td class="mt-nowrap">{{ item.lastLoginAt ? dateTime(item.lastLoginAt) : '—' }}</td>
               <td class="mt-actions">
                 <template v-if="item.id !== session.admin?.id">
                   <button type="button" @click="resetPassword(item)">重設密碼</button>
@@ -226,29 +236,12 @@ onMounted(load);
 </template>
 
 <style scoped>
-/* Master Travel's administrators table: one line per account, the actions on the right. */
-.accounts__table {
-  min-width: 860px;
-  table-layout: fixed;
-}
-.accounts__table th:nth-child(1) {
-  width: 24%;
-}
-.accounts__table th:nth-child(2) {
-  width: 14%;
-}
-.accounts__table th:nth-child(3),
-.accounts__table th:nth-child(4) {
-  width: 12%;
-}
-.accounts__table th:nth-child(5) {
-  width: 15%;
-}
-.accounts__table th:nth-child(6) {
-  width: 23%;
-}
+/* Columns sized by what is in them, like the other lists, so the table fits a narrow screen too. */
 .accounts__table td small {
   white-space: normal;
+}
+.accounts__state {
+  margin-top: 4px;
 }
 .accounts__password {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

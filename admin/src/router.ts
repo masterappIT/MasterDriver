@@ -6,6 +6,8 @@ declare module 'vue-router' {
     title?: string;
     roles?: AdminRole[];
     public?: boolean;
+    /** A detail page: its 返回 link stands where a list page names its section. */
+    detail?: boolean;
   }
 }
 
@@ -19,7 +21,7 @@ const routes: RouteRecordRaw[] = [
   // A user's details are a drawer over the list now; links to the old page open it.
   { path: '/users/:id', redirect: (to) => ({ path: '/users', query: { open: String(to.params.id) } }) },
   { path: '/orders', component: () => import('./pages/OrdersPage.vue'), meta: { title: '訂單' } },
-  { path: '/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '訂單詳情' } },
+  { path: '/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '訂單詳情', detail: true } },
   { path: '/support', component: () => import('./pages/SupportPage.vue'), meta: { title: '客服', roles: WRITE } },
   { path: '/support/:id', component: () => import('./pages/SupportPage.vue'), meta: { title: '客服', roles: WRITE } },
   { path: '/billing', component: () => import('./pages/BillingPage.vue'), meta: { title: '收費控制', roles: WRITE } },

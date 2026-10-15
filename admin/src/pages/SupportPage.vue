@@ -818,6 +818,15 @@ onBeforeUnmount(() => {
   min-width: 0;
   padding: var(--space-lg);
 }
+/* Nothing chosen yet: as tall as the inbox beside it, the hint in the middle. */
+.support__thread--empty {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  text-align: center;
+}
 .support__who {
   display: flex;
   justify-content: space-between;

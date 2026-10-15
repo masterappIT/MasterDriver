@@ -70,16 +70,16 @@ function moneyMarks(order: OrderRow): string[] {
   <div class="page-head">
     <div class="page-head__title">
       <h1>訂單</h1>
-      <span v-if="result" class="muted">共 {{ result.total }} 張{{ list.filtered.value ? '符合' : '' }}</span>
+      <span v-if="result" class="muted">{{ list.filtered.value ? '符合' : '共' }} {{ result.total }} 張</span>
     </div>
   </div>
   <form class="filters" @submit.prevent="list.apply()">
-    <input v-model="filters.q" class="input" type="search" placeholder="單號、地點或手機號碼" />
+    <input v-model="filters.q" class="input orders__search" type="search" placeholder="單號、地點或手機號碼" />
     <select v-model="filters.status" class="select" aria-label="狀態" @change="list.apply()">
       <option value="">全部狀態</option>
       <option v-for="(label, key) in ORDER_STATUS" :key="key" :value="key">{{ label }}</option>
     </select>
-    <select v-model="filters.money" class="select" aria-label="收款與結清" @change="list.apply()">
+    <select v-model="filters.money" class="select orders__money" aria-label="收款與結清" @change="list.apply()">
       <option value="">收款與結清：全部</option>
       <option value="UNPAID">未收款（已有司機或已完成）</option>
       <option value="UNSETTLED">未結清（已完成、別的司機接）</option>
@@ -114,9 +114,9 @@ function moneyMarks(order: OrderRow): string[] {
           <th>出單者</th>
           <th>接單司機</th>
           <th class="num">出單價</th>
-          <th>收款／結清</th>
-          <th class="num">服務費</th>
-          <th class="num">搶單</th>
+          <th class="col-wide">收款／結清</th>
+          <th class="num col-wide">服務費</th>
+          <th class="num col-wide">搶單</th>
         </tr>
       </thead>
       <tbody>
@@ -129,7 +129,10 @@ function moneyMarks(order: OrderRow): string[] {
             {{ order.origin }} 至 {{ order.destination }}
             <div v-if="order.legIndex" class="hint">接駁第 {{ order.legIndex }} 段</div>
           </td>
-          <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
+          <td class="nowrap">
+            <StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" />
+            <div v-for="mark in moneyMarks(order)" :key="mark" class="narrow-only hint">{{ mark }}</div>
+          </td>
           <td class="nowrap">
             <RouterLink :to="`/users/${order.dispatcher.id}`" class="clip" :title="order.dispatcher.name ?? undefined">{{ order.dispatcher.name ?? '未填姓名' }}</RouterLink>
             <div class="hint">{{ order.dispatcher.phone }}</div>
@@ -143,12 +146,15 @@ function moneyMarks(order: OrderRow): string[] {
             <span v-else-if="order.driverDeleted" class="muted">司機已刪除</span>
             <span v-else class="muted">—</span>
           </td>
-          <td class="num">{{ money(order.driverPrice) }}</td>
-          <td class="nowrap">
+          <td class="num">
+            {{ money(order.driverPrice) }}
+            <div class="narrow-only hint">服務費 {{ hkd(order.serviceFee) }}・搶單 {{ order.claimAttempts }}</div>
+          </td>
+          <td class="nowrap col-wide">
             <div v-for="mark in moneyMarks(order)" :key="mark">{{ mark }}</div>
           </td>
-          <td class="num">{{ hkd(order.serviceFee) }}</td>
-          <td class="num">{{ order.claimAttempts }}</td>
+          <td class="num col-wide">{{ hkd(order.serviceFee) }}</td>
+          <td class="num col-wide">{{ order.claimAttempts }}</td>
         </tr>
         <tr v-if="result.items.length === 0" class="table__empty">
           <td colspan="9" class="muted">
@@ -164,6 +170,22 @@ function moneyMarks(order: OrderRow): string[] {
 </template>
 
 <style scoped>
+/*
+ * Every filter on one line at 1280px: the search takes what the others leave, and 收款與結清 is as wide
+ * as its first choice, not its longest (a longer choice shows cut, in full when the list is open).
+ */
+.filters .orders__search {
+  flex: 1 1 180px;
+}
+
+.orders__money {
+  width: 170px;
+}
+
+.filters .filters__date {
+  width: 136px;
+}
+
 /* Wide enough that a route reads on two lines at most, narrow enough for nine columns in the card. */
 .orders__route {
   min-width: 140px;

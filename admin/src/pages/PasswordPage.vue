@@ -46,7 +46,7 @@ async function submit() {
 /* The three fields across the card, the same width each. */
 .password-page__fields {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-lg);
   align-items: end;
 }
