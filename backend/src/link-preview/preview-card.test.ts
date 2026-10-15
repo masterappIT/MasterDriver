@@ -106,6 +106,7 @@ test('each square renders to a 600 × 600 JPEG; a driver without a photo gets th
   for (const square of [
     { kind: 'driver' as const, name: '<李', photo: null },
     { kind: 'order' as const, badge: '有單', when: '10/16 02:57' },
+    { kind: 'confirm' as const },
     { kind: 'home' as const },
   ]) {
     const svg = squareSvg(square);
@@ -116,4 +117,5 @@ test('each square renders to a 600 × 600 JPEG; a driver without a photo gets th
   }
   assert.ok(squareSvg({ kind: 'driver', name: '<李', photo: null }).includes('&lt;'));
   assert.ok(squareSvg({ kind: 'order', badge: '有單', when: '10/16 02:57' }).includes('10/16 02:57'));
+  assert.ok(squareSvg({ kind: 'confirm' }).includes('<tspan fill="#f5c518">行程</tspan>'), '行程 in gold');
 });

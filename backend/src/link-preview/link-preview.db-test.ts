@@ -93,11 +93,13 @@ test('a confirmation card is about the dispatcher: their car only when they driv
     assert.ok(!JSON.stringify(card).includes('張師傅'), `${step}: never the claiming driver`);
     assert.ok(!JSON.stringify(card).includes('埃爾法'), `${step}: never the claiming driver’s car`);
     assert.equal(card?.owner?.line, '行程由李師傅負責，有問題請找李師傅', step);
+    assert.deepEqual(await previews.squareData('c', confirmCode), { kind: 'confirm' }, `${step}: 為你安排的行程, no initial`);
   }
 
   // They drive it themselves: their own car.
   await ctx.prisma.order.update({ where: { id: order.id }, data: { claimedById: dispatcher } });
   assert.equal((await previews.cardData('c', confirmCode))?.vehicle, '7座商務車 · 兩地牌');
+  assert.equal((await previews.squareData('c', confirmCode))?.kind, 'driver', 'their own car, or their initial');
 });
 
 test('a confirmation card counts the trips the dispatcher arranged, and offers their 名片頁 only when it is public', async () => {

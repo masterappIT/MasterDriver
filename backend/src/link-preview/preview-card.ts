@@ -71,11 +71,13 @@ export interface PreviewMeta {
  * The square picture, for the previews that show a small square: WeChat's card (from iOS's share
  * menu, which reads the tags every visitor gets) crops the middle of any picture to a thumbnail,
  * where the wide card would be a strip of photo (2026-10-15). It carries one thing, large: the
- * brand and the car whole (or the initial) for a driver; 有單 and when for a 搶單 link; the brand
- * alone for everything else.
+ * brand and the car whole (or the initial) for a driver; 為你安排的行程 for a confirmation link whose
+ * dispatcher has someone else drive (A5, 2026-10-15); 有單 and when for a 搶單 link; the brand alone
+ * for everything else.
  */
 export type SquareData =
   | { kind: 'driver'; name: string; photo: string | null }
+  | { kind: 'confirm' }
   | { kind: 'order'; badge: string; when: string }
   | { kind: 'home' };
 
@@ -318,6 +320,14 @@ export function squareSvg(square: SquareData): string {
       `<rect x="${x}" y="150" width="${width}" height="196" rx="26" fill="#f5c518" stroke="rgba(23,23,23,0.5)" stroke-width="12" />`,
       label(square.badge, SQUARE / 2, 302, 150, 900, '#171717', width),
       label(square.when, SQUARE / 2, 450, 64, 800, '#ffffff'),
+    );
+  } else if (square.kind === 'confirm') {
+    // The logo as large as on the home square, then 為你安排 / 的行程 with 行程 in the gold of 有單:
+    // the word a thumbnail still carries. No car: someone else drives it.
+    body.push(
+      mark(SQUARE / 2 - 98, 92, 4),
+      label('為你安排', SQUARE / 2, 372, 108, 900, '#ffffff'),
+      `<text x="${SQUARE / 2}" y="500" text-anchor="middle" font-family="${FONT}" font-size="108" font-weight="900" letter-spacing="${108 * 0.06}"><tspan fill="#ffffff">的</tspan><tspan fill="#f5c518">行程</tspan></text>`,
     );
   } else {
     // The mark and the name, nothing smaller.

@@ -270,7 +270,9 @@ export class LinkPreviewService {
     const title = name ? `${name}為你安排的行程` : '為你安排的行程';
     const description = `點開確認時間與上車地點。${name ? `行程由${name}負責。` : ''}`;
     const url = `${this.config.publicBaseUrl}/c/${confirmCode}`;
-    return { title, description, url, card, square: { kind: 'driver', name: name || '司機', photoKey } };
+    // Their car (or initial) only when they drive it; otherwise 為你安排的行程, never a stranger's initial.
+    const square: Resolved['square'] = drivesIt ? { kind: 'driver', name: name || '司機', photoKey } : { kind: 'confirm' };
+    return { title, description, url, card, square };
   }
 
   /**
