@@ -46,8 +46,10 @@ FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app/backend
+# fonts-noto-cjk: the link-preview cards (src/link-preview) are drawn on the server, and their
+# Chinese needs a font; without one every character comes out as a box.
 RUN apt-get update \
-  && apt-get install --yes --no-install-recommends ca-certificates openssl \
+  && apt-get install --yes --no-install-recommends ca-certificates openssl fontconfig fonts-noto-cjk \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/package.json /app/package-lock.json /app/

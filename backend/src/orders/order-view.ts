@@ -388,6 +388,9 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
             phone: `${order.dispatcher.countryCode} ${order.dispatcher.phone}`,
             phones: phonesOf(order.dispatcher),
             ...pageContactOf(order.dispatcher.profilePage),
+            // Their 名片頁, when public, so the passenger books them directly next time: the customer
+            // stays the dispatcher's whoever drove (taken-down pages are never published).
+            pageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,
           },
     passengerConfirmedAt: confirmed,
     flightNo: lead.flightNo,

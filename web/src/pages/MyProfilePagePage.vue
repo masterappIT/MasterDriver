@@ -6,11 +6,14 @@ import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GroupText from '../components/GroupText.vue';
 import PhotoCrop from '../components/PhotoCrop.vue';
+import NameCardSheet from '../components/NameCardSheet.vue';
 import { t } from '../i18n';
 import { toast } from '../toast';
 
 interface MyPage {
   code: string;
+  /** From the driver profile, as the public page shows it. */
+  name: string | null;
   url: string;
   /** A few lines about the driver and the link, to paste where the page is shared. */
   shareText: string;
@@ -40,6 +43,8 @@ const busy = ref(false);
 const picker = ref<HTMLInputElement | null>(null);
 /** The photo just picked, while the driver places it in the frame. */
 const cropping = ref<File | null>(null);
+/** 名片圖: the square picture with the QR code, made on the phone when asked for. */
+const nameCardOpen = ref(false);
 const form = reactive({ intro: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
 
 /**
@@ -186,6 +191,8 @@ onMounted(async () => {
           <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
         </div>
         <button class="my-page__link-only" type="button" @click="copyLink">{{ t('只複製連結') }}</button>
+        <!-- For where a link shows no preview: WeChat, 朋友圈, 小紅書. -->
+        <button class="button secondary block my-page__name-card" type="button" @click="nameCardOpen = true">{{ t('做成名片圖') }}</button>
         <p v-if="!page.hasDriverProfile" class="my-page__notice">{{ t('公開之前，請先在「我的」填寫司機資料（姓名、車型）。') }}</p>
         <p class="hint my-page__from">{{ t('姓名、車型、電話取自司機資料，公開後名片頁會顯示你的港澳和內地號碼。完成單數由系統計算。') }}</p>
       </section>
@@ -270,10 +277,25 @@ onMounted(async () => {
       </button>
       <button v-else class="my-page__unpublish" type="button" :disabled="busy" @click="save(false)">{{ t('改為不公開') }}</button>
     </template>
+
+    <NameCardSheet
+      v-if="nameCardOpen && page"
+      :name="page.name ?? t('司機')"
+      :routes="page.routes"
+      :completed-trips="page.completedTrips"
+      :photo-url="page.photos[0]?.url ?? null"
+      :url="page.url"
+      :published="page.published"
+      @close="nameCardOpen = false"
+    />
   </div>
 </template>
 
 <style scoped>
+.my-page__name-card {
+  margin-top: var(--space-md);
+}
+
 .my-page__guide {
   display: block;
   margin: 0 var(--space-xs) var(--space-md);

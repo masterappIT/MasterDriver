@@ -712,3 +712,16 @@ test('the 接單池 filters by Hong Kong day and by a word in the origin or dest
   assert.deepEqual(await codes({ q: '深圳灣' }), [sooner.code, later.code]);
   assert.deepEqual(await codes({ date: '2026-10-15', q: '澳門' }), []);
 });
+
+test('the passenger sees the dispatcher’s 名片頁 to book them next time, only while it is public', async () => {
+  const dispatcher = await createDriver(ctx, '李師傅');
+  const order = await ctx.orders.create(dispatcher, sampleOrder);
+  const confirmCode = order.links.passengerConfirm.split('/c/')[1];
+  assert.equal((await ctx.orders.getForPassenger(confirmCode)).dispatcher?.pageCode, null);
+
+  const page = await ctx.profilePages.update(dispatcher, { published: true });
+  assert.equal((await ctx.orders.getForPassenger(confirmCode)).dispatcher?.pageCode, page.code);
+
+  await ctx.profilePages.staffBlock(dispatcher, '照片含廣告');
+  assert.equal((await ctx.orders.getForPassenger(confirmCode)).dispatcher?.pageCode, null, 'taken down: unpublished');
+});
