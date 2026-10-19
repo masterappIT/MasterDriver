@@ -1,7 +1,12 @@
 # 搬遷計畫：正式環境由 Google Cloud 搬到 HostKVM
 
-> 狀態：**已批准**（2026-10-19）。第 1 步本倉庫的程式改動（4.1 的前兩項與 4.2）已完成、未上線；伺服器、Google Cloud、Squarespace 都還沒動。
-> 本機只驗證了：後端測試、建置、腳本語法（`bash -n`、ShellCheck）。`deploy/hostkvm/` 的腳本、Caddy 與 nginx 設定還沒在任何 Docker 環境實際跑過，第 2 步在測試網域第一次實跑。
+> 狀態：**已批准**（2026-10-19）。第 1 步只差「程式上線到 Cloud Run」（推送 `main`）：
+> - 本倉庫的程式改動（4.1 的前兩項與 4.2）已提交，未推送。本機驗證了後端測試、建置、腳本語法（`bash -n`、ShellCheck）。
+> - 伺服器（2026-10-19）：`setup.sh` 已執行。`master_driver` 資料庫與帳號（新密碼，資料庫是空的）、`app.env`、檔案目錄、`masterdriver-*` 指令、cron、`deploy-masterdriver` 帳號（加進 `AllowUsers`，只接受 GitHub 那把金鑰）都已建立；伺服器能從 Artifact Registry 拉 MasterDriver 的映像。每日備份已實際上傳一次到備份 bucket。恢復測試要等第 2 步匯入資料後才能做（空資料庫沒有可核對的表）。
+> - Google Cloud（2026-10-19）：`masterapp-prod-vm@dualplate-511819` 有 `masterdriver` 映像倉庫的只讀權限；備份 bucket `master-driver-511510-backups`（香港、不公開、35 天自動刪除）；備份帳戶 `masterdriver-backup` 只有新增與讀取權限，金鑰只放在伺服器。
+> - GitHub：`production` 環境的 Secret `MASTERDRIVER_DEPLOY_SSH_KEY`（部署帳號的私鑰，本機不留副本）。workflow 在第 4 步才使用它。
+> - Squarespace（2026-10-19）：`masterdriverapp`、`masterdriveradmin` 的 TTL 已由 4 小時改為 5 分鐘，IP 仍是負載平衡器。
+> - 還沒做：容器、Caddy 網站、nginx 的 `resolve` 都還沒在伺服器上跑過，第 2 步在測試網域第一次實跑。到時也要確認 API 加入 `masterdriver` 網絡後能連外網（`data` 網絡是 `internal`），因為簡訊和付款服務需要。
 > 本倉庫公開：本文件不寫任何密碼、金鑰或 Secret 的值。
 
 ## 1. 目標與原則
