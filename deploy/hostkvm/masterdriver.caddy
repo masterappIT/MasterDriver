@@ -1,0 +1,37 @@
+# MasterDriver's sites on the server's shared Caddy. masterdriver-caddy-site fills in the host names
+# and writes the result to the server's Caddy sites directory. See docs/HOSTKVM-MIGRATION.md.
+# Each site goes to slot a or b: only a slot joined to the `edge` network is found, and a new slot
+# joins before the old one stops, so a release never leaves a site without a running front end.
+
+(masterdriver_proxy) {
+	# From the Google load balancer (during the move): keep the user's address it passes on, as on
+	# Cloud Run. Otherwise Caddy sets X-Forwarded-For to the connecting address, which cannot be forged.
+	@masterdriver_google_lb remote_ip 35.191.0.0/16 130.211.0.0/22
+	handle @masterdriver_google_lb {
+		reverse_proxy {args[0]} {args[1]} {
+			lb_policy first
+			lb_try_duration 10s
+			fail_duration 10s
+			health_uri /healthz
+			health_interval 10s
+			header_up X-Forwarded-For {header.X-Forwarded-For}
+		}
+	}
+	handle {
+		reverse_proxy {args[0]} {args[1]} {
+			lb_policy first
+			lb_try_duration 10s
+			fail_duration 10s
+			health_uri /healthz
+			health_interval 10s
+		}
+	}
+}
+
+__WEB_HOSTS__ {
+	import masterdriver_proxy masterdriver-web-a:8080 masterdriver-web-b:8080
+}
+
+__ADMIN_HOSTS__ {
+	import masterdriver_proxy masterdriver-admin-a:8080 masterdriver-admin-b:8080
+}

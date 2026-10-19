@@ -44,5 +44,5 @@ jobs:
       - name: Check deployment scripts
         run: |
           set -euo pipefail
-          for script in deploy/cloud-run/*.sh deploy/frontend/*.sh; do bash -n "$script"; done
+          for script in deploy/cloud-run/*.sh deploy/frontend/*.sh deploy/hostkvm/*.sh; do bash -n "$script"; done
           PYTHONDONTWRITEBYTECODE=1 python3 deploy/cloud-run/test_revision_ready.py

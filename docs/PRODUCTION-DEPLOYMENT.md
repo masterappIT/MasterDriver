@@ -2,6 +2,8 @@
 
 部署方式沿用 Master Travel：Google Cloud Run、Cloud SQL、Artifact Registry、Secret Manager、Cloud Storage，由 GitHub Actions 自動發布。兩個專案的雲端資源完全分開，MasterDriver 使用獨立的 Google Cloud 專案 `master-driver-511510`，區域 `asia-east2`（香港）。
 
+**搬遷中（2026-10-19 批准）：**正式環境要搬到 HostKVM 伺服器，計畫與進度見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md)。切換前本文件描述的 Cloud Run 環境照常運作。
+
 本文件只記錄架構與操作方式，不得寫入任何密碼、金鑰或 Secret 的內容（本倉庫公開）。
 
 **目前狀態（2026-10-13）：已部署。**「一次性設定」全部完成，第一次部署由 GitHub Actions 執行成功，資料種子已執行。`DEPLOY_ENABLED` 已是 `true`：**之後每次推送到 `main` 都會自動部署正式環境。**
@@ -359,3 +361,4 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 - `backend/Dockerfile`、`.dockerignore`
 - `deploy/frontend/`：`Dockerfile`、`web.conf`、`admin.conf`、`build-image.sh`、`deploy.sh`
 - `deploy/cloud-run/`：`deploy.sh`、`smoke-test.sh`、`rollback.sh`、`revision-ready.py`
+- `deploy/hostkvm/`：搬到 HostKVM 後的伺服器檔案（見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 4.2），切換前不使用

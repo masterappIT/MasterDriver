@@ -122,7 +122,7 @@ export class GcsMediaStorage implements MediaStorage {
   }
 }
 
-/** No storage configured: uploads are refused instead of landing on a disk that will be lost. */
+/** Production with no storage configured: uploads are refused instead of landing on a disk that may be lost. */
 export class UnavailableMediaStorage implements MediaStorage {
   readonly available = false;
   async put(): Promise<void> {
@@ -136,6 +136,8 @@ export class UnavailableMediaStorage implements MediaStorage {
 
 export function createMediaStorage(config: Pick<AppConfig, 'isProduction' | 'supportMediaBucket' | 'supportMediaDir'>): MediaStorage {
   if (config.supportMediaBucket) return new GcsMediaStorage(config.supportMediaBucket);
+  // Production uses a directory only when one is named (the server's backed-up disk), never the default.
+  if (config.supportMediaDir) return new LocalMediaStorage(config.supportMediaDir);
   if (config.isProduction) return new UnavailableMediaStorage();
-  return new LocalMediaStorage(config.supportMediaDir ?? resolve(__dirname, '../../../.data/support-media'));
+  return new LocalMediaStorage(resolve(__dirname, '../../../.data/support-media'));
 }

@@ -1,0 +1,5 @@
+# MasterDriver's daily jobs (installed as /etc/cron.d/masterdriver). The server's clock is UTC.
+# 03:00 Hong Kong time: database and files to the backup bucket.
+0 19 * * * root /usr/local/sbin/masterdriver-backup >>/srv/apps/masterdriver/logs/backup.log 2>&1
+# 04:30 Hong Kong time: 客服 files past their keep-until time (was Cloud Scheduler and a Cloud Run job).
+30 20 * * * root /usr/local/sbin/masterdriver-purge >>/srv/apps/masterdriver/logs/purge.log 2>&1

@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { loadConfig } from '../config';
 import { sniffMedia } from './media-file';
 import { GcsMediaStorage, LocalMediaStorage, createMediaStorage } from '../storage/media-storage';
 
@@ -72,8 +73,16 @@ test('Cloud Storage: one access token is reused, files go to the bucket with the
   assert.equal(upload.headers['content-type'], 'video/mp4');
 });
 
-test('production without a bucket has no media storage; a local directory is never used there', () => {
+test('production uses the bucket, else a named directory, else no media storage; the default directory is never used there', () => {
   assert.equal(createMediaStorage({ isProduction: true, supportMediaBucket: null, supportMediaDir: null }).available, false);
   assert.ok(createMediaStorage({ isProduction: true, supportMediaBucket: 'b', supportMediaDir: null }) instanceof GcsMediaStorage);
+  assert.ok(createMediaStorage({ isProduction: true, supportMediaBucket: 'b', supportMediaDir: '/data/media' }) instanceof GcsMediaStorage);
+  assert.ok(createMediaStorage({ isProduction: true, supportMediaBucket: null, supportMediaDir: '/data/media' }) instanceof LocalMediaStorage);
   assert.ok(createMediaStorage({ isProduction: false, supportMediaBucket: null, supportMediaDir: '/tmp/x' }) instanceof LocalMediaStorage);
+});
+
+test('SUPPORT_MEDIA_DIR is read in production too', () => {
+  const env = { NODE_ENV: 'production', OTP_PEPPER: 'x'.repeat(32), DATA_ENCRYPTION_KEY: Buffer.alloc(32).toString('base64') };
+  assert.equal(loadConfig({ ...env, SUPPORT_MEDIA_DIR: ' /data/media ' }).supportMediaDir, '/data/media');
+  assert.equal(loadConfig(env).supportMediaDir, null);
 });
