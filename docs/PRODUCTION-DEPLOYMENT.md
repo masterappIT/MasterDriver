@@ -1,18 +1,22 @@
 # 正式環境部署
 
-部署方式沿用 Master Travel：Google Cloud Run、Cloud SQL、Artifact Registry、Secret Manager、Cloud Storage，由 GitHub Actions 自動發布。兩個專案的雲端資源完全分開，MasterDriver 使用獨立的 Google Cloud 專案 `master-driver-511510`，區域 `asia-east2`（香港）。
+**目前（2026-10-19 起）：正式環境在公司共用的 HostKVM 伺服器 `45.134.82.239`**，見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md)。GitHub Actions 建置映像推送到 Google Cloud 的 Artifact Registry（專案 `master-driver-511510`，區域 `asia-east2`），再經 SSH 叫伺服器部署（`deploy-production.yml`、`deploy/hostkvm/deploy.sh`）。推送 `main` 就部署；只改文件（`docs/`、`.md`）的推送不部署，要部署可手動執行 workflow。
 
-**已搬到 HostKVM（2026-10-19）：**正式環境已在 HostKVM 伺服器運行，見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md)。本文件描述的 Cloud Run 環境已不接流量，資源暫時保留作回退。發布流程改為經 SSH 部署到伺服器（`deploy-production.yml`、`deploy/hostkvm/deploy.sh`），2026-10-19 起推送 `main` 就部署到伺服器；只改文件（`docs/`、`.md`）的推送不部署，要部署可手動執行 workflow。
+**Google Cloud 已於 2026-10-19 提前清理**：Cloud Run、Jobs、Scheduler、負載平衡器、固定 IP、Cloud SQL 都已刪除，**不能再退回 GCP**。保留的只有 Artifact Registry、三個 bucket（每日備份、舊客服檔案、封存）、Secret Manager 與服務帳號（見 HOSTKVM-MIGRATION.md 第 6 步）。
+
+2026-10-13 至 10-19 正式環境沿用 Master Travel 的做法跑在 Cloud Run、Cloud SQL 上。本文件標明「歷史紀錄」的段落描述的是那個已刪除的環境，只作參考。
 
 本文件只記錄架構與操作方式，不得寫入任何密碼、金鑰或 Secret 的內容（本倉庫公開）。
 
-**目前狀態（2026-10-13）：已部署。**「一次性設定」全部完成，第一次部署由 GitHub Actions 執行成功，資料種子已執行。`DEPLOY_ENABLED` 已是 `true`：**之後每次推送到 `main` 都會自動部署正式環境。**
+**部署狀態：**「一次性設定」在 2026-10-13 完成（當時在 Cloud Run），`DEPLOY_ENABLED` 是 `true`：**每次推送到 `main`（文件除外）都會自動部署正式環境。**
 
-| 服務 | 正式網址（2026-10-14 起） | Cloud Run 原網址（仍可用） |
-|---|---|---|
-| 司機與乘客網頁 | `https://masterdriverapp.masterappinc.com` | `https://masterdriver-web-396289477283.asia-east2.run.app` |
-| 平台後台 | `https://masterdriveradmin.masterappinc.com` | `https://masterdriver-admin-396289477283.asia-east2.run.app` |
-| API | 只經上面網址的 `/api` 使用 | |
+| 服務 | 正式網址（2026-10-14 起） |
+|---|---|
+| 司機與乘客網頁 | `https://masterdriverapp.masterappinc.com` |
+| 平台後台 | `https://masterdriveradmin.masterappinc.com` |
+| API | 只經上面網址的 `/api` 使用 |
+
+Cloud Run 原網址（`*.run.app`）已隨服務刪除，不能再用。
 
 派單連結與乘客確認連結用正式網址產生（見下方「正式網域」）。
 
@@ -23,7 +27,7 @@
 - 正式網域還沒在內地手機的微信內實測。
 - 港澳號碼的簡訊（國際 253 帳號）。
 
-已完成的還有：資料種子、第一個超級管理員（帳號 `vincent`）、客服檔案的每日清理（Cloud Run Job `masterdriver-support-purge`，Cloud Scheduler 每天 04:30 香港時間觸發）。
+已完成的還有：資料種子、第一個超級管理員（帳號 `vincent`）、客服檔案的每日清理（伺服器的 cron 每天 04:30 香港時間執行 `masterdriver-purge`，`deploy/hostkvm/cron`；Cloud Run 時期是 Job `masterdriver-support-purge` 加 Cloud Scheduler，已刪除）。
 
 **安全備註：**GitHub 到 Google Cloud 的登入限定為本倉庫、`production` 環境、`main` 分支；部署帳戶讀不到 Secret 的內容。能推送到本倉庫 `main` 的人就能部署正式環境，所以 masterappIT 帳號的密碼、兩步驗證與權杖要妥善保管。2026-10-13 曾因 Master Travel 倉庫的 `security-audit.yml` 懷疑帳號被盜用而暫緩接上 GitHub；使用者已確認帳號沒有被盜用。
 
@@ -38,34 +42,41 @@
 
 ## 架構
 
+HostKVM 伺服器上的位置是 `/srv/apps/masterdriver/`（`compose.yaml`、`app.env`、`media/`、`logs/`），設定檔都在本倉庫 `deploy/hostkvm/`。
+
 ```mermaid
 flowchart TB
     User[司機、乘客的瀏覽器<br/>微信、WhatsApp 內建瀏覽器]
     Staff[平台人員的瀏覽器]
-    Web[Cloud Run：web<br/>nginx + 司機與乘客網頁]
-    Admin[Cloud Run：admin<br/>nginx + 平台後台]
-    API[Cloud Run：api<br/>NestJS]
-    Job[Cloud Run Job：migrate]
-    SQL[Cloud SQL<br/>PostgreSQL]
-    Bucket[Cloud Storage<br/>客服圖片與影片，不公開]
-    Secrets[Secret Manager]
+    Caddy[伺服器共用的 Caddy<br/>80/443，自動 HTTPS]
+    Web[容器：web<br/>nginx + 司機與乘客網頁]
+    Admin[容器：admin<br/>nginx + 平台後台]
+    API[容器：api<br/>NestJS]
+    PG[伺服器共用的 Postgres 16<br/>資料庫 master_driver]
+    Media[伺服器磁碟 media/<br/>客服檔案與名片頁照片]
+    Backup[Cloud Storage<br/>每日備份 bucket]
     Registry[Artifact Registry]
     Actions[GitHub Actions]
+    Deploy[伺服器的部署腳本<br/>masterdriver-deploy]
 
-    User --> Web
-    Staff --> Admin
+    User --> Caddy
+    Staff --> Caddy
+    Caddy --> Web
+    Caddy --> Admin
     Web -->|/api| API
     Admin -->|/api| API
-    API --> SQL
-    API --> Bucket
-    Secrets --> API
-    Secrets --> Job
-    Job --> SQL
+    API --> PG
+    API --> Media
+    PG -.->|每日 03:00 香港時間| Backup
+    Media -.-> Backup
     Actions --> Registry
+    Actions -->|SSH| Deploy
+    Deploy -->|換槽| API
+    Deploy -->|換槽| Web
+    Deploy -->|換槽| Admin
     Registry --> Web
     Registry --> Admin
     Registry --> API
-    Registry --> Job
 ```
 
 | 服務 | 內容 | 說明 |
@@ -73,7 +84,9 @@ flowchart TB
 | `web` | `web/dist` + nginx | 搶單頁、乘客確認頁、司機端、客服頁；`/api/*` 轉給 API |
 | `admin` | `admin/dist` + nginx | 平台後台；固定不給搜尋引擎收錄、不能被嵌入其他網站 |
 | `api` | `backend/Dockerfile` | 所有驗證、權限、收費與搶單判斷。映像檔建置時下載當月的 DB-IP City Lite（數據流監控用來由 IP 推算地區，約 130 MB）；下載不到時照常建置，地區顯示「未知地區」 |
-| `migrate`（Job） | 與 `api` 同一個映像檔 | 只執行 `prisma migrate deploy`；API 啟動時不會改資料庫結構 |
+| migration | 與 `api` 同一個映像檔 | 部署腳本先用新映像執行 `prisma migrate deploy`，再啟動新的 API；API 啟動時不會改資料庫結構 |
+
+每個服務有 a、b 兩個槽，平時只有一個在跑；目前用哪個槽、各槽的映像摘要記在伺服器的 `release.env`（`masterdriver-deploy status` 可查）。
 
 瀏覽器只連 `web` 或 `admin` 的網域，API 經同一網域的 `/api` 轉發，所以登入 cookie 是同站的，不需要 CORS。
 
@@ -90,21 +103,21 @@ flowchart TB
 `.github/workflows/deploy-production.yml`，推送到 `main` 或手動執行時觸發：
 
 1. 執行品質閘門（`verify:api`、資料庫整合測試、`verify:admin`、`verify:web`、部署腳本檢查），不通過就停止。
-2. 以 Workload Identity Federation 登入 Google Cloud（GitHub 不保存任何 Google 金鑰）。
-3. 建置 `web`、`admin`、`api` 三個映像檔並推送，之後一律以 `名稱@sha256:摘要` 指定，不使用 `latest`。
-4. 建立 Cloud SQL 備份，失敗就停止。
-5. 執行 migration Job，失敗就停止，並印出執行狀態與日誌。
-6. 把 API 部署成不接流量的候選 revision，檢查 `/api/health/live` 與 `/api/health/ready`。
-7. 檢查通過才把流量切到新 revision，並再次核對 revision、流量 100% 與映像檔摘要。
-8. 部署 `web` 與 `admin`，同樣先不接流量，核對後才切換。
+2. 以 Workload Identity Federation 登入 Google Cloud（GitHub 不保存任何 Google 金鑰），只用來推送映像檔。
+3. 建置 `web`、`admin`、`api` 三個映像檔並推送到 Artifact Registry，之後一律以 `名稱@sha256:摘要` 指定，不使用 `latest`。
+4. 經 SSH 連到伺服器（帳號 `deploy-masterdriver` 只能執行 `masterdriver-deploy`；私鑰在 `production` 環境的 Secret，伺服器的 host key 寫死在 workflow）。
+5. `backup`：伺服器上 `pg_dump` 備份資料庫，失敗就停止。
+6. `api`：用新映像執行 migration，失敗就停止；新的 API 在另一個槽啟動，先不接流量，檢查 `/api/health/live` 與 `/api/health/ready` 通過才接上，之後停掉舊的。
+7. `frontends`：`web` 與 `admin` 同樣在另一個槽啟動，檢查通過才接到 Caddy，之後停掉舊的。
+8. 檢查公開網址的 `/api/health/ready`。
 
-每次要改動正式環境（備份、migration、切流量、前端）之前，都會確認這個 commit 仍是 `main` 的最新一筆；排隊中的舊版本不會蓋掉新版本。
+任何一步檢查失敗，新槽會被停掉，舊版繼續運行。每次要改動正式環境（備份、API、前端）之前，都會確認這個 commit 仍是 `main` 的最新一筆；排隊中的舊版本不會蓋掉新版本。伺服器上每一步的細節見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 5.2。
 
 ### 健康檢查
 
 | 路徑 | 用途 |
 |---|---|
-| `GET /api/health/live` | 程序是否活著；Cloud Run 的啟動與存活探測用這個。資料庫出問題時不會讓平台不斷重啟服務 |
+| `GET /api/health/live` | 程序是否活著；部署腳本啟動新槽時檢查這個（Cloud Run 時期是啟動與存活探測）。資料庫出問題時不會讓平台不斷重啟服務 |
 | `GET /api/health/ready` | 資料庫是否有回應；發布前檢查與外部監控用這個 |
 | `GET /api/health` | 同 `ready`（舊路徑） |
 | `GET /healthz` | `web`、`admin` 的 nginx 容器 |
@@ -113,10 +126,16 @@ flowchart TB
 
 連線卡住、沒到達伺服器的請求不會出現在伺服器的紀錄裡，所以用戶端網頁會自己回報打開頁面的結果（`POST /api/public/load-report`，2026-10-14 起）。每筆在 API 的日誌記一行 `client-load`，內容是結果（`ready` 顯示成功、`stalled` 載入畫面超過 10 秒、`network-failed` 讀取三次都失敗）、頁面種類（如 `/o/:code`，不含任何代碼）、花了多少毫秒、瀏覽器回報的網路類型，以及伺服器依 IP 查出的地區與是否在微信內；`afterStall: true` 表示同一分頁之前卡住過。不記 IP 與用戶。每個位址每分鐘最多 20 筆。
 
+日誌在伺服器上（要 root）：運行中的 API 用 `docker logs`；每次發布被停掉的容器，日誌先存到 `/srv/apps/masterdriver/logs/`（保留 30 天）再刪除。
+
 ```bash
-gcloud logging read 'resource.labels.service_name="masterdriver-api" AND textPayload:"client-load"' \
-  --project master-driver-511510 --freshness 7d --limit 200 --format='value(timestamp,textPayload)'
+# 運行中的 API（槽 a 或 b，見 masterdriver-deploy status 的 API_SLOT）
+docker logs --timestamps --since 168h masterdriver-api-a 2>&1 | grep client-load
+# 之前的版本
+zgrep -h client-load /srv/apps/masterdriver/logs/masterdriver-api-*.log.gz
 ```
+
+Cloud Run 時期（2026-10-19 前）的日誌在 Cloud Logging，用 `gcloud logging read` 查，保留 30 天。
 
 `stalled` 那一筆是卡住當下送出的，網路不通時可能送不到；之後重新載入成功時的 `ready` 會帶 `afterStall: true`，兩者一起看。
 
@@ -126,15 +145,23 @@ API 與 migration 分開執行，新舊版本會短暫同時存在，所以 migr
 
 ### 回滾
 
-程式有問題時，把流量切回上一個確認過的 revision：
+程式有問題時，用部署腳本重新部署上一版的摘要，同樣先檢查再切換（[HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 5.2 第 9 點）。在伺服器上以 root 執行：
 
 ```bash
-PROJECT_ID=master-driver-511510 REGION=asia-east2 SERVICE_NAME=masterdriver-api REVISION=<上一個 revision> ./deploy/cloud-run/rollback.sh
+masterdriver-deploy status   # release.env：沒在用的那個槽就是上一版的映像
+masterdriver-deploy api <commit> sha256:<上一版 api 摘要>
+masterdriver-deploy frontends <commit> sha256:<上一版 web 摘要> sha256:<上一版 admin 摘要>
 ```
+
+`<commit>` 只寫進日誌和 `release.env`，填上一版完整的 40 位 commit（上一版的 `release.env` 存在 `release.env.prev`）。`api` 同樣會先用該映像執行 `prisma migrate deploy`。這個回滾方法還沒實際執行過。之後再推送 `main` 會照常部署新版本，所以回滾後要盡快修正 `main`。
+
+`deploy/cloud-run/rollback.sh` 是 Cloud Run 時期的回滾腳本，服務已刪除，不能再用。
 
 已執行的 migration 不會跟著還原；若結構仍向後相容就保留，否則優先用新版本修正。只有在資料完整性有風險、並宣告事故後，才考慮從備份還原。
 
 ## 一次性設定
+
+> **歷史紀錄（Cloud Run 時期，2026-10-13）。**以下資源中，Cloud Run、Jobs、Scheduler、Cloud SQL 已於 2026-10-19 刪除；仍在使用的是 Artifact Registry（第 2 節）、Workload Identity Federation 與 `masterdriver-deploy` 帳戶（推送映像用，第 6、7 節）、GitHub 設定（第 8 節）。客服檔案 bucket（第 5 節）與 Secret Manager（第 4 節）保留但正式環境已不使用。HostKVM 伺服器的設定見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 第 1 步與 `deploy/hostkvm/setup.sh`。
 
 以下由有權限的人執行一次。指令裡的名稱是建議值，可以更改，但要和 GitHub 變數一致。
 
@@ -275,6 +302,8 @@ gcloud iam service-accounts add-iam-policy-binding "$(sa deploy)" --role=roles/i
 | `GCP_FOLLOWING_JOBS` | `masterdriver-support-purge`（以空白分隔；發布時跟著換成新映像檔的 Job） |
 | `PRODUCTION_WEB_URL` | 司機與乘客網頁的正式網址，例如 `https://<正式網域>`，結尾不加 `/`。派單連結與乘客確認連結用這個網址產生 |
 
+2026-10-19 起 `deploy-production.yml` 只用 `GCP_PROJECT_ID`、`GCP_REGION`、`GCP_ARTIFACT_REPOSITORY`、`GCP_WORKLOAD_IDENTITY_PROVIDER`、`GCP_DEPLOY_SERVICE_ACCOUNT`、`PRODUCTION_WEB_URL`（只用來在最後檢查公開網址），另加 Secret `MASTERDRIVER_DEPLOY_SSH_KEY`。其餘變數是 Cloud Run 時期的；API 的 `PUBLIC_BASE_URL` 改在伺服器的 `app.env` 設定。
+
 **倉庫**層級的變數（不是環境變數，因為要在進入環境之前判斷）：
 
 | 變數 | 值 |
@@ -307,12 +336,21 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 
 ## 正式網域
 
-2026-10-14 設定完成：
+**目前（2026-10-19 起）：**
 
 | 網域 | 指向 |
 |---|---|
-| `masterdriverapp.masterappinc.com` | 司機與乘客網頁（Cloud Run `masterdriver-web`） |
-| `masterdriveradmin.masterappinc.com` | 平台後台（Cloud Run `masterdriver-admin`） |
+| `masterdriverapp.masterappinc.com` | A 紀錄 `45.134.82.239`（HostKVM），Caddy 轉到 `web` |
+| `masterdriveradmin.masterappinc.com` | A 紀錄 `45.134.82.239`（HostKVM），Caddy 轉到 `admin` |
+
+- DNS 在 Squarespace（見下方「DNS」），兩筆 A 紀錄 2026-10-19 06:09 UTC 改指伺服器，TTL 5 分鐘。
+- HTTPS 證書由伺服器的 Caddy 向 Let's Encrypt 取得並自動續期（`deploy/hostkvm/masterdriver.caddy`）。
+- **還沒在內地手機的微信內實測**（紅線 2，見 HOSTKVM-MIGRATION.md 檔頭）。
+- 後台「SEO」的正式網域要填 `https://masterdriverapp.masterappinc.com`（在後台操作）。
+
+### 2026-10-14 至 10-19：Google 負載平衡器（歷史紀錄，資源已刪除）
+
+當時兩個網域指向 Cloud Run `masterdriver-web`、`masterdriver-admin`。以下資源與固定 IP `34.144.204.172` 已於 2026-10-19 刪除，IP 已還給 Google。
 
 **為什麼用負載平衡器：**Cloud Run 的自訂網域對應不支援 `asia-east2`（2026-10-14 查 Google Cloud 文件確認），所以在前面加了全球外部 HTTPS 負載平衡器，做法照同公司 MasterBox（`masterbox-507211`）現有的那一套，但資源完全在本專案，不與 MasterBox 共用。
 
@@ -338,7 +376,9 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 - 微信內分享連結時，未在微信登記的網域可能出現提示頁；是否需要做微信的網域驗證，在實測時一併確認。
 - 後台「SEO」的正式網域要填 `https://masterdriverapp.masterappinc.com`（在後台操作）。
 
-## 已在正式環境驗證（2026-10-13）
+## 已在正式環境驗證（2026-10-13，Cloud Run 時期）
+
+搬到 HostKVM 後已驗證的項目見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 檔頭。
 
 - 完整的發布流程：品質閘門、三個映像檔、資料庫備份、migration Job、API 部署與健康檢查、兩個前端。第一次（建立服務）與第二次（新版本先不接流量、檢查通過才切換，清理 Job 跟著換映像檔）兩條路徑都由推送 `main` 實際跑過。
 - 資料種子 Job 執行成功。
@@ -349,10 +389,10 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 
 ## 尚未驗證
 
-- 回滾腳本沒有實際執行過。
-- 正式網域在內地的連線，以及微信與 WhatsApp 內的操作（內地簡訊登入只在 iOS 模擬器的 Safari 驗證過）。
+- HostKVM 上的回滾（重新部署上一版的摘要）沒有實際執行過。
+- 搬到 HostKVM 後的內地微信、WhatsApp 內操作、登入與簡訊、出單搶單、客服上傳、後台登入（見 HOSTKVM-MIGRATION.md 檔頭的「還沒驗證」）。
 - 港澳號碼的簡訊登入（國際 253 帳號尚未設定）。
-- 影片上傳（只驗證了圖片）。客服檔案清理 Job 與排程已實際觸發成功，但當時沒有過期檔案可刪。
+- 影片上傳（Cloud Run 時期只驗證了圖片）。
 - 從本機推送 API 映像檔會因上傳逾時失敗（映像檔約 780 MB），部署一律由 GitHub Actions 執行。
 
 ## 相關檔案
@@ -360,5 +400,5 @@ gcloud run jobs execute masterdriver-seed --region="$REGION" --wait
 - `.github/workflows/deploy-production.yml`、`.github/workflows/quality-gates.yml`
 - `backend/Dockerfile`、`.dockerignore`
 - `deploy/frontend/`：`Dockerfile`、`web.conf`、`admin.conf`、`build-image.sh`、`deploy.sh`
-- `deploy/cloud-run/`：`deploy.sh`、`smoke-test.sh`、`rollback.sh`、`revision-ready.py`
-- `deploy/hostkvm/`：搬到 HostKVM 後的伺服器檔案（見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 4.2），切換前不使用
+- `deploy/hostkvm/`：伺服器上的檔案（部署、備份、清理、Caddy、cron；見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 4.2），2026-10-19 起使用
+- `deploy/cloud-run/`：`deploy.sh`、`smoke-test.sh`、`rollback.sh`、`revision-ready.py`。Cloud Run 時期的腳本，服務已刪除，不再使用（照 HOSTKVM-MIGRATION.md 第 6 步，不特別清理）

@@ -6,8 +6,8 @@
 > - 06:09 兩筆 A 紀錄改指 `45.134.82.239`（TTL 5 分鐘），Caddy 取得 Let's Encrypt 證書。Google、Cloudflare、阿里 DNS 都已解析到新 IP。
 > - 已驗證：兩個網域的 HTTPS 與 `/api/health/ready`、名片頁連結預覽與分享圖、`robots.txt`、站內通知未登入回 401、API 能連外網、用戶真實 IP 經 Caddy 與 nginx 傳到 API、備份上傳與恢復測試（46 個表、14 個檔案全部找得到）。
 > - **還沒驗證**：內地手機在微信內打開（紅線 2）、WhatsApp 內操作、登入與簡訊、出單搶單、客服上傳、後台登入（第 7 節）。
-> - `deploy-production.yml` 已改為經 SSH 叫伺服器做備份、API、前端三步（5.1），伺服器的 host key 寫死在 workflow；其餘步驟不變，最後多一步檢查公開網址的 `/api/health/ready`。部署帳號的限制已在伺服器上測過（只能執行 `masterdriver-deploy`、格式不對的參數一律拒絕、不能用 Docker）。2026-10-19 06:23 第一次由 workflow 發布（9d0cc4a，手動執行）成功：GitHub 的金鑰與 host key 連得上，部署前備份、migration、API 與前端都由 a 槽切到 b 槽，公開網址正常；`DEPLOY_ENABLED` 已改回 `true`，之後推送 `main` 就部署到伺服器。Google Cloud 的資源保留到穩定（第 6 步）。
-> - **回退**：兩筆 A 紀錄改回 `34.144.204.172`，並把 Cloud Run 的 `masterdriver-api` 改回接受所有流量（`--ingress all`）。切換後寫入伺服器的資料要先搬回 Cloud SQL。
+> - `deploy-production.yml` 已改為經 SSH 叫伺服器做備份、API、前端三步（5.1），伺服器的 host key 寫死在 workflow；其餘步驟不變，最後多一步檢查公開網址的 `/api/health/ready`。部署帳號的限制已在伺服器上測過（只能執行 `masterdriver-deploy`、格式不對的參數一律拒絕、不能用 Docker）。2026-10-19 06:23 第一次由 workflow 發布（9d0cc4a，手動執行）成功：GitHub 的金鑰與 host key 連得上，部署前備份、migration、API 與前端都由 a 槽切到 b 槽，公開網址正常；`DEPLOY_ENABLED` 已改回 `true`，之後推送 `main` 就部署到伺服器。
+> - **Google Cloud 已提前清理**（2026-10-19 14:24–14:35 UTC，使用者決定，原定穩定兩週後）：Cloud Run、Jobs、Scheduler、負載平衡器、固定 IP `34.144.204.172`、Cloud SQL 都已刪除，詳見第 6 步。**不能再退回 GCP**；原本「A 紀錄改回 `34.144.204.172`、Cloud Run API 改回 `--ingress all`」的回退方法已失效。要用切換前的舊資料，只能從第 6 步的最後匯出恢復到伺服器。
 > 本倉庫公開：本文件不寫任何密碼、金鑰或 Secret 的值。
 
 ## 1. 目標與原則
@@ -209,6 +209,7 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 - 第 6 步前：把 Cloud SQL 改回可寫即可，沒有資料差異。
 - 第 6 步後：把負載平衡器改回 Cloud Run（即時生效）。但之後寫入伺服器的資料要先用同樣的暫停寫入方式搬回 Cloud SQL。
 - Google Cloud 上的所有資源保留到穩定為止。
+- （2026-10-19 起失效：Google Cloud 的資源已在第 6 步提前刪除，不能再退回。）
 
 ### 第 5 步：改 DNS（不停機）
 
@@ -218,6 +219,31 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 4. TTL 調回正常，刪除兩個臨時子網域。
 
 ### 第 6 步：清理 Google Cloud（穩定兩週後）
+
+> **已提前完成**（2026-10-19 14:24–14:35 UTC）。使用者決定提前，沒有等兩週；清理由 MasterApp-infra 進行，紀錄在該倉庫的 `docs/step-3-master-driver.md`。實際做法見下面「實際清理紀錄」，原計畫保留在後面作對照。
+
+#### 實際清理紀錄
+
+- 刪除前核對：12:30 UTC 之後沒有經正式網域的請求；10:00 UTC 之後只有 12:07 一個，其餘是直接連 IP 的掃描程式。
+- **最後匯出**：`gs://master-driver-511510-archive/final-before-delete-20261019T142418Z.sql.gz`（資料庫 `master_driver`，808,696 bytes）。只確認匯出成功和檔案大小，沒有下載核對內容。
+  - 封存 bucket `master-driver-511510-archive` 是這次新建的：asia-east2，沒有自動刪除規則，禁止公開存取。
+- **刪除前的設定**：同一個 bucket 的 `gcp-config-before-delete-20261019/`（20 個 YAML）。Cloud Run 的密碼是 Secret Manager 引用，YAML 裏沒有密碼本身。
+- **已刪除**（`master-driver-511510`）：
+  - Cloud Run `masterdriver-api`、`masterdriver-web`、`masterdriver-admin`
+  - Jobs `masterdriver-migrate`、`masterdriver-seed`、`masterdriver-support-purge`；Scheduler `masterdriver-support-purge-daily`
+  - 負載平衡器全套：轉發規則、HTTP 與 HTTPS proxy、URL map、證書 `masterdriver-cert`、兩個 backend、兩個 NEG
+  - 固定 IP `masterdriver-public-ip`（`34.144.204.172`，已還給 Google）
+  - Cloud SQL `masterdriver-db`，連同它的自動備份
+- **保留**：
+  - Artifact Registry `masterdriver`：伺服器從這裏拉映像，刪除後試拉成功
+  - bucket `master-driver-511510-backups`：伺服器每日備份，35 天後自動刪除
+  - bucket `master-driver-511510-support-media`：要先確認舊的客服附件都已搬到伺服器才能刪（和原計畫第 2 點不同）
+  - bucket `master-driver-511510-archive`
+  - Secret Manager、所有服務帳號和 IAM 權限
+- 刪除後兩個網域都指向 `45.134.82.239`，首頁和 `/api/health/ready` 回應 200。
+- **影響**：不能再退回 GCP，本文件檔頭與第 4 步的回退方法都已失效。要用切換前的舊資料，只能把上面的匯出恢復到伺服器。
+
+#### 原計畫
 
 1. 最後一次備份 Cloud SQL 和 bucket，存到公司的備份 bucket。
 2. 刪除會持續收費的資源：
