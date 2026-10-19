@@ -93,7 +93,7 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 
 - `compose.yaml`：三個服務的 a、b 槽、網絡、記憶體上限、檔案目錄。
 - `api-upstream.conf`：給前端 nginx 的 `masterdriver_api` 定義（4.1）。
-- `masterdriver.caddy`：兩個網域的 Caddy 設定；`caddy-site.sh` 填入網域、寫到伺服器的 Caddy 網站設定目錄，驗證通過才 reload，失敗就放回原本的設定。
+- `masterdriver.caddy`：兩個網域的 Caddy 設定；`caddy-site.sh` 填入網域、寫到伺服器的 Caddy 網站設定目錄，驗證通過才 reload，失敗就放回原本的設定。兩個網站都 `import access_log`（共用 Caddyfile 的請求記錄，寫到 Caddy 的 `/data/access.log`，每份 50 MB、保留 5 份；2026-10-19 加上）。
 - `setup.sh`：首次安裝，可以重跑。建立資料庫帳號與資料庫、`app.env`、檔案目錄、部署帳號、cron，並把下列腳本裝成 `masterdriver-*` 指令。
 - `deploy.sh`：部署腳本（5.2）；`forced-command.sh`：部署帳號只能執行它。
 - `backup.sh`：每日備份（3.1）；`restore-test.sh`：恢復測試；`purge.sh`：每日清除過期客服檔案。
