@@ -1,12 +1,13 @@
 # 搬遷計畫：正式環境由 Google Cloud 搬到 HostKVM
 
-> 狀態：**已批准**（2026-10-19）。第 1 步只差「程式上線到 Cloud Run」（推送 `main`）：
-> - 本倉庫的程式改動（4.1 的前兩項與 4.2）已提交，未推送。本機驗證了後端測試、建置、腳本語法（`bash -n`、ShellCheck）。
-> - 伺服器（2026-10-19）：`setup.sh` 已執行。`master_driver` 資料庫與帳號（新密碼，資料庫是空的）、`app.env`、檔案目錄、`masterdriver-*` 指令、cron、`deploy-masterdriver` 帳號（加進 `AllowUsers`，只接受 GitHub 那把金鑰）都已建立；伺服器能從 Artifact Registry 拉 MasterDriver 的映像。每日備份已實際上傳一次到備份 bucket。恢復測試要等第 2 步匯入資料後才能做（空資料庫沒有可核對的表）。
-> - Google Cloud（2026-10-19）：`masterapp-prod-vm@dualplate-511819` 有 `masterdriver` 映像倉庫的只讀權限；備份 bucket `master-driver-511510-backups`（香港、不公開、35 天自動刪除）；備份帳戶 `masterdriver-backup` 只有新增與讀取權限，金鑰只放在伺服器。
-> - GitHub：`production` 環境的 Secret `MASTERDRIVER_DEPLOY_SSH_KEY`（部署帳號的私鑰，本機不留副本）。workflow 在第 4 步才使用它。
-> - Squarespace（2026-10-19）：`masterdriverapp`、`masterdriveradmin` 的 TTL 已由 4 小時改為 5 分鐘，IP 仍是負載平衡器。
-> - 還沒做：容器、Caddy 網站、nginx 的 `resolve` 都還沒在伺服器上跑過，第 2 步在測試網域第一次實跑。到時也要確認 API 加入 `masterdriver` 網絡後能連外網（`data` 網絡是 `internal`），因為簡訊和付款服務需要。
+> 狀態：**已切換**（2026-10-19 06:09 UTC）。正式環境已在 HostKVM 運行；使用者指示「直接部署完切流量」「不要預演」，所以第 2、3、5 步（測試網域、負載平衡器過渡、之後再改 DNS）都沒做，改為一次切換：
+> - 05:43 `DEPLOY_ENABLED` 改為 `false`。05:56 舊 API（Cloud Run）改為只接受內部流量，停止寫入（Cloud SQL 不支援整個執行個體設成唯讀，所以只能停 API）。停機約 13 分鐘。
+> - 用 `gcloud sql export sql` 匯出（不需要資料庫密碼），`masterdriver-import-database` 匯入；bucket 的 14 個檔案用 `masterdriver-import-media` 複製。映像是 b401f35 由 workflow 建置的摘要；migration 沒有待執行的。
+> - 06:09 兩筆 A 紀錄改指 `45.134.82.239`（TTL 5 分鐘），Caddy 取得 Let's Encrypt 證書。Google、Cloudflare、阿里 DNS 都已解析到新 IP。
+> - 已驗證：兩個網域的 HTTPS 與 `/api/health/ready`、名片頁連結預覽與分享圖、`robots.txt`、站內通知未登入回 401、API 能連外網、用戶真實 IP 經 Caddy 與 nginx 傳到 API、備份上傳與恢復測試（46 個表、14 個檔案全部找得到）。
+> - **還沒驗證**：內地手機在微信內打開（紅線 2）、WhatsApp 內操作、登入與簡訊、出單搶單、客服上傳、後台登入（第 7 節）。
+> - **還沒做**：`deploy-production.yml` 改為部署到伺服器（5.1）；改好前 `DEPLOY_ENABLED` 保持 `false`，推送 `main` 不會部署。Google Cloud 的資源保留到穩定（第 6 步）。
+> - **回退**：兩筆 A 紀錄改回 `34.144.204.172`，並把 Cloud Run 的 `masterdriver-api` 改回接受所有流量（`--ingress all`）。切換後寫入伺服器的資料要先搬回 Cloud SQL。
 > 本倉庫公開：本文件不寫任何密碼、金鑰或 Secret 的值。
 
 ## 1. 目標與原則
