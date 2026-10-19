@@ -93,7 +93,10 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 
 - `compose.yaml`：三個服務的 a、b 槽、網絡、記憶體上限、檔案目錄。
 - `api-upstream.conf`：給前端 nginx 的 `masterdriver_api` 定義（4.1）。
-- `masterdriver.caddy`：兩個網域的 Caddy 設定；`caddy-site.sh` 填入網域、寫到伺服器的 Caddy 網站設定目錄，驗證通過才 reload，失敗就放回原本的設定。兩個網站都 `import access_log`（共用 Caddyfile 的請求記錄，寫到 Caddy 的 `/data/access.log`，每份 50 MB、保留 5 份；2026-10-19 加上）。
+- `masterdriver.caddy`：兩個網域的 Caddy 設定；`caddy-site.sh` 填入網域、寫到伺服器的 Caddy 網站設定目錄，驗證通過才 reload，失敗就放回原本的設定。兩個網站都 `import access_log`（共用 Caddyfile 的請求記錄，寫到 Caddy 的 `/data/access.log`，每份 50 MB、保留 5 份）。
+  - 2026-10-20 上線（`af616ec`）：用 `6495808` 的本目錄重跑 `setup.sh`（不帶參數，只有這個模板和伺服器上的不同），再執行 `masterdriver-caddy-site "masterdriverapp.masterappinc.com" "masterdriveradmin.masterappinc.com"`，validate 和 reload 都成功。由「主機使用情況檢查」session 在伺服器上執行。
+  - 網址裏的代碼在記錄裏改為 `REDACTED`，網址本身和 `Referer` 標頭都遮蔽（MasterApp-infra `fd0dac6`、`396ff72`）：`/c/`、`/b/`、`/o/`、`/p/`，`/api/c/`、`/api/o/`、`/api/public/profiles/`、`/api/public/bookings/`、`/api/public/link-preview/{card,square}/{p,o,c}/`，以及參數 `path`、`next`。用測試網址確認過記錄裏找不到原值。
+  - 新增帶代碼的網址時，要通知 MasterApp-infra 擴充 `stack/Caddyfile` 的這條規則，否則代碼會寫進記錄。
 - `setup.sh`：首次安裝，可以重跑。建立資料庫帳號與資料庫、`app.env`、檔案目錄、部署帳號、cron，並把下列腳本裝成 `masterdriver-*` 指令。
 - `deploy.sh`：部署腳本（5.2）；`forced-command.sh`：部署帳號只能執行它。
 - `backup.sh`：每日備份（3.1）；`restore-test.sh`：恢復測試；`purge.sh`：每日清除過期客服檔案。
