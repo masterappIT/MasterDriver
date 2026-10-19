@@ -8,6 +8,10 @@ name: Deploy production
 on:
   push:
     branches: [main]
+    # A push that only changes documents is not released (workflow_dispatch still is).
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
