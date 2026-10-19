@@ -6,7 +6,7 @@
 > - 06:09 兩筆 A 紀錄改指 `45.134.82.239`（TTL 5 分鐘），Caddy 取得 Let's Encrypt 證書。Google、Cloudflare、阿里 DNS 都已解析到新 IP。
 > - 已驗證：兩個網域的 HTTPS 與 `/api/health/ready`、名片頁連結預覽與分享圖、`robots.txt`、站內通知未登入回 401、API 能連外網、用戶真實 IP 經 Caddy 與 nginx 傳到 API、備份上傳與恢復測試（46 個表、14 個檔案全部找得到）。
 > - **還沒驗證**：內地手機在微信內打開（紅線 2）、WhatsApp 內操作、登入與簡訊、出單搶單、客服上傳、後台登入（第 7 節）。
-> - `deploy-production.yml` 已改為經 SSH 叫伺服器做備份、API、前端三步（5.1），伺服器的 host key 寫死在 workflow；其餘步驟不變，最後多一步檢查公開網址的 `/api/health/ready`。部署帳號的限制已在伺服器上測過（只能執行 `masterdriver-deploy`、格式不對的參數一律拒絕、不能用 Docker）。**還沒實際跑過**：推送後把 `DEPLOY_ENABLED` 改回 `true`，第一次發布才會驗證 GitHub 那把金鑰。Google Cloud 的資源保留到穩定（第 6 步）。
+> - `deploy-production.yml` 已改為經 SSH 叫伺服器做備份、API、前端三步（5.1），伺服器的 host key 寫死在 workflow；其餘步驟不變，最後多一步檢查公開網址的 `/api/health/ready`。部署帳號的限制已在伺服器上測過（只能執行 `masterdriver-deploy`、格式不對的參數一律拒絕、不能用 Docker）。2026-10-19 06:23 第一次由 workflow 發布（9d0cc4a，手動執行）成功：GitHub 的金鑰與 host key 連得上，部署前備份、migration、API 與前端都由 a 槽切到 b 槽，公開網址正常；`DEPLOY_ENABLED` 已改回 `true`，之後推送 `main` 就部署到伺服器。Google Cloud 的資源保留到穩定（第 6 步）。
 > - **回退**：兩筆 A 紀錄改回 `34.144.204.172`，並把 Cloud Run 的 `masterdriver-api` 改回接受所有流量（`--ingress all`）。切換後寫入伺服器的資料要先搬回 Cloud SQL。
 > 本倉庫公開：本文件不寫任何密碼、金鑰或 Secret 的值。
 
