@@ -103,6 +103,12 @@ export class ChannelsController {
     return this.sms.messages();
   }
 
+  @Get('sms-waits')
+  @AdminRoles('SUPER_ADMIN', 'OPERATOR')
+  smsWaits() {
+    return this.sms.waits();
+  }
+
   @Put('sms-channels/:route')
   @AdminRoles('SUPER_ADMIN')
   async saveSms(@Param('route') route: string, @Body(new ZodPipe(smsChannelUpdateSchema)) body: SmsChannelUpdate, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {

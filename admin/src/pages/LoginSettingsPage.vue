@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, can } from '../api';
 import { dateTime } from '../format';
+import OtpWaitTable, { type RouteWait } from '../components/OtpWaitTable.vue';
 
 /**
  * 登入配置, laid out as Master Travel's 登入配置 (see docs/REUSE.md): one page with a tab per
@@ -122,6 +123,7 @@ async function saveDevelopment() {
 const smsRoute = ref<Route>('DOMESTIC');
 const channels = ref<Channel[]>([]);
 const messages = ref<Message[]>([]);
+const waits = ref<{ days: number; routes: RouteWait[] } | null>(null);
 const historyLoading = ref(false);
 type ChannelForm = { enabled: boolean; endpoint: string; account: string; password: string; template: string; testPhone: string };
 const forms = reactive<Record<Route, ChannelForm>>({
@@ -199,7 +201,11 @@ const spugMessages = computed(() => messages.value.filter((item) => item.provide
 async function loadHistory() {
   historyLoading.value = true;
   try {
-    messages.value = await api<Message[]>('GET', '/sms-messages');
+    [messages.value, waits.value] = await Promise.all([
+      api<Message[]>('GET', '/sms-messages'),
+      // The figures are extra: the records still show if they cannot be read.
+      api<{ days: number; routes: RouteWait[] }>('GET', '/sms-waits').catch(() => waits.value),
+    ]);
   } catch (e) {
     smsError.value = (e as Error).message;
   } finally {
@@ -488,6 +494,8 @@ onMounted(async () => {
       <p v-if="channel && routeOnSpug" class="sms-route-note">{{ ROUTE[smsRoute].tab }}目前不經 253 發送，這裡的帳號暫不使用。</p>
       <p v-else-if="channel && !routeReady" class="sms-route-note sms-sender-warning">這個號碼區的 253 帳號尚未啟用或未填好，{{ ROUTE[smsRoute].numbers }}目前收不到驗證碼。</p>
 
+      <OtpWaitTable v-if="waits" :days="waits.days" :routes="waits.routes" />
+
       <div class="sms-history">
         <div class="sms-history-header">
           <h4>最近發送紀錄（{{ ROUTE[smsRoute].tab }}・253）</h4>
@@ -599,6 +607,8 @@ onMounted(async () => {
         </div>
         <p v-for="message in spugWarnings" :key="message" class="sms-sender-warning">{{ message }}</p>
       </div>
+
+      <OtpWaitTable v-if="waits" :days="waits.days" :routes="waits.routes" />
 
       <div class="sms-history">
         <div class="sms-history-header">

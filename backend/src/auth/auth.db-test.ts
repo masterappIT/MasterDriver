@@ -62,6 +62,27 @@ test('a code asked for before 重新發送 still signs in, once, and the others 
   const [first, second] = ctx.sms.sent.map((sent) => sent.code);
   await ctx.auth.verifyCode({ ...phone, code: first }, undefined, later(62));
   await rejectsWith(ctx.auth.verifyCode({ ...phone, code: second }, undefined, later(63)), 'OTP_INVALID');
+  // Only the code typed counts as used; the other expired, so 驗證碼等待時間 sees one sign-in.
+  const rows = await ctx.prisma.verificationCode.findMany({ orderBy: { createdAt: 'asc' } });
+  assert.deepEqual(rows.map((row) => row.consumedAt !== null), [true, false]);
+  assert.ok(rows[1].expiresAt <= later(62));
+});
+
+test('驗證碼等待時間 counts SMS sign-ins from their first code, and leaves out development mode', async () => {
+  await ctx.auth.requestCode(phone, '1.1.1.1');
+  await ctx.auth.requestCode(phone, '1.1.1.1', later(61));
+  await ctx.auth.verifyCode({ ...phone, code: ctx.sms.sent[0].code }, undefined, later(80));
+  await ctx.auth.requestCode({ countryCode: '+86', phone: '13800138000' }, '1.1.1.1');
+  await ctx.developmentLogin.update({ enabled: true }, 'test');
+  await ctx.auth.requestCode({ countryCode: '+853', phone: '66123456' }, '1.1.1.1');
+  await ctx.auth.verifyCode({ countryCode: '+853', phone: '66123456', code: DEFAULT_DEVELOPMENT_CODE }, undefined);
+
+  const { days, routes } = await ctx.smsChannels.waits(later(90));
+  assert.equal(days, 7);
+  const [domestic, international] = routes;
+  assert.deepEqual([domestic.attempts, domestic.signedIn, domestic.notSignedIn], [1, 0, 1]);
+  assert.deepEqual([international.attempts, international.signedIn, international.notSignedIn], [1, 1, 0]);
+  assert.ok(international.medianSeconds! >= 79 && international.medianSeconds! <= 81);
 });
 
 test('only the three newest live codes sign in', async () => {

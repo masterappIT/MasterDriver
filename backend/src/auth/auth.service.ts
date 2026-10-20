@@ -137,10 +137,11 @@ export class AuthService {
       data: { consumedAt: now },
     });
     if (consumed.count !== 1) throw apiError(HttpStatus.BAD_REQUEST, 'OTP_INVALID', 'Code is wrong or expired');
-    // The other codes sent for this sign-in are no longer needed.
+    // The other codes sent for this sign-in are no longer needed. They expire rather than count
+    // as used, so 驗證碼等待時間 sees one sign-in, through the code that was typed.
     await this.prisma.verificationCode.updateMany({
-      where: { countryCode, phone, consumedAt: null },
-      data: { consumedAt: now },
+      where: { countryCode, phone, consumedAt: null, expiresAt: { gt: now } },
+      data: { expiresAt: now },
     });
 
     const user = await this.prisma.user.upsert({
