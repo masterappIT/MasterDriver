@@ -1,6 +1,6 @@
 /**
  * 提示音: a short tone made in the browser, no sound file. Browsers let a page make sound only
- * after the person has touched it, so the first tap anywhere unlocks it; until then a new
+ * after the person has touched it, so a tap anywhere unlocks it; until then a new
  * notification is shown without sound. iPhones in silent mode stay silent.
  *
  * The tones and their timing follow Master Travel's driver app (driver_alert_tone.dart, see
@@ -93,17 +93,25 @@ export async function unlockSound() {
   return audio.state === 'running';
 }
 
-/** Unlocks on the first tap anywhere in the page. */
+/**
+ * Unlocks on the first tap anywhere in the page, and again on any later tap and on coming back
+ * to the page: iPhones pause a page's sound when it goes to the background or a call comes in,
+ * and a paused sound stays silent until it is started again.
+ */
 export function unlockOnFirstTouch() {
   const unlock = () => {
-    void unlockSound().then((running) => {
-      if (!running) return;
-      window.removeEventListener('pointerdown', unlock, true);
-      window.removeEventListener('keydown', unlock, true);
-    });
+    if (context?.state === 'running') return;
+    void unlockSound();
+  };
+  const resume = () => {
+    // Not from a tap, so a sound never unlocked stays locked; one paused by the phone may start.
+    if (document.visibilityState !== 'visible' || !context || context.state === 'running') return;
+    void context.resume().catch(() => undefined);
   };
   window.addEventListener('pointerdown', unlock, true);
   window.addEventListener('keydown', unlock, true);
+  document.addEventListener('visibilitychange', resume);
+  window.addEventListener('pageshow', resume);
 }
 
 /** Plays a tone if the sound can play now; returns whether it did. */
