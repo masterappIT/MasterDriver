@@ -4,6 +4,8 @@
 
 **Google Cloud 已於 2026-10-19 提前清理**：Cloud Run、Jobs、Scheduler、負載平衡器、固定 IP、Cloud SQL 都已刪除，**不能再退回 GCP**。保留的只有 Artifact Registry、三個 bucket（每日備份、舊客服檔案、封存）、Secret Manager 與服務帳號（見 HOSTKVM-MIGRATION.md 第 6 步）。
 
+**備份只有一套**（2026-10-21 香港時間起）：資料庫和客服、名片頁檔案只由伺服器上的 `masterdriver-backup`（本倉庫 `deploy/hostkvm/backup.sh`）每日 19:00 UTC 一起備份到 `gs://master-driver-511510-backups/masterdriver/`；MasterApp-infra 不再重複備份 `master_driver`。原因與恢復測試紀錄見 [HOSTKVM-MIGRATION.md](HOSTKVM-MIGRATION.md) 3.1。
+
 2026-10-13 至 10-19 正式環境沿用 Master Travel 的做法跑在 Cloud Run、Cloud SQL 上。本文件標明「歷史紀錄」的段落描述的是那個已刪除的環境，只作參考。
 
 本文件只記錄架構與操作方式，不得寫入任何密碼、金鑰或 Secret 的內容（本倉庫公開）。

@@ -9,7 +9,7 @@
 **現況**（2026-10-19 GCP 清理之後）：
 
 - `deploy-production.yml` 用 Workload Identity Federation 以 `masterdriver-deploy` 服務帳號登入 Google Cloud。現在登入 GCP **只為了推映像**到 `asia-east2-docker.pkg.dev/master-driver-511510/masterdriver`（`api`、`web`、`admin`），以及用 `gcloud artifacts docker images describe` 取得摘要。
-- 伺服器拉映像：root 的 Docker 已用 `masterapp-prod-vm@dualplate-511819` 的金鑰登入 `asia-east2-docker.pkg.dev`（`MasterApp-infra` 的 `server/registry-login.sh`），這個帳號有 `masterdriver` 倉庫的只讀權限。
+- 伺服器拉映像：root 的 Docker 用 MasterApp-infra 的帳號登入 `asia-east2-docker.pkg.dev`（`MasterApp-infra` 的 `server/registry-login.sh`），這個帳號有 `masterdriver` 倉庫的只讀權限。2026-10-21 起是 `masterapp-backup@masterapp-infra`；寫這份方案時是 `masterapp-prod-vm@dualplate-511819`，已刪除。
 - `deploy/hostkvm/lib.sh` 的 `REGISTRY` 寫死 Artifact Registry，`deploy.sh` 只接受摘要，再拼成 `$REGISTRY/api@<摘要>`，所以只能部署這個倉庫的映像。
 - Artifact Registry `masterdriver`：9.2 GB，api 57 版、web 58 版、admin 58 版，**沒有清理規則**（2026-10-19 查詢）。
 
@@ -156,7 +156,7 @@
 6. （可選，要你同意，會切換一次正式環境）以 root 手動執行 `masterdriver-deploy api <上一版 commit> <上一版摘要>`，確認沒有 token 時可以用本機映像回滾。
 7. **清理 Google Cloud**（第 9 節，要你同意），並在本倉庫和 `MasterApp-infra` 的 `docs/step-3-master-driver.md` 都記錄。`MasterApp-infra` 由那邊的 session 記錄，本倉庫不改它。
 
-**回退**：在第 7 步之前，Artifact Registry 和 `masterapp-prod-vm` 的權限都還在。revert 這個 commit，重新裝舊腳本（第 3 步的做法），再推送即可。
+**回退**：在第 7 步之前，Artifact Registry 和伺服器拉映像帳號（現為 `masterapp-backup@masterapp-infra`）的權限都還在。revert 這個 commit，重新裝舊腳本（第 3 步的做法），再推送即可。
 
 ## 8. 要驗證的事
 
@@ -173,7 +173,7 @@
 
 | 資源 | 說明 |
 |---|---|
-| Artifact Registry `masterdriver` | 9.2 GB，每月約 US$1。`masterapp-prod-vm@dualplate-511819` 在這個倉庫的只讀權限會隨倉庫一起刪除，該帳號本身和它在其他產品倉庫的權限不受影響（Dualplate、MasterBox 仍用 Artifact Registry） |
+| Artifact Registry `masterdriver` | 9.2 GB，每月約 US$1。伺服器拉映像帳號（現為 `masterapp-backup@masterapp-infra`）在這個倉庫的只讀權限會隨倉庫一起刪除，該帳號本身和它在其他產品倉庫的權限不受影響（Dualplate、MasterBox 仍用 Artifact Registry） |
 | 服務帳號 `masterdriver-deploy` | 先移除它的專案角色 `run.admin`、`artifactregistry.writer`、`cloudsql.admin`、`logging.viewer`，在 `masterdriver-api`、`-migrate`、`-frontend` 上的 `iam.serviceAccountUser`，以及 Workload Identity 的 `iam.workloadIdentityUser`（`attribute.repository/masterappIT/MasterDriver`），再刪除帳號 |
 | Workload Identity pool `github` 和 provider `github` | 只有本倉庫用。刪除後 30 天內可以恢復 |
 | GitHub `production` 環境的變數 | `GCP_*` 全部 19 個（2026-10-19 查詢，包括早已沒用的 Cloud Run、Cloud SQL 相關變數），只留 `PRODUCTION_WEB_URL`。刪除前把值存一份到封存 bucket |
@@ -187,7 +187,7 @@
 
 | 資源 | 原因 |
 |---|---|
-| bucket `master-driver-511510-backups`，服務帳號 `masterdriver-backup` | 伺服器每天上傳的備份（`backup.sh`），金鑰在伺服器上。所以這個專案不能關閉 |
+| bucket `master-driver-511510-backups`，服務帳號 `masterdriver-backup` | 伺服器每天上傳的備份（`backup.sh`，2026-10-21 起是 Master Driver 唯一的一套，見 `HOSTKVM-MIGRATION.md` 3.1），金鑰在伺服器上。所以這個專案不能關閉 |
 | bucket `master-driver-511510-archive` | 最後的資料庫匯出和刪除前的設定 |
 | Secret Manager 3 個 secret | 是否保留作密碼備份，要你決定 |
 | bucket `master-driver-511510-support-media` | 要先確認舊的客服附件都已搬到伺服器才刪（切換時複製了 14 個檔案並核對過） |

@@ -8,6 +8,7 @@
 > - **還沒驗證**：內地手機在微信內打開（紅線 2）、WhatsApp 內操作、登入與簡訊、出單搶單、客服上傳、後台登入（第 7 節）。
 > - `deploy-production.yml` 已改為經 SSH 叫伺服器做備份、API、前端三步（5.1），伺服器的 host key 寫死在 workflow；其餘步驟不變，最後多一步檢查公開網址的 `/api/health/ready`。部署帳號的限制已在伺服器上測過（只能執行 `masterdriver-deploy`、格式不對的參數一律拒絕、不能用 Docker）。2026-10-19 06:23 第一次由 workflow 發布（9d0cc4a，手動執行）成功：GitHub 的金鑰與 host key 連得上，部署前備份、migration、API 與前端都由 a 槽切到 b 槽，公開網址正常；`DEPLOY_ENABLED` 已改回 `true`，之後推送 `main` 就部署到伺服器。
 > - **Google Cloud 已提前清理**（2026-10-19 14:24–14:35 UTC，使用者決定，原定穩定兩週後）：Cloud Run、Jobs、Scheduler、負載平衡器、固定 IP `34.144.204.172`、Cloud SQL 都已刪除，詳見第 6 步。**不能再退回 GCP**；原本「A 紀錄改回 `34.144.204.172`、Cloud Run API 改回 `--ingress all`」的回退方法已失效。要用切換前的舊資料，只能從第 6 步的最後匯出恢復到伺服器。
+> - **備份只有一套**（2026-10-21 香港時間起，使用者同意）：Master Driver 的資料庫和檔案只由本倉庫的 `masterdriver-backup` 備份，MasterApp-infra 不再重複備份 `master_driver`，見 3.1。2026-10-20 20:07 UTC 恢復測試通過。
 > 本倉庫公開：本文件不寫任何密碼、金鑰或 Secret 的值。
 
 ## 1. 目標與原則
@@ -70,6 +71,15 @@
   - bucket 設保留期限（例如 35 天）自動刪除。不用逐檔同步：保留期限按上傳時間算，逐檔同步會讓很久以前上傳、仍在使用的檔案被刪掉。
   - 伺服器上保留最近 7 天，以便快速還原。
   - 恢復測試要同時還原資料庫和檔案，並核對資料庫裏的 `storageKey` 都找得到檔案。
+- **只有這一套備份**（2026-10-21 香港時間起）：
+  - 腳本：`/usr/local/sbin/masterdriver-backup`（來源本倉庫 `deploy/hostkvm/backup.sh`），由 `/etc/cron.d/masterdriver` 每日 19:00 UTC（香港 03:00）執行。
+  - 內容：資料庫 `master_driver` 和 `media` 打包檔，同一次備份、一起上傳到 `gs://master-driver-511510-backups/masterdriver/<年>/<月>/<日>/<時間>/`。
+  - 帳號：本專案的服務帳號 `masterdriver-backup`，只能新增和讀取；bucket 35 天後自動刪除。
+  - 恢復測試：`/usr/local/sbin/masterdriver-restore-test`（來源 `deploy/hostkvm/restore-test.sh`），在沒有網絡的臨時 Postgres 容器還原，不碰正式資料。
+  - **以前有兩套**：MasterApp-infra 的 `/srv/infra/backup.sh`（19:30 UTC）也備份 `master_driver`，放在同一個 bucket 的 `postgres/master_driver/`，只有資料庫、沒有檔案。2026-10-21 已在 MasterApp-infra 的 `backup/targets.conf` 停用（該倉庫提交 `0f33ee7`，`docs/operations.md` 已更新），infra 的帳號 `masterapp-backup@masterapp-infra` 也不再有這個 bucket 的權限。舊的 `postgres/` 備份不手動刪，35 天後自動刪除。
+  - **理由**：資料庫和檔案在同一時間備份，還原時兩者一致；另一套只有資料庫、時間也不同，用它還原會和檔案對不上。
+  - 部署前的 `masterdriver-deploy backup`（5.2）只在伺服器上保留最近 5 份，不上傳，不算另一套異地備份。
+  - **恢復測試紀錄**：2026-10-20 20:07 UTC 執行 `masterdriver-restore-test`，使用 `20261020T190001Z`（當日 19:00 的每日備份，已上傳，6.3 MB）：校驗碼相符、還原成功、48 個表、資料庫記錄的 14 個檔案在打包檔裏都找得到。
 
 ## 4. 程式與設定的改動
 
@@ -102,7 +112,7 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 - `backup.sh`：每日備份（3.1）；`restore-test.sh`：恢復測試；`purge.sh`：每日清除過期客服檔案。
 - `import-database.sh`、`import-media.sh`：第 2、4 步匯入 Cloud SQL 的副本與 bucket 的檔案；匯入後列出每個表的行數，給核對用。
 - `lib.sh`：各腳本共用的設定與函式。
-- `cron`：每日備份、每日清除過期客服檔案。
+- `cron`：每日備份（Master Driver 唯一的異地備份，見 3.1）、每日清除過期客服檔案。
 - 品質閘門現有的「部署腳本檢查」加上這個目錄。
 
 ### 4.3 轉發與用戶 IP
@@ -131,7 +141,7 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 | 部署 `web`、`admin`，先檢查再切換 | 改為經 SSH 叫伺服器做同樣的事 |
 | 倉庫變數 `DEPLOY_ENABLED` 開關部署 | 不變 |
 
-- 伺服器拉映像：公司伺服器已用只讀的 `masterapp-prod-vm` 帳號登入 Artifact Registry，只要給它 MasterDriver 映像倉庫的只讀權限。
+- 伺服器拉映像：公司伺服器用 MasterApp-infra 的帳號登入 Artifact Registry，它在 MasterDriver 映像倉庫（`masterdriver`）只有讀取權限。2026-10-21 起是 `masterapp-backup@masterapp-infra`；之前是 `masterapp-prod-vm@dualplate-511819`，已刪除。
 - 部署帳號 `deploy-masterdriver` 只能執行部署腳本，不能開 shell、不能轉發連線，並逐個檢查參數格式；映像必須來自 `asia-east2-docker.pkg.dev/master-driver-511510/masterdriver/`。
 - 私鑰只放在本倉庫 `production` 環境的 Secret；伺服器的 host key 寫死在 workflow 裏。
 
@@ -168,7 +178,7 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 2. 完成 4.2 的伺服器檔案。在伺服器建立：資料庫帳號和 `master_driver` 資料庫（新密碼）、`app.env`（權限 600）、檔案目錄、部署帳號、cron。
    - `app.env`：`NODE_ENV=production`、`PORT=8080`、`PUBLIC_BASE_URL=https://masterdriverapp.masterappinc.com`、`SESSION_COOKIE_SECURE=true`、`SUPPORT_MEDIA_DIR`、新的 `DATABASE_URL`。
    - `OTP_PEPPER` 和 `DATA_ENCRYPTION_KEY` 從 Secret Manager 原樣抄過去。
-3. 給伺服器的 `masterapp-prod-vm` 帳號 MasterDriver 映像倉庫（`masterdriver`）的只讀權限。
+3. 給伺服器的 `masterapp-prod-vm` 帳號 MasterDriver 映像倉庫（`masterdriver`）的只讀權限（2026-10-21 已改為 `masterapp-backup@masterapp-infra`，見 5.1）。
    建立備份 bucket 和只能新增的備份服務帳戶（3.1）。
 4. 在 Squarespace 把 `masterdriverapp`、`masterdriveradmin` 的 TTL 由 4 小時調低到 5 分鐘（給第 5 步用）。
 
