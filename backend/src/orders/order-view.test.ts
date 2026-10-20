@@ -130,3 +130,27 @@ test('the passenger sees no driver before the order is claimed', () => {
   const view = toPassengerView({ ...order, status: 'OPEN', claimedById: null, claimedBy: null });
   assert.equal(view.driver, null);
 });
+
+test('the dispatcher is told when the driver who took the order was deleted since', () => {
+  // 刪除用戶 takes the driver off and keeps when the order was taken.
+  const deleted = { ...order, status: 'COMPLETED', completedAt: new Date('2026-10-15T08:00:00Z'), claimedById: null, claimedBy: null } as OrderWithPeople;
+  const view = toOrderView(deleted, 'dispatcher', 'https://x.test');
+  assert.equal(view.driverDeleted, true);
+  assert.equal(view.driver, null);
+  assert.equal(view.claimedAt, '2026-10-14T01:00:00.000Z');
+  assert.equal(toOrderView(order, 'dispatcher', 'https://x.test').driverDeleted, false);
+  // Never taken, or given back (claimedAt cleared): nobody was deleted.
+  assert.equal(toOrderView({ ...order, status: 'OPEN', claimedById: null, claimedBy: null, claimedAt: null }, 'dispatcher', 'https://x.test').driverDeleted, false);
+  assert.equal('driverDeleted' in toOrderView(deleted, 'other', 'https://x.test'), false);
+});
+
+test('a 接駁 leg whose driver was deleted is marked for the dispatcher only', () => {
+  const first = { ...order, id: 'leg-1', legIndex: 1, destination: '港珠澳大橋', status: 'COMPLETED', claimedById: null, claimedBy: null };
+  const second = { ...order, id: 'leg-2', code: 'KLMNOPQRST', legIndex: 2, origin: '港珠澳大橋', status: 'COMPLETED' };
+  const journeyHead = { journeyLegs: [first, second], tripGroup: null };
+  const legOrder = { ...second, journeyHead } as unknown as OrderWithPeople;
+  const legs = toOrderView(legOrder, 'dispatcher', 'https://x.test', new Date(), 'dispatcher').journey?.legs;
+  assert.deepEqual(legs?.map((leg) => leg.driverDeleted), [true, false]);
+  const driverLegs = toOrderView(legOrder, 'driver', 'https://x.test', new Date(), 'driver').journey?.legs;
+  assert.equal(driverLegs?.some((leg) => 'driverDeleted' in leg), false);
+});

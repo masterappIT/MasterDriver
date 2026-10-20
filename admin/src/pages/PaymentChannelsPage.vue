@@ -162,14 +162,12 @@ onMounted(() => run(() => api<Channel[]>('GET', '/payment-channels'), () => ''))
               <label v-for="(label, key) in METHODS" :key="key"><input v-model="stripe.paymentMethods" type="checkbox" :value="key" /> {{ label }}</label>
             </div>
           </div>
-          <p class="hint">支付寶、微信支付在 Stripe 一般不支援自動續訂；會以「一次付一個月或一年」處理。</p>
+          <p class="hint channel-form__full">支付寶、微信支付在 Stripe 一般不支援自動續訂；會以「一次付一個月或一年」處理。</p>
         </template>
         <template v-else>
-          <label class="field">支付網關（HTTPS）<input v-model="alipay.gatewayUrl" class="input" required /></label>
-          <div class="row">
-            <label class="field">商戶 ID（Partner）<input v-model="alipay.partner" class="input" inputmode="numeric" maxlength="16" placeholder="2160 開頭的 16 位數字" required /></label>
-            <label class="field">App ID（選填）<input v-model="alipay.appId" class="input" /></label>
-          </div>
+          <label class="field channel-form__full">支付網關（HTTPS）<input v-model="alipay.gatewayUrl" class="input" required /></label>
+          <label class="field">商戶 ID（Partner）<input v-model="alipay.partner" class="input" inputmode="numeric" maxlength="16" placeholder="2160 開頭的 16 位數字" required /></label>
+          <label class="field">App ID（選填）<input v-model="alipay.appId" class="input" /></label>
           <label class="field">
             應用私鑰 PKCS8 PEM（{{ current.privateKeyConfigured ? '已加密儲存；留空表示不變' : '必填' }}）
             <textarea v-model="alipay.privateKey" class="input channel-form__key" autocomplete="off" spellcheck="false" />
@@ -180,20 +178,19 @@ onMounted(() => run(() => api<Channel[]>('GET', '/payment-channels'), () => ''))
           </label>
           <label class="field">異步通知地址（選填）<input v-model="alipay.notifyUrl" class="input" placeholder="https://" /></label>
           <label class="field">同步返回地址（選填）<input v-model="alipay.returnUrl" class="input" placeholder="https://" /></label>
-          <p class="hint">和 Master Travel 一樣，AlipayHK 的「檢查」只驗證金鑰格式，不會呼叫 AlipayHK，不能證明可以實際收款。</p>
+          <p class="hint channel-form__full">和 Master Travel 一樣，AlipayHK 的「檢查」只驗證金鑰格式，不會呼叫 AlipayHK，不能證明可以實際收款。</p>
         </template>
-        <div class="row">
+        <div class="form-foot channel-form__full">
           <button class="button" type="submit">儲存</button>
           <button class="button secondary" type="button" :disabled="!current.saved" @click="test">{{ provider === 'STRIPE' ? '連線檢查' : '金鑰格式檢查' }}</button>
-          <button class="button" :class="{ danger: current.enabled }" type="button" :disabled="!current.saved" @click="toggle">
+          <span class="hint">最後修改：{{ dateTime(current.updatedAt) }}　{{ current.updatedBy ?? '' }}</span>
+          <span class="hint">最後檢查：{{ dateTime(current.lastTestedAt) }}　{{ current.lastTestMessage ?? '' }}</span>
+          <!-- Turning a channel on or off is a different act from saving it: on the right, as on 平台服務費. -->
+          <button class="button channel-form__toggle" :class="{ danger: current.enabled }" type="button" :disabled="!current.saved" @click="toggle">
             {{ current.enabled ? '停用' : '啟用' }}
           </button>
         </div>
       </fieldset>
-      <p class="hint">
-        最後檢查：{{ dateTime(current.lastTestedAt) }}　{{ current.lastTestMessage ?? '' }}<br />
-        最後修改：{{ dateTime(current.updatedAt) }}　{{ current.updatedBy ?? '' }}
-      </p>
     </form>
   </div>
 </template>
@@ -227,9 +224,30 @@ onMounted(() => run(() => api<Channel[]>('GET', '/payment-channels'), () => ''))
   border: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-lg) 20px;
+  align-items: end;
+}
+
+/* Fields in two columns; notes, key boxes and the save row take the whole line. */
+.channel-form__full,
+.channel-form__fields > .field:has(textarea) {
+  grid-column: 1 / -1;
+}
+
+.channel-form__fields > .hint {
+  margin: 0;
+}
+
+.channel-form__toggle {
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  .channel-form__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .channel-form__key {

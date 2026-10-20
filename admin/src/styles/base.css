@@ -116,7 +116,7 @@ a:hover {
 }
 
 h1 {
-  margin: 0 0 var(--space-lg);
+  margin: 0 0 20px;
   color: var(--color-text);
   font-size: 26px;
   line-height: 1.2;
@@ -163,9 +163,10 @@ h2 {
   align-items: center;
 }
 
+/* auto-fit: a few cards share the row instead of leaving its right end empty. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 18px;
 }
 
@@ -243,10 +244,41 @@ textarea.input {
   line-height: 1.5;
 }
 
+/*
+ * Every one-line box the same 40px, whatever the browser: Safari ignores min-height on a select and
+ * pads date and time boxes, so in a row of fields the boxes came out at different heights.
+ */
+input.input,
+.select {
+  height: 40px;
+  line-height: 22px;
+}
+
+input.input[type='date'],
+input.input[type='datetime-local'],
+input.input[type='time'] {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 38px;
+}
+
+/* A select drawn by us, so it is as tall as an input in every browser, with its own arrow. */
+.select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%23647892' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 12px center;
+  background-repeat: no-repeat;
+  background-size: 12px 8px;
+}
+
 .input:focus,
 .select:focus {
   border-color: var(--color-focus);
-  background: var(--color-surface);
+  background-color: var(--color-surface);
   box-shadow: 0 0 0 3px rgba(74, 141, 240, 0.13);
 }
 
@@ -315,6 +347,20 @@ textarea.input {
   min-width: 180px;
 }
 
+/* A name or an ID that could be long: one line, cut with an ellipsis; the full text is in its title. */
+.table .clip {
+  display: block;
+  max-width: 8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Text with no spaces to break at, such as raw data: wrap anywhere instead of widening the table. */
+.table .break {
+  overflow-wrap: anywhere;
+}
+
 .table-wrap {
   min-width: 0;
   overflow-x: auto;
@@ -343,9 +389,10 @@ textarea.input {
   margin-bottom: 12px;
 }
 
+/* 12px between columns: a list of eight or nine columns fits its card on a 1280px screen. */
 .card.table-wrap > .table th,
 .card.table-wrap > .table td {
-  padding: 12px 16px;
+  padding: 12px;
 }
 
 .card.table-wrap > .table th:first-child,
@@ -380,6 +427,14 @@ textarea.input {
   margin: 0;
 }
 
+/* A line under the title on what the page is for. */
+.page-head .page-head__desc {
+  max-width: 900px;
+  margin: 6px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-body);
+}
+
 /* The search and filters above a list: one row, no card around it. */
 .filters {
   display: flex;
@@ -399,9 +454,34 @@ textarea.input {
   margin-bottom: var(--space-md);
 }
 
-/* Settings pages: forms read best at a measure, not across a wide screen. */
+/* Fields and their button on one line: a field's label sits above its box, so line up the boxes.
+   A row of a checkbox and a button, with no labelled field, stays centred. */
+.row:has(> .field),
+.form-foot:has(> .field) {
+  align-items: flex-end;
+}
+
+/* Fields in even columns: every box the same width, however many there are. */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-lg);
+  align-items: end;
+}
+
+.card > .form-grid + .form-grid,
+.card > .form-grid + .field,
+.card > .field + .form-grid,
+.card > h2 + .form-grid {
+  margin-top: var(--space-lg);
+}
+
+/*
+ * Settings pages are as wide as every other page; a form keeps to a readable measure by putting its
+ * fields and cards side by side (.form-grid, .split), not by leaving the right of the screen empty.
+ */
 .settings-page {
-  max-width: 960px;
+  min-width: 0;
 }
 
 /* Fields in a card stack with room between them; side by side in a row they share the width. */
@@ -494,9 +574,10 @@ textarea.input {
 }
 
 /* Facts about one thing: a small label over each value, as many across as fit. */
+/* auto-fit: a few facts spread across the card instead of bunching on its left. */
 .facts {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: var(--space-lg) 28px;
   margin: 0;
 }
@@ -544,7 +625,8 @@ textarea.input {
 
 .card > h2 + .hint {
   display: block;
-  margin: -6px 0 var(--space-md);
+  margin-top: -6px;
+  margin-bottom: var(--space-md);
 }
 
 /* Steps in time, each with when it happened; those not reached yet are dimmed. */
@@ -685,6 +767,25 @@ textarea.input {
 }
 
 /* A row opens its detail page wherever it is clicked; its title is the link a keyboard reaches. */
+/*
+ * Below 1280px a list has less room than its columns need. A column marked .col-wide is then left out,
+ * and what it said shows under a neighbouring cell, in an element marked .narrow-only.
+ */
+/* !important: these are switches, and a table's own rules (such as small text shown as a block) must not undo them. */
+.narrow-only {
+  display: none !important;
+}
+
+@media (max-width: 1279px) {
+  .col-wide {
+    display: none !important;
+  }
+
+  .narrow-only {
+    display: block !important;
+  }
+}
+
 .table--links tbody tr:not(.table__empty) {
   cursor: pointer;
 }

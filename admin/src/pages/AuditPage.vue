@@ -54,6 +54,19 @@ const ACTION: Record<string, string> = {
   'support.reply': '客服回覆',
   'support.handled': '客服標記不用回覆',
   'support.delete': '刪除客服對話',
+  'user.suspend': '停用用戶',
+  'user.restore': '恢復用戶',
+  'user.delete': '刪除用戶',
+  'user.profile.update': '代改司機資料',
+  'order.cancel': '代出單者取消訂單',
+  'profile-page.block': '下架名片頁',
+  'profile-page.restore': '恢復名片頁',
+  'profile-page.photo.remove': '刪除名片頁照片',
+  'group-invite.remove': '移除派單群',
+  'settings.limits': '修改防濫用設定',
+  'settings.logo': '修改 Logo',
+  'channels.spug.save': '修改 Spug 設定',
+  'channels.spug.testSend': 'Spug 發送測試簡訊',
 };
 
 const action = ref('');
@@ -74,7 +87,12 @@ onMounted(load);
 </script>
 
 <template>
-  <h1>操作紀錄</h1>
+  <div class="page-head">
+    <div class="page-head__title">
+      <h1>操作紀錄</h1>
+      <span v-if="result" class="muted">{{ action ? '符合' : '共' }} {{ result.total }} 筆</span>
+    </div>
+  </div>
   <div class="filters">
     <select v-model="action" class="select" @change="(page = 1), load()">
       <option value="">全部操作</option>
@@ -89,26 +107,40 @@ onMounted(load);
           <th>時間</th>
           <th>操作者</th>
           <th>操作</th>
-          <th>對象</th>
-          <th>內容</th>
+          <th class="audit__target">對象</th>
+          <th class="audit__detail">內容</th>
           <th>IP</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="entry in result.items" :key="entry.id">
           <td class="nowrap">{{ dateTime(entry.createdAt) }}</td>
-          <td>{{ entry.admin?.displayName ?? '—' }}</td>
-          <td>{{ ACTION[entry.action] ?? entry.action }}</td>
-          <td>
+          <td class="nowrap">{{ entry.admin?.displayName ?? '—' }}</td>
+          <td class="nowrap">{{ ACTION[entry.action] ?? entry.action }}</td>
+          <td class="audit__target">
             <RouterLink v-if="entry.targetType === 'user'" :to="`/users/${entry.targetId}`">用戶</RouterLink>
             <RouterLink v-else-if="entry.targetType === 'order'" :to="`/orders/${entry.targetId}`">訂單</RouterLink>
-            <span v-else>{{ entry.targetId ?? '' }}</span>
+            <span v-else class="clip" :title="entry.targetId ?? undefined">{{ entry.targetId ?? '' }}</span>
           </td>
-          <td class="hint">{{ entry.detail ? JSON.stringify(entry.detail) : '' }}</td>
-          <td class="hint">{{ entry.ip ?? '' }}</td>
+          <td class="hint break audit__detail">{{ entry.detail ? JSON.stringify(entry.detail) : '' }}</td>
+          <td class="hint nowrap">{{ entry.ip ?? '' }}</td>
         </tr>
       </tbody>
     </table>
     <PagerBar :page="page" :page-size="result.pageSize" :total="result.total" @change="(p) => ((page = p), load())" />
   </div>
 </template>
+
+<style scoped>
+/* 內容 takes the room the other columns do not need, so 操作 and IP sit beside it, not across the card. */
+.audit__detail {
+  width: 100%;
+  min-width: 220px;
+}
+
+/* 用戶, 訂單 or an ID on one line; a long ID is cut, its whole value in its title. */
+.audit__target {
+  min-width: 120px;
+  white-space: nowrap;
+}
+</style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { api, apiFetch, can } from '../api';
+import { api, apiFetch, can, type ApiError } from '../api';
 import StatusBadge from './StatusBadge.vue';
 import { ask, notify } from '../feedback';
 import { CREDIT_ENTRY, dateTime, fromLocalInput, hkd, money, PLAN_NAME, PLATE_TYPE } from '../format';
@@ -43,6 +43,8 @@ interface UserDetail {
   } | null;
   profilePage: {
     code: string;
+    /** The address passengers open it at, the one the driver shares. */
+    url: string;
     published: boolean;
     blockedAt: string | null;
     blockedReason: string | null;
@@ -163,6 +165,59 @@ async function suspend() {
   if (reason) await run(() => api('POST', `${base.value}/suspend`, { reason }), '帳號已停用');
 }
 
+/** A trip with someone else still under way, which stops 刪除用戶 until it is dealt with. */
+interface DeletionBlocker {
+  id: string;
+  role: 'DISPATCHED' | 'CLAIMED';
+  pickupAt: string;
+  origin: string;
+  destination: string;
+  legIndex: number | null;
+}
+const deletionBlockers = ref<DeletionBlocker[]>([]);
+
+/**
+ * 刪除用戶 (超級管理員 only), for good: the orders the user put out and everything else of theirs
+ * go; another dispatcher's order they took stays with that dispatcher and reads 司機已刪除. While a
+ * trip with someone else is under way nothing is deleted and those orders are listed instead.
+ */
+async function removeUser() {
+  let preview: { dispatchedOrders: number; claimedOrdersKept: number; blocking: DeletionBlocker[] };
+  try {
+    preview = await api('GET', `${base.value}/deletion`);
+  } catch (e) {
+    notify((e as Error).message, true);
+    return;
+  }
+  deletionBlockers.value = preview.blocking;
+  if (preview.blocking.length > 0) {
+    notify('還有進行中的單，處理完才能刪除', true);
+    return;
+  }
+  const kept = preview.claimedOrdersKept > 0 ? `他接過的 ${preview.claimedOrdersKept} 張別人的單會留給出單者，單上顯示「司機已刪除」。` : '';
+  const reason = await ask({
+    title: '刪除這個用戶',
+    text: `帳號、他出的 ${preview.dispatchedOrders} 張單（連同搶單紀錄和相關通知）、名片頁與預約、照片、客服對話、點數紀錄、收款方式和派單群都會刪除。${kept}刪除後無法復原。`,
+    reason: '原因（會記在操作紀錄）',
+    confirm: '刪除用戶',
+    danger: true,
+  });
+  if (!reason) return;
+  try {
+    await api('DELETE', base.value, { reason });
+  } catch (e) {
+    notify((e as Error).message, true);
+    // Someone took one of the user's orders meanwhile: show what stops it now.
+    if ((e as ApiError).code === 'USER_HAS_ACTIVE_ORDERS') {
+      deletionBlockers.value = (await api<{ blocking: DeletionBlocker[] }>('GET', `${base.value}/deletion`).catch(() => ({ blocking: [] }))).blocking;
+    }
+    return;
+  }
+  notify('用戶已刪除');
+  emit('changed');
+  emit('close');
+}
+
 async function restore() {
   if ((await ask({ title: '恢復這個帳號', text: '對方可以再登入。', confirm: '恢復帳號' })) === null) return;
   await run(() => api('POST', `${base.value}/restore`), '帳號已恢復');
@@ -234,6 +289,15 @@ function loadImages(detail: UserDetail) {
 }
 const photoPath = (photoId: string) => `${base.value}/page/photos/${photoId}`;
 const qrPath = (inviteId: string) => `${base.value}/group-invites/${inviteId}/qr`;
+
+async function copyPageUrl(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    notify('名片頁連結已複製');
+  } catch {
+    notify('複製失敗，請直接選取連結複製', true);
+  }
+}
 
 async function blockPage() {
   const reason = await ask({
@@ -325,6 +389,7 @@ interface OrderRow {
   selfDrive: boolean;
   dispatcher: { id: string; name: string | null; phone: string };
   claimedBy: { id: string; name: string | null; phone: string } | null;
+  driverDeleted: boolean;
 }
 const orderRole = ref<'dispatcher' | 'driver'>('dispatcher');
 const orders = ref<{ total: number; items: OrderRow[] } | null>(null);
@@ -367,6 +432,7 @@ watch(
     editing.value = false;
     crediting.value = false;
     gifting.value = false;
+    deletionBlockers.value = [];
     void load();
     void loadOrders();
   },
@@ -389,7 +455,6 @@ onBeforeUnmount(() => {
   <div class="mt-drawer-backdrop" @click="emit('close')"></div>
   <aside class="mt-drawer" role="dialog" aria-modal="true" aria-labelledby="user-drawer-title">
     <header class="mt-drawer-head">
-      <span class="mt-eyebrow">DRIVER PROFILE</span>
       <h2 id="user-drawer-title">{{ user ? (user.profile?.name ?? '未填姓名') : '載入中…' }}</h2>
       <span v-if="user" class="mt-muted">{{ user.phone }} · {{ user.id }}</span>
       <button type="button" class="mt-close" aria-label="關閉" @click="emit('close')">×</button>
@@ -402,10 +467,12 @@ onBeforeUnmount(() => {
         <div class="mt-drawer-status">
           <span class="mt-status" :class="user.suspendedAt ? 'cancelled' : 'completed'">{{ user.suspendedAt ? '已停用' : '使用中' }}</span>
           <template v-if="can.write()">
-            <button v-if="user.suspendedAt" type="button" class="mt-button restore" @click="restore">恢復用戶</button>
-            <button v-else type="button" class="mt-button danger" @click="suspend">停用用戶</button>
             <button type="button" class="mt-button secondary" @click="contact">用客服聯絡</button>
+            <button v-if="user.suspendedAt" type="button" class="mt-button restore" @click="restore">恢復用戶</button>
+            <button v-else type="button" class="mt-button danger-outline" @click="suspend">停用用戶</button>
           </template>
+          <!-- Deleting cannot be undone: set apart at the end, the one solid red button. -->
+          <button v-if="can.superAdmin()" type="button" class="mt-button danger mt-drawer-status__end" @click="removeUser">刪除用戶</button>
         </div>
       </template>
     </header>
@@ -416,10 +483,21 @@ onBeforeUnmount(() => {
 
     <div v-if="user" class="mt-drawer-body">
       <div v-if="user.suspendedAt" class="notice error">{{ dateTime(user.suspendedAt) }} 停用，原因：{{ user.suspendedReason ?? '—' }}</div>
+      <div v-if="deletionBlockers.length > 0" class="notice error">
+        還不能刪除：以下的單還在進行中，先處理（例如代為取消，或等行程完成）再刪除。
+        <ul>
+          <li v-for="order in deletionBlockers" :key="order.id">
+            <RouterLink :to="`/orders/${order.id}`">
+              {{ dateTime(order.pickupAt) }} {{ order.origin }} 至 {{ order.destination }}{{ order.legIndex ? `（接駁第 ${order.legIndex} 段）` : '' }}
+            </RouterLink>
+            · {{ order.role === 'DISPATCHED' ? '他出的單，別的司機接了' : '他接了別人的單' }}
+          </li>
+        </ul>
+      </div>
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">POINTS &amp; PLAN</span><h3>點數與方案</h3></div>
+          <div><h3>點數與方案</h3></div>
         </div>
         <div class="mt-cards">
           <article>
@@ -484,7 +562,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">DRIVER DETAILS</span><h3>司機資料</h3></div>
+          <div><h3>司機資料</h3></div>
           <button v-if="can.write()" type="button" class="mt-action" @click="editProfile">代改司機資料</button>
         </div>
         <p v-if="!user.profile" class="mt-muted">尚未填寫（第一次搶單前會要求填寫）</p>
@@ -504,7 +582,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">SERVICE ACTIVITY</span><h3>訂單</h3></div>
+          <div><h3>訂單</h3></div>
           <div class="mt-segmented" role="group" aria-label="出的單或接的單">
             <button type="button" :class="{ 'is-active': orderRole === 'dispatcher' }" :aria-pressed="orderRole === 'dispatcher'" @click="orderRole = 'dispatcher'">
               出的單 {{ user.counts.dispatched }}
@@ -527,7 +605,7 @@ onBeforeUnmount(() => {
                 <td>{{ dateTime(order.pickupAt) }}<br /><span class="mt-muted">{{ order.code }}</span></td>
                 <td>{{ order.origin }} 至 {{ order.destination }}</td>
                 <td><StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" /></td>
-                <td>{{ otherSide(order)?.name ?? (order.selfDrive ? (orderRole === 'dispatcher' ? '自己做' : '自己出的單') : '—') }}</td>
+                <td>{{ otherSide(order)?.name ?? (order.selfDrive ? (orderRole === 'dispatcher' ? '自己做' : '自己出的單') : order.driverDeleted ? '司機已刪除' : '—') }}</td>
                 <td class="num">{{ money(order.driverPrice) }}</td>
               </tr>
             </tbody>
@@ -541,7 +619,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">PROFILE PAGE</span><h3>名片頁與派單群</h3></div>
+          <div><h3>名片頁與派單群</h3></div>
           <template v-if="can.write() && user.profilePage">
             <button v-if="user.profilePage.blockedAt" type="button" class="mt-action is-restore" @click="restorePage">恢復名片頁</button>
             <button v-else type="button" class="mt-action is-danger" @click="blockPage">下架名片頁</button>
@@ -550,6 +628,14 @@ onBeforeUnmount(() => {
         <p v-if="!user.profilePage" class="mt-muted">還沒有打開過名片頁設定。</p>
         <template v-else>
           <div v-if="user.profilePage.blockedAt" class="notice error">{{ dateTime(user.profilePage.blockedAt) }} 下架，原因：{{ user.profilePage.blockedReason ?? '—' }}</div>
+          <div class="user-drawer__page-link">
+            <span>名片頁連結</span>
+            <a :href="user.profilePage.url" target="_blank" rel="noopener noreferrer">{{ user.profilePage.url }}</a>
+            <button type="button" class="mt-action" @click="copyPageUrl(user.profilePage.url)">複製</button>
+            <small v-if="user.profilePage.blockedAt || !user.profilePage.published" class="mt-muted">
+              {{ user.profilePage.blockedAt ? '已下架' : '未公開' }}，乘客目前打不開。
+            </small>
+          </div>
           <dl class="mt-facts">
             <div>
               <dt>狀態</dt>
@@ -559,7 +645,6 @@ onBeforeUnmount(() => {
                 </span>
               </dd>
             </div>
-            <div><dt>代碼</dt><dd>{{ user.profilePage.code }}</dd></div>
             <div><dt>收到預約</dt><dd>{{ user.profilePage.bookings }} 個</dd></div>
             <div><dt>微信號</dt><dd>{{ user.profilePage.wechatId ?? '—' }}</dd></div>
             <div><dt>WhatsApp</dt><dd>{{ user.profilePage.whatsapp ?? '—' }}</dd></div>
@@ -603,7 +688,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">FINANCIAL ACTIVITY</span><h3>點數紀錄</h3></div>
+          <div><h3>點數紀錄</h3></div>
         </div>
         <p v-if="user.credits.entries.length === 0" class="mt-muted">沒有紀錄。</p>
         <div v-else class="mt-history-wrap">
@@ -624,7 +709,7 @@ onBeforeUnmount(() => {
 
       <section class="mt-section">
         <div class="mt-section-head">
-          <div><span class="mt-eyebrow">NOTIFICATIONS</span><h3>通知</h3></div>
+          <div><h3>通知</h3></div>
         </div>
         <p class="user-drawer__first">
           關掉的通知：{{ user.notifications.off.map((group) => NOTIFICATION_GROUP[group] ?? group).join('、') || '沒有' }}。
@@ -653,7 +738,6 @@ onBeforeUnmount(() => {
     <form class="mt-drawer mt-drawer--edit" role="dialog" aria-modal="true" aria-labelledby="user-edit-title" @submit.prevent="saveProfile">
       <div class="mt-edit-head">
         <div>
-          <span class="mt-eyebrow">EDIT DRIVER</span>
           <h3 id="user-edit-title">代改司機資料</h3>
           <p class="mt-muted">和司機自己填的表單同一套規則；修改會記在操作紀錄。</p>
         </div>
@@ -725,6 +809,36 @@ onBeforeUnmount(() => {
   color: #233d5d;
   font-size: 13px;
 }
+/* The page's address on one line of its own: the label, the link, and a way to copy it. */
+.user-drawer__page-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid #e1eaf4;
+  border-radius: 10px;
+  background: #f7fbff;
+  font-size: 13px;
+}
+
+.user-drawer__page-link > span {
+  color: #647892;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.user-drawer__page-link > a {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.user-drawer__page-link > small {
+  flex-basis: 100%;
+}
+
 .user-drawer__media {
   display: flex;
   flex-wrap: wrap;

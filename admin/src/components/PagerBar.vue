@@ -6,17 +6,17 @@ const emit = defineEmits<{ change: [page: number] }>();
 const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
 </script>
 
+<!-- How many there are is beside the page's title; under the list only the pages, and only when there is more than one. -->
 <template>
-  <div class="pager-bar">
-    <span class="pager-bar__total">共 {{ total }} 筆</span>
+  <div v-if="pages > 1" class="pager-bar">
+    <span class="pager-bar__where">第 {{ page }} / {{ pages }} 頁・每頁 {{ pageSize }} 筆</span>
     <button type="button" :disabled="page <= 1" @click="emit('change', page - 1)">上一頁</button>
-    <span>{{ page }} / {{ pages }}</span>
     <button type="button" :disabled="page >= pages" @click="emit('change', page + 1)">下一頁</button>
   </div>
 </template>
 
 <style scoped>
-/* Under a list: how many there are on the left, the pages on the right. */
+/* Under a list: which page this is on the left, the buttons on the right. */
 .pager-bar {
   display: flex;
   align-items: center;
@@ -32,7 +32,7 @@ const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)
   font-weight: 600;
 }
 
-.pager-bar__total {
+.pager-bar__where {
   margin-right: auto;
   color: var(--color-text-secondary);
   font-weight: 400;
@@ -67,7 +67,7 @@ const pages = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)
     padding-left: 16px;
   }
 
-  .pager-bar__total {
+  .pager-bar__where {
     flex: 1 0 100%;
     text-align: center;
   }

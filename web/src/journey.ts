@@ -35,6 +35,8 @@ export interface JourneyLeg {
   progress?: TripProgress;
   /** 修改行程 this leg's driver has not confirmed yet (dispatcher only). */
   changePending?: boolean;
+  /** 司機已刪除 (dispatcher only): this leg's driver was deleted by the platform since. */
+  driverDeleted?: boolean;
   /** Only for the dispatcher and this leg's driver. */
   driver?: LegDriver | null;
 }

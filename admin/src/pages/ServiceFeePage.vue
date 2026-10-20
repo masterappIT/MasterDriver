@@ -48,7 +48,7 @@ onMounted(() => load().catch((e) => (error.value = (e as Error).message)));
     <div v-if="error" class="notice error">{{ error }}</div>
     <div v-if="message" class="notice">{{ message }}</div>
     <div v-if="status" class="card">
-      <dl class="facts facts--numbers">
+      <dl class="facts facts--numbers service-fee__facts">
         <div><dt>狀態</dt><dd><span class="tag" :class="status.enabled ? 'tag--info' : ''">{{ status.enabled ? '開啟' : '關閉' }}</span></dd></div>
         <div><dt>每單</dt><dd>{{ money(status.fee) }}</dd></div>
       </dl>
@@ -57,14 +57,34 @@ onMounted(() => load().catch((e) => (error.value = (e as Error).message)));
         <li>出單時從點數扣，單被取消會全額退回；點數不足就不能出單。</li>
         <li>團隊、公司方案與全站免費期期間免收。</li>
       </ul>
-      <form class="row form-foot" @submit.prevent="save({ fee: Number(fee) }, '金額已更新')">
-        <label class="field">每單金額（HK$）<input v-model="fee" class="input" type="number" min="0" step="0.5" required /></label>
+      <form class="form-foot" @submit.prevent="save({ fee: Number(fee) }, '金額已更新')">
+        <label class="field service-fee__amount">每單金額（HK$）<input v-model="fee" class="input" type="number" min="0" step="0.5" required /></label>
         <button class="button secondary" type="submit">更新金額</button>
-        <button class="button" :class="{ danger: status.enabled }" type="button" @click="toggle">
+        <button class="button service-fee__toggle" :class="{ danger: status.enabled }" type="button" @click="toggle">
           {{ status.enabled ? '關閉服務費' : '開啟服務費' }}
         </button>
       </form>
-      <p class="hint">最後修改：{{ dateTime(status.updatedAt) }}　{{ status.updatedBy ?? '' }}</p>
+      <p class="hint service-fee__meta">最後修改：{{ dateTime(status.updatedAt) }}　{{ status.updatedBy ?? '' }}</p>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Two facts read together on the left, not spread across the card. */
+.service-fee__facts {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+/* The amount with its button on the left; turning the fee on or off is a different act, on the right. */
+.service-fee__amount {
+  width: 200px;
+}
+
+.service-fee__toggle {
+  margin-left: auto;
+}
+
+.service-fee__meta {
+  margin: var(--space-md) 0 0;
+}
+</style>

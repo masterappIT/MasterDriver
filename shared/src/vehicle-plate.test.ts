@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   composeMainlandPlate,
+  plateRegions,
   formatHongKongPlateInput,
   formatMacauPlateInput,
   inferVehiclePlates,
@@ -73,4 +74,13 @@ test('a profile from before these choices opens on the ownership and type its pl
   assert.deepEqual(inferVehiclePlates({ macauPlate: 'MA-12-34' }), { vehicleOwnership: 'MACAU', plateType: 'SINGLE' });
   assert.deepEqual(inferVehiclePlates({ macauPlate: 'MA-12-34', mainlandPlate: '粵Z·1234澳' }), { vehicleOwnership: 'MACAU', plateType: 'DUAL' });
   assert.deepEqual(inferVehiclePlates({ hkPlate: 'AB1234', mainlandPlate: '粵B12345' }), { vehicleOwnership: 'MAINLAND', plateType: 'DUAL' });
+});
+
+test('plate regions name where the plates are from, never their numbers', () => {
+  assert.deepEqual(plateRegions({ hkPlate: 'AB 1234' }), ['香港']);
+  assert.deepEqual(plateRegions({ hkPlate: 'AB 1234', mainlandPlate: '粵Z·1234港' }), ['香港', '粵Z']);
+  assert.deepEqual(plateRegions({ hkPlate: 'AB 1234', macauPlate: 'MA-12-34', mainlandPlate: '粵Z·1234港' }), ['香港', '澳門', '粵Z']);
+  assert.deepEqual(plateRegions({ mainlandPlate: '粵A·B1234' }), ['粵A']);
+  assert.deepEqual(plateRegions({}), []);
+  assert.ok(!plateRegions({ hkPlate: 'AB 1234', mainlandPlate: '粵Z·1234港' }).join('').includes('1234'));
 });

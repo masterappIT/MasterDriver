@@ -10,6 +10,8 @@ import { SMS_PROVIDER, type SmsProvider } from './sms';
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
+/** How many of a number's newest unused, unexpired codes sign in. */
+const LIVE_CODES = 3;
 export const SESSION_TTL_MS = 180 * 24 * 60 * 60 * 1000;
 const LAST_SEEN_REFRESH_MS = 60 * 60 * 1000;
 
@@ -103,19 +105,30 @@ export class AuthService {
 
   async verifyCode(input: OtpVerify, userAgent: string | undefined, now = new Date()) {
     const { countryCode, phone, code } = input;
-    const record = await this.prisma.verificationCode.findFirst({
+    // The few newest live codes all count: an SMS can take a minute, so the one asked for
+    // before 重新發送 may arrive after it. Each is checked by the mode of its own request.
+    const records = await this.prisma.verificationCode.findMany({
       where: { countryCode, phone, consumedAt: null, expiresAt: { gt: now } },
       orderBy: { createdAt: 'desc' },
+      take: LIVE_CODES,
     });
-    if (!record) throw apiError(HttpStatus.BAD_REQUEST, 'OTP_INVALID', 'Code is wrong or expired');
-    if (record.attempts >= MAX_ATTEMPTS) throw apiError(HttpStatus.BAD_REQUEST, 'OTP_LOCKED', 'Too many wrong attempts');
+    if (records.length === 0) throw apiError(HttpStatus.BAD_REQUEST, 'OTP_INVALID', 'Code is wrong or expired');
+    const open = records.filter((record) => record.attempts < MAX_ATTEMPTS);
+    if (open.length === 0) throw apiError(HttpStatus.BAD_REQUEST, 'OTP_LOCKED', 'Too many wrong attempts');
 
-    const expected =
-      record.mode === 'DEVELOPMENT'
-        ? developmentCodeHash(this.config.otpPepper, code)
-        : this.codeHash(countryCode, phone, code);
-    if (!safeEqualHex(record.codeHash, expected)) {
-      await this.prisma.verificationCode.update({ where: { id: record.id }, data: { attempts: { increment: 1 } } });
+    const record = open.find((candidate) => {
+      const expected =
+        candidate.mode === 'DEVELOPMENT'
+          ? developmentCodeHash(this.config.otpPepper, code)
+          : this.codeHash(countryCode, phone, code);
+      return safeEqualHex(candidate.codeHash, expected);
+    });
+    if (!record) {
+      // A wrong code counts against every code it was tried on, so the limit stays five tries in all.
+      await this.prisma.verificationCode.updateMany({
+        where: { id: { in: open.map((candidate) => candidate.id) } },
+        data: { attempts: { increment: 1 } },
+      });
       throw apiError(HttpStatus.BAD_REQUEST, 'OTP_INVALID', 'Code is wrong or expired');
     }
     // Consume once: a code that is verified twice in parallel only signs in once.
@@ -124,6 +137,12 @@ export class AuthService {
       data: { consumedAt: now },
     });
     if (consumed.count !== 1) throw apiError(HttpStatus.BAD_REQUEST, 'OTP_INVALID', 'Code is wrong or expired');
+    // The other codes sent for this sign-in are no longer needed. They expire rather than count
+    // as used, so 驗證碼等待時間 sees one sign-in, through the code that was typed.
+    await this.prisma.verificationCode.updateMany({
+      where: { countryCode, phone, consumedAt: null, expiresAt: { gt: now } },
+      data: { expiresAt: now },
+    });
 
     const user = await this.prisma.user.upsert({
       where: { countryCode_phone: { countryCode, phone } },

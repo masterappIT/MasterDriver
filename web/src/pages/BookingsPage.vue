@@ -40,10 +40,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <PageBack :title="t('預約')" fallback="/app/me" />
+    <PageBack :title="t('等我報價')" fallback="/app/me" />
     <div v-if="error" class="notice error">{{ error }}</div>
     <p v-if="bookings && bookings.length === 0" class="bookings__empty">
-      {{ t('還沒有預約。把名片頁的連結放到朋友圈、小紅書或傳給熟客，乘客就可以在上面預約。') }}
+      {{ t('還沒有客人詢價。把名片頁的連結放到朋友圈、小紅書或傳給熟客，客人就可以在上面向你問價。') }}
       <RouterLink to="/app/guide/customers">{{ t('看教學：怎麼用名片頁找客人') }}</RouterLink>
       <RouterLink to="/app/profile-page">{{ t('打開我的名片頁') }}</RouterLink>
     </p>

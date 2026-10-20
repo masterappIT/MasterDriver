@@ -103,13 +103,13 @@ onMounted(async () => {
     <!-- 我的客源 keeps its explanations: a driver new to the tool learns from them what each is for. -->
     <section class="card me__group">
       <span class="section-label">{{ t('我的客源') }}</span>
-      <MenuRow to="/app/guide/customers" icon="help" :title="t('怎麼用名片頁找客人')" :detail="t('名片頁可以做什麼、連結放在哪裡、客人怎樣預約')" />
-      <MenuRow to="/app/profile-page" icon="card" :title="t('我的名片頁')" :detail="t('放到朋友圈、小紅書或傳給熟客，乘客在上面預約')" />
+      <MenuRow to="/app/guide/customers" icon="help" :title="t('怎麼用名片頁找客人')" :detail="t('名片頁可以做什麼、連結放在哪裡、客人怎樣向你詢價')" />
+      <MenuRow to="/app/profile-page" icon="card" :title="t('我的名片頁')" :detail="t('放到朋友圈、小紅書或傳給熟客，客人在上面向你詢價')" />
       <MenuRow
         to="/app/bookings"
         icon="event"
-        :title="t('預約')"
-        :detail="unread.bookings ? t(`${unread.bookings} 個預約有新消息`) : t('乘客從名片頁送來的預約，由你報價')"
+        :title="t('等我報價')"
+        :detail="unread.bookings ? t(`${unread.bookings} 個客人詢價有新消息`) : t('客人在你的名片頁問價，你回覆報價後可以出單')"
         :count="unread.bookings"
       />
       <MenuRow

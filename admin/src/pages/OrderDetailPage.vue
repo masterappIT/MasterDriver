@@ -34,6 +34,8 @@ interface OrderDetail {
   fromBooking: boolean;
   payment: { showPaymentMethods: boolean; paidAt: string | null; settledAt: string | null };
   tripGroup: { platform: 'WHATSAPP' | 'WECHAT'; expiresAt: string | null } | null;
+  /** Taken by a driver whose account was deleted since. */
+  driverDeleted: boolean;
   driver: {
     id: string;
     name: string | null;
@@ -171,7 +173,7 @@ onMounted(async () => {
       </dl>
     </div>
 
-    <div class="split">
+    <div class="split order-detail__split">
       <div class="card">
         <h2>相關人員</h2>
         <dl class="facts order-detail__people">
@@ -181,6 +183,10 @@ onMounted(async () => {
               <RouterLink :to="`/users/${order.dispatcher.id}`">{{ order.dispatcher.name ?? '未填姓名' }}（{{ order.dispatcher.phone }}）</RouterLink>
               <button v-if="can.write()" class="order-detail__contact" type="button" @click="contact(order.dispatcher.id)">用客服聯絡</button>
             </dd>
+          </div>
+          <div v-if="order.driverDeleted" class="facts__wide">
+            <dt>接單司機</dt>
+            <dd class="muted">司機已刪除</dd>
           </div>
           <div v-if="order.driver" class="facts__wide">
             <dt>接單司機</dt>
@@ -269,6 +275,11 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* 相關人員 and 時間線 side by side are as tall as each other. */
+.order-detail__split {
+  align-items: stretch;
+}
+
 .order-detail__contact {
   margin-left: var(--space-sm);
   padding: 1px 8px;

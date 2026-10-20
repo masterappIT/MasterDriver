@@ -102,6 +102,7 @@ onMounted(async () => {
     <h1>一般設定</h1>
     <div v-if="error" class="notice error">{{ error }}</div>
     <div v-if="message" class="notice">{{ message }}</div>
+    <div class="split general-settings__split">
     <div class="card general-settings__card">
       <h2>Logo</h2>
       <p class="muted">顯示在平台首頁、登入頁和搶單頁的頁首。沒有上傳時顯示文字「MasterDriver」。</p>
@@ -117,37 +118,42 @@ onMounted(async () => {
       <p class="hint">PNG、JPG 或 WebP，400 KB 以內；建議使用透明背景的 PNG，高度至少 96 px。上傳後立即生效，不用按「儲存全部」。</p>
     </div>
 
-    <form class="general-settings" @submit.prevent="save">
       <div class="card general-settings__card">
         <h2>升級入口</h2>
         <label class="field">
           Master Travel 預約演示連結（所有升級提示和預設廣告都連到這裡）
-          <input v-model="form.upgradeUrl" class="input" placeholder="https://" />
+          <input v-model="form.upgradeUrl" class="input" placeholder="https://" form="general-settings-form" />
         </label>
       </div>
+    </div>
 
-      <div class="card general-settings__card">
-        <h2>客服聯絡</h2>
-        <div class="row">
-          <label class="field">微信號<input v-model="form.supportWechatId" class="input" /></label>
-          <label class="field">WhatsApp 號碼<input v-model="form.supportWhatsapp" class="input" placeholder="+852 …" /></label>
+    <form id="general-settings-form" class="general-settings" @submit.prevent="save">
+      <div class="split">
+        <div class="card general-settings__card">
+          <h2>客服聯絡</h2>
+          <div class="form-grid">
+            <label class="field">微信號<input v-model="form.supportWechatId" class="input" /></label>
+            <label class="field">WhatsApp 號碼<input v-model="form.supportWhatsapp" class="input" placeholder="+852 …" /></label>
+          </div>
+        </div>
+
+        <div class="card general-settings__card">
+          <h2>公告</h2>
+          <label class="field">公告文字（顯示在司機端頂部）<input v-model="form.announcementText" class="input" maxlength="300" /></label>
+          <label class="row"><input v-model="form.announcementEnabled" type="checkbox" /> 顯示公告</label>
         </div>
       </div>
 
       <div class="card general-settings__card">
-        <h2>公告</h2>
-        <label class="field">公告文字（顯示在司機端頂部）<input v-model="form.announcementText" class="input" maxlength="300" /></label>
-        <label class="row"><input v-model="form.announcementEnabled" type="checkbox" /> 顯示公告</label>
-      </div>
-
-      <div class="card general-settings__card">
         <h2>服務條款與私隱政策</h2>
-        <label class="field">服務條款<textarea v-model="form.termsText" class="input general-settings__text" /></label>
-        <label class="field">私隱政策<textarea v-model="form.privacyText" class="input general-settings__text" /></label>
+        <div class="form-grid general-settings__texts">
+          <label class="field">服務條款<textarea v-model="form.termsText" class="input general-settings__text" /></label>
+          <label class="field">私隱政策<textarea v-model="form.privacyText" class="input general-settings__text" /></label>
+        </div>
         <p class="hint">上線前請律師審閱條款內容，特別是平台服務費與兩地個人資料的部分。</p>
       </div>
 
-      <div class="row">
+      <div class="form-foot general-settings__foot">
         <button class="button" type="submit">儲存全部</button>
         <span v-if="meta" class="hint">最後修改：{{ dateTime(meta.updatedAt) }}　{{ meta.updatedBy ?? '' }}</span>
       </div>
@@ -160,6 +166,33 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+}
+
+/* The card's gap spaces its lines; paragraphs add none of their own. */
+.general-settings__card > p,
+.general-settings__card > h2 {
+  margin: 0;
+}
+
+/* Side by side cards are as tall as each other. */
+.general-settings__split {
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.general-settings .split {
+  align-items: stretch;
+}
+
+.general-settings__texts {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+/* 儲存全部 saves every card above, so it sits below them, not inside one. */
+.general-settings__foot {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .general-settings__logo {

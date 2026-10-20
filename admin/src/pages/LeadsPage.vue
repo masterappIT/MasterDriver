@@ -70,12 +70,14 @@ const breakdown = (lead: Lead) =>
 
 <template>
   <div class="page-head">
-    <div class="page-head__title">
-      <h1>潛在客戶</h1>
-      <span v-if="leads" class="muted">共 {{ leads.length }} 位</span>
+    <div>
+      <div class="page-head__title">
+        <h1>潛在客戶</h1>
+        <span v-if="leads" class="muted">共 {{ leads.length }} 位</span>
+      </div>
+      <p class="page-head__desc">按派單量、帶動的司機數、活躍天數、成長和付費情況排名，找出最可能需要 Master Travel 的車隊。</p>
     </div>
   </div>
-  <p class="muted">按派單量、帶動的司機數、活躍天數、成長和付費情況排名，找出最可能需要 Master Travel 的車隊。</p>
   <div class="filters">
     <select v-model="filters.days" class="select" aria-label="期間" @change="list.apply()">
       <option value="14">近 14 天</option>
@@ -96,9 +98,10 @@ const breakdown = (lead: Lead) =>
           <th>出單者</th>
           <th>分數</th>
           <th class="num">單量／完成</th>
-          <th class="num">司機數</th>
-          <th class="num">活躍天數</th>
-          <th class="num">成長</th>
+          <!-- 分數 lists these too, so a narrow screen leaves the columns out. -->
+          <th class="num col-wide">司機數</th>
+          <th class="num col-wide">活躍天數</th>
+          <th class="num col-wide">成長</th>
           <th>付費</th>
           <th>跟進</th>
         </tr>
@@ -115,9 +118,9 @@ const breakdown = (lead: Lead) =>
             <div v-for="part in breakdown(lead)" :key="part" class="hint">{{ part }}</div>
           </td>
           <td class="num">{{ lead.stats.orders }} / {{ lead.stats.completed }}</td>
-          <td class="num">{{ lead.stats.drivers }}</td>
-          <td class="num">{{ lead.stats.activeDays }}</td>
-          <td class="num">{{ lead.stats.growth > 0 ? `+${lead.stats.growth}` : lead.stats.growth }}</td>
+          <td class="num col-wide">{{ lead.stats.drivers }}</td>
+          <td class="num col-wide">{{ lead.stats.activeDays }}</td>
+          <td class="num col-wide">{{ lead.stats.growth > 0 ? `+${lead.stats.growth}` : lead.stats.growth }}</td>
           <td class="nowrap">
             {{ lead.stats.plan ? PLAN_NAME[lead.stats.plan] ?? lead.stats.plan : '' }}
             {{ lead.stats.toppedUp > 0 ? `充值 ${hkd(lead.stats.toppedUp)}` : '' }}

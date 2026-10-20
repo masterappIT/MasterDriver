@@ -134,31 +134,41 @@ onMounted(async () => {
 
 <template>
   <div class="settings-page">
-    <h1>防濫用設定</h1>
-    <p class="muted">這些上限用來擋住洗版和佔用儲存空間，正常使用不會碰到。修改後立即生效，不用重新部署；每次修改都會寫入操作紀錄。</p>
+    <div class="page-head">
+      <div>
+        <h1>防濫用設定</h1>
+        <p class="page-head__desc">這些上限用來擋住洗版和佔用儲存空間，正常使用不會碰到。修改後立即生效，不用重新部署；每次修改都會寫入操作紀錄。</p>
+      </div>
+    </div>
     <div v-if="error" class="notice error">{{ error }}</div>
     <div v-if="message" class="notice">{{ message }}</div>
 
     <form class="card limits" @submit.prevent="save">
       <h2>簡訊驗證碼</h2>
-      <label v-for="field in OTP_FIELDS" :key="field.key" class="field">
-        {{ field.label }}
-        <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
-        <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
-      </label>
+      <div class="limits__fields">
+        <label v-for="field in OTP_FIELDS" :key="field.key" class="field">
+          {{ field.label }}
+          <input v-model.number="form[field.key]" class="input" type="number" :min="field.min" :max="field.max" step="1" required />
+          <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+        </label>
+      </div>
       <p class="hint">簡訊按則收費，這三項用來防止被刷。開發模式登入時同樣適用。</p>
       <h2 class="limits__heading">客服</h2>
-      <label v-for="field in FIELDS" :key="field.key" class="field">
-        {{ field.label }}
-        <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
-        <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
-      </label>
+      <div class="limits__fields">
+        <label v-for="field in FIELDS" :key="field.key" class="field">
+          {{ field.label }}
+          <input v-model.number="form[field.key]" class="input" type="number" :min="field.min" :max="field.max" step="1" required />
+          <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+        </label>
+      </div>
       <h2 class="limits__heading">名片頁預約</h2>
-      <label v-for="field in BOOKING_FIELDS" :key="field.key" class="field">
-        {{ field.label }}
-        <input v-model.number="form[field.key]" class="input limits__input" type="number" :min="field.min" :max="field.max" step="1" required />
-        <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
-      </label>
+      <div class="limits__fields">
+        <label v-for="field in BOOKING_FIELDS" :key="field.key" class="field">
+          {{ field.label }}
+          <input v-model.number="form[field.key]" class="input" type="number" :min="field.min" :max="field.max" step="1" required />
+          <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+        </label>
+      </div>
       <div class="form-foot">
         <button class="button" type="submit">儲存</button>
         <span v-if="meta?.updatedBy" class="hint">最後修改：{{ dateTime(meta.updatedAt) }}　{{ meta.updatedBy }}</span>
@@ -174,14 +184,24 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  max-width: 560px;
 }
 
+/* A section starts below a line, like the save row. */
 .limits__heading {
-  margin-top: var(--space-lg);
+  margin-top: var(--space-md);
+  padding-top: 20px;
+  border-top: 1px solid var(--color-divider);
 }
 
-.limits__input {
-  max-width: 160px;
+/* A section's fields side by side in even columns; the box sits at the top so the hints below line up. */
+.limits__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-lg) 20px;
+  align-items: start;
+}
+
+.limits > .hint {
+  margin: 0;
 }
 </style>

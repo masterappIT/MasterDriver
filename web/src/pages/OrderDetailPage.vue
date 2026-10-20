@@ -84,6 +84,8 @@ interface Detail {
   tripGroup?: TripGroup | null;
   contactRevealMinutes?: number | null;
   selfDrive?: boolean;
+  /** 司機已刪除 (dispatcher only): the driver who took it was deleted by the platform since. */
+  driverDeleted?: boolean;
   /** 接單池: listed for every signed-in driver (dispatcher only). */
   inPool?: boolean;
   driver: Driver | null;
@@ -474,8 +476,8 @@ const remindPayment = computed(() => {
   return o.status === 'COMPLETED' || new Date(o.pickupAt).getTime() <= Date.now();
 });
 
-/** 已結清: only once the trip is done, and only when someone else drove it. */
-const canSettle = computed(() => order.value?.status === 'COMPLETED' && !order.value.selfDrive);
+/** 已結清: only once the trip is done, and only when someone else drove it who is still there. */
+const canSettle = computed(() => order.value?.status === 'COMPLETED' && !order.value.selfDrive && !order.value.driverDeleted);
 
 /**
  * The page follows the order's stage. While it waits for a driver, the text to paste into groups
@@ -656,7 +658,7 @@ watch(id, () => {
       <!-- Where the order stands: 已出單, 有人接, 乘客確認. -->
       <ol v-if="order.status !== 'CANCELLED' && !ownTrip && !doneForDriver" class="detail__steps" style="order: 1" :aria-label="t('進度')">
         <li class="done">{{ t('已出單') }}</li>
-        <li :class="{ done: order.claimedAt }">{{ order.driver?.name ? t(`${order.driver.name} 接單`) : t('有人接') }}</li>
+        <li :class="{ done: order.claimedAt }">{{ order.driverDeleted ? t('司機已刪除') : order.driver?.name ? t(`${order.driver.name} 接單`) : t('有人接') }}</li>
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
       </ol>
 
@@ -1078,6 +1080,15 @@ watch(id, () => {
         </div>
         <ContactLines v-if="isDispatcher && !selfDriven" class="detail__gap" :phones="order.driver.phones?.slice(1)" :wechat-id="order.driver.wechatId" :whatsapp="order.driver.whatsapp" />
         <p v-if="isDispatcher && !selfDriven && order.driver.hidePlates" class="hint detail__gap">{{ t('這位司機對乘客隱藏車牌：乘客確認頁不顯示車牌，會提醒乘客上車前先確認。') }}</p>
+      </section>
+      <!-- 司機已刪除: the platform deleted the driver's account; the order stays the dispatcher's. -->
+      <section v-if="isDispatcher && order.driverDeleted && !order.driver" class="card" style="order: 7">
+        <span class="section-label">{{ t('接單司機') }}</span>
+        <div class="detail__person">
+          <strong>{{ t('司機已刪除') }}</strong>
+          <span class="hint">{{ t(`${shortTime(order.claimedAt)} 搶到`) }}</span>
+        </div>
+        <p class="hint">{{ t(order.status === 'COMPLETED' ? '這位司機的帳號已被平台刪除，看不到他的資料和聯絡方式，這單也不用再標記結清。' : '這位司機的帳號已被平台刪除，看不到他的資料和聯絡方式。') }}</p>
       </section>
 
       <!-- The driver who took the order: how to reach whoever put it out. -->

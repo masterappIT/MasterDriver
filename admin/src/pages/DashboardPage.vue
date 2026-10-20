@@ -118,14 +118,15 @@ onMounted(load);
           <h2>收費</h2>
           <RouterLink v-if="can.write()" to="/billing">收費控制</RouterLink>
         </div>
-        <dl class="facts dashboard__facts dashboard__facts--first">
-          <div class="facts__wide">
-            <dt>平台服務費</dt>
-            <dd>
-              <span class="tag" :class="{ 'tag--info': data.serviceFee.enabled }">{{ data.serviceFee.enabled ? '開啟' : '關閉' }}</span>
-              {{ data.serviceFee.enabled ? `每單 ${money(data.serviceFee.fee)}` : '' }}
-            </dd>
+        <!-- Laid out like 訂單 and 用戶: two big numbers, then the details below a line. -->
+        <dl class="facts facts--numbers">
+          <div>
+            <dt>平台服務費（每單）</dt>
+            <dd>{{ data.serviceFee.enabled ? money(data.serviceFee.fee) : '關閉' }}</dd>
           </div>
+          <div><dt>用戶點數餘額合計</dt><dd>{{ hkd(data.creditsOutstanding) }}</dd></div>
+        </dl>
+        <dl class="facts dashboard__facts">
           <div class="facts__wide">
             <dt>全站免費期</dt>
             <dd v-if="data.freePeriods.length === 0" class="muted">沒有生效中的免費期</dd>
@@ -133,7 +134,6 @@ onMounted(load);
               {{ period.name }}<span class="muted">（{{ period.endsAt ? `至 ${dateTime(period.endsAt)}` : '未設結束時間' }}）</span>
             </dd>
           </div>
-          <div class="facts__wide"><dt>用戶點數餘額合計</dt><dd>{{ hkd(data.creditsOutstanding) }}</dd></div>
         </dl>
       </section>
     </div>
@@ -240,11 +240,6 @@ onMounted(load);
   border-top: 1px solid var(--color-divider);
 }
 
-.dashboard__facts--first {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
 
 .dashboard__label {
   margin: var(--space-lg) 0 var(--space-sm);
@@ -302,19 +297,24 @@ onMounted(load);
   margin: 0;
 }
 
+/* The same boxes as the order counts in 訂單 above. */
 .dashboard__mark {
   display: grid;
   gap: 2px;
-  padding: 10px 14px;
-  border: 1px solid var(--color-card-border);
+  padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: var(--radius-input);
-  color: var(--color-text-secondary);
+  color: var(--color-text);
+  background: var(--color-field);
   font-size: var(--font-caption);
 }
 
+.dashboard__mark span {
+  color: var(--color-text-secondary);
+}
+
 .dashboard__mark strong {
-  color: var(--color-text);
-  font-size: 20px;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
 

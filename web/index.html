@@ -5,8 +5,30 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <!-- Trip pages and the driver app are never indexed (docs/PLAN.md, SEO). -->
     <meta name="robots" content="noindex, nofollow" />
-    <meta name="theme-color" content="#3568e8" />
+    <meta name="theme-color" content="#1f5fd6" />
     <title>MasterDriver 跨境師傅幫</title>
+    <!--
+      The preview a link gets when it is shared. The app sets its tags only after it runs, and a link
+      preview never runs it. Every page carries the home page's tags below; on a 名片頁 (/p/), a
+      confirmation (/c/) or a 搶單 link (/o/), nginx puts that link's own tags in their place
+      (deploy/frontend/web.conf), which is what iOS's share menu hands WeChat; if the API does not
+      answer in time these stay. Link-preview robots (WhatsApp, iMessage) get the API's page instead.
+      Never the passenger (docs/DESIGN.md, 連結預覽). The image needs a full address; the square,
+      because WeChat crops a picture's middle to a small square.
+    -->
+    <!--# block name="home_tags" -->
+    <meta property="og:site_name" content="跨境師傅幫 MasterDriver" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="MasterDriver 跨境師傅幫｜跨境司機派單、接單、獲客" />
+    <meta property="og:description" content="一條連結派單到多個群，司機搶單；名片頁讓客人直接約你。免費。" />
+    <meta property="og:url" content="https://masterdriverapp.masterappinc.com/" />
+    <meta property="og:image" content="https://masterdriverapp.masterappinc.com/share-square.jpg" />
+    <meta property="og:image:width" content="600" />
+    <meta property="og:image:height" content="600" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="description" content="一條連結派單到多個群，司機搶單；名片頁讓客人直接約你。免費。" />
+    <!--# endblock -->
+    <!--# include virtual="/__link-tags/$link_path" stub="home_tags" -->
     <!-- The loading screen: shown before any code arrives, so a slow connection never shows a blank page. -->
     <style>
       body {

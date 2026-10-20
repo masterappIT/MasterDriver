@@ -1,0 +1,62 @@
+# MasterDriver on the HostKVM server (/srv/apps/masterdriver/compose.yaml). See docs/HOSTKVM-MIGRATION.md.
+# Each service has two slots, a and b. The image of each slot and the slot in use are in
+# release.env, written by masterdriver-deploy; only the slot in use is running.
+# The networks here are those of a slot that takes no traffic yet: a new API slot only reaches the
+# database, and the deploy script joins it to `masterdriver` (where the front ends find it) once its
+# checks pass; a new front-end slot only reaches the API, and joins `edge` (where Caddy finds it) the same way.
+name: masterdriver
+
+x-api: &api
+  restart: unless-stopped
+  env_file: /srv/apps/masterdriver/app.env
+  volumes:
+    # 客服 and 名片頁 files (SUPPORT_MEDIA_DIR=/data/media), backed up every day by masterdriver-backup.
+    - /srv/apps/masterdriver/media:/data/media
+  networks: [data]
+  mem_limit: 1g
+  stop_grace_period: 30s
+
+x-frontend: &frontend
+  restart: unless-stopped
+  environment:
+    API_ORIGIN: http://masterdriver_api
+  volumes:
+    - /srv/apps/masterdriver/api-upstream.conf:/etc/nginx/conf.d/api-upstream.conf:ro
+  networks: [masterdriver]
+  mem_limit: 128m
+  # nginx stops gracefully (SIGQUIT): open requests, notification streams included (90 s), finish first.
+  stop_grace_period: 100s
+
+services:
+  api-a:
+    <<: *api
+    image: ${API_A_IMAGE:-masterdriver-unset}
+    container_name: masterdriver-api-a
+  api-b:
+    <<: *api
+    image: ${API_B_IMAGE:-masterdriver-unset}
+    container_name: masterdriver-api-b
+  web-a:
+    <<: *frontend
+    image: ${WEB_A_IMAGE:-masterdriver-unset}
+    container_name: masterdriver-web-a
+  web-b:
+    <<: *frontend
+    image: ${WEB_B_IMAGE:-masterdriver-unset}
+    container_name: masterdriver-web-b
+  admin-a:
+    <<: *frontend
+    image: ${ADMIN_A_IMAGE:-masterdriver-unset}
+    container_name: masterdriver-admin-a
+  admin-b:
+    <<: *frontend
+    image: ${ADMIN_B_IMAGE:-masterdriver-unset}
+    container_name: masterdriver-admin-b
+
+networks:
+  # The server's shared Postgres.
+  data:
+    external: true
+  # Front ends to API; created by setup.sh.
+  masterdriver:
+    external: true

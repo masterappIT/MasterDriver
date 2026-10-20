@@ -9,6 +9,7 @@ import { fromLocalInput, plateKind, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
 import PhoneField from '../components/PhoneField.vue';
 import { t } from '../i18n';
+import LinkProblem from '../components/LinkProblem.vue';
 
 interface Page {
   code: string;
@@ -120,7 +121,8 @@ onBeforeUnmount(() => watcher?.disconnect());
 <template>
   <div class="page profile">
     <PageBack fallback="/app/profile-page" history only-in-app />
-    <div v-if="error" class="notice error">{{ error }}</div>
+    <LinkProblem v-if="error && !page" :message="error" next="請向介紹你來的司機要一條新的連結。" />
+    <div v-else-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="page">
       <div v-if="page.mine && !page.published" class="notice">
@@ -198,7 +200,7 @@ onBeforeUnmount(() => watcher?.disconnect());
         <p>
           <RouterLink to="/support">{{ t('檢舉這個頁面') }}</RouterLink>
         </p>
-        <RouterLink to="/" class="profile__brand"><BrandMark /><span>{{ t('由 MasterDriver 跨境師傅幫提供') }}</span></RouterLink>
+        <RouterLink to="/" class="profile__brand"><BrandMark :name="false" :size="24" /><span>{{ t('由 MasterDriver 跨境師傅幫提供') }}</span></RouterLink>
       </footer>
 
       <div v-if="page.published && !formInView" class="action-bar">

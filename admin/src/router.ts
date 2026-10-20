@@ -6,8 +6,8 @@ declare module 'vue-router' {
     title?: string;
     roles?: AdminRole[];
     public?: boolean;
-    /** The page names its own section above its title, as the Master Travel pages do. */
-    ownHeading?: boolean;
+    /** A detail page: its 返回 link stands where a list page names its section. */
+    detail?: boolean;
   }
 }
 
@@ -17,11 +17,11 @@ const routes: RouteRecordRaw[] = [
   { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { public: true, title: '登入' } },
   { path: '/', component: () => import('./pages/DashboardPage.vue'), meta: { title: '總覽' } },
   { path: '/observability', component: () => import('./pages/ObservabilityPage.vue'), meta: { title: '數據流監控', roles: WRITE } },
-  { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { title: '用戶', ownHeading: true } },
+  { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { title: '用戶' } },
   // A user's details are a drawer over the list now; links to the old page open it.
   { path: '/users/:id', redirect: (to) => ({ path: '/users', query: { open: String(to.params.id) } }) },
   { path: '/orders', component: () => import('./pages/OrdersPage.vue'), meta: { title: '訂單' } },
-  { path: '/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '訂單詳情' } },
+  { path: '/orders/:id', component: () => import('./pages/OrderDetailPage.vue'), meta: { title: '訂單詳情', detail: true } },
   { path: '/support', component: () => import('./pages/SupportPage.vue'), meta: { title: '客服', roles: WRITE } },
   { path: '/support/:id', component: () => import('./pages/SupportPage.vue'), meta: { title: '客服', roles: WRITE } },
   { path: '/billing', component: () => import('./pages/BillingPage.vue'), meta: { title: '收費控制', roles: WRITE } },
@@ -36,7 +36,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/settings/limits', component: () => import('./pages/LimitsPage.vue'), meta: { title: '防濫用設定', roles: WRITE } },
   { path: '/payment-channels', component: () => import('./pages/PaymentChannelsPage.vue'), meta: { title: '付款通道', roles: WRITE } },
   { path: '/sms-channels', redirect: { path: '/settings/login', query: { tab: 'sms' } } },
-  { path: '/accounts', component: () => import('./pages/AccountsPage.vue'), meta: { title: '後台帳號', roles: ['SUPER_ADMIN'], ownHeading: true } },
+  { path: '/accounts', component: () => import('./pages/AccountsPage.vue'), meta: { title: '後台帳號', roles: ['SUPER_ADMIN'] } },
   { path: '/audit', component: () => import('./pages/AuditPage.vue'), meta: { title: '操作紀錄', roles: ['SUPER_ADMIN'] } },
   { path: '/password', component: () => import('./pages/PasswordPage.vue'), meta: { title: '修改密碼' } },
   { path: '/:pathMatch(.*)*', redirect: '/' },

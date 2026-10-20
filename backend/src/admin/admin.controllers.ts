@@ -184,6 +184,18 @@ export class AdminController {
     return this.data.restoreUser(id, admin, request.ip);
   }
 
+  @Get('users/:id/deletion')
+  @AdminRoles('SUPER_ADMIN')
+  userDeletion(@Param('id') id: string) {
+    return this.data.userDeletion(id);
+  }
+
+  @Delete('users/:id')
+  @AdminRoles('SUPER_ADMIN')
+  deleteUser(@Param('id') id: string, @Body(new ZodPipe(adminReasonSchema)) body: AdminReason, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    return this.data.deleteUser(id, body, admin, request.ip);
+  }
+
   // ---- complaints about a user's 名片頁 and 派單群
 
   @Post('users/:id/page/block')

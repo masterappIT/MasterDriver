@@ -4,7 +4,7 @@ import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 
 /**
- * 名片頁與預約怎麼用: what the driver's own page is for, where to put its link so customers
+ * 名片頁與客人詢價怎麼用: what the driver's own page is for, where to put its link so customers
  * find it, and what happens when one books. Shown to new drivers from the home page, and kept
  * under 我的 for later. Only what the tool does today: a link to copy, no posters or QR images.
  */
@@ -20,15 +20,15 @@ function toMyPage() {
 
 /** Where drivers put the link, as short chips under step 2. */
 const PLACES = ['微信朋友圈', '傳給熟客', 'WhatsApp', '小紅書主頁簡介', '司機群'];
-const TIPS = ['放車輛照片，客人比較放心', '介紹自己寫清楚', '收到預約盡快報價'];
+const TIPS = ['放車輛照片，客人比較放心', '介紹自己寫清楚', '收到詢價盡快報價'];
 </script>
 
 <template>
   <div class="page guide">
-    <!-- Opened from 首頁, 我的, 預約 and the 名片頁: 返回 goes back to whichever it was. -->
+    <!-- Opened from 首頁, 我的, 等我報價 and the 名片頁: 返回 goes back to whichever it was. -->
     <PageBack :title="t('用名片頁找客人')" fallback="/app/me" history />
 
-    <p class="guide__lead">{{ t('一條屬於你的連結，客人直接向你預約。') }}</p>
+    <p class="guide__lead">{{ t('一條屬於你的連結，客人直接向你詢價、約車。') }}</p>
 
     <!--
       Four steps, each a small picture of the screen it is about and one line under it. The
@@ -95,7 +95,7 @@ const TIPS = ['放車輛照片，客人比較放心', '介紹自己寫清楚', '
         <div class="guide__caption">
           <span class="guide__number">3</span>
           <div>
-            <strong>{{ t('客人預約，你報價') }}</strong>
+            <strong>{{ t('客人詢價，你報價') }}</strong>
             <p>{{ t('客人不用下載、不用登入') }}</p>
           </div>
         </div>
@@ -128,7 +128,7 @@ const TIPS = ['放車輛照片，客人比較放心', '介紹自己寫清楚', '
     </section>
 
     <button class="button block large" type="button" @click="toMyPage">{{ t('去做我的名片頁') }}</button>
-    <RouterLink class="guide__bookings" to="/app/bookings">{{ t('看收到的預約') }}</RouterLink>
+    <RouterLink class="guide__bookings" to="/app/bookings">{{ t('看等我報價的客人') }}</RouterLink>
   </div>
 </template>
 

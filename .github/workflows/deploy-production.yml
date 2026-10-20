@@ -1,16 +1,28 @@
 name: Deploy production
 
 # Every push to `main` is released: quality gates, images, database backup,
-# migration, API candidate revision, smoke tests, traffic, then the two
-# static apps. See docs/PRODUCTION-DEPLOYMENT.md.
+# migration, API candidate, checks, traffic, then the two static apps. Images go
+# to Artifact Registry; the HostKVM server runs them (deploy/hostkvm/deploy.sh,
+# reached over SSH by an account that can run nothing else). See
+# docs/PRODUCTION-DEPLOYMENT.md and docs/HOSTKVM-MIGRATION.md.
 on:
   push:
     branches: [main]
+    # A push that only changes documents is not released (workflow_dispatch still is).
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
+
+env:
+  # The server and its host key, fixed here so a connection to anything else fails.
+  DEPLOY_HOST: 45.134.82.239
+  DEPLOY_USER: deploy-masterdriver
+  DEPLOY_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIfLOO+u+1eL4NfB87NjjvQm6GWt7b4ZKianVO7bGRGD
 
 concurrency:
   group: production
@@ -117,12 +129,34 @@ jobs:
           fi
           printf 'Database mutation authorized for current commit: %s\n' "$GITHUB_SHA"
 
+      - name: Connect to the production server
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.MASTERDRIVER_DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host production
+            HostName $DEPLOY_HOST
+            User $DEPLOY_USER
+            IdentityFile ~/.ssh/deploy
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+            ConnectTimeout 20
+            ServerAliveInterval 30
+            ServerAliveCountMax 4
+          EOF
+          ssh production status
+
       - name: Create pre-migration database backup
-        run: >-
-          gcloud sql backups create
-          --project "${{ vars.GCP_PROJECT_ID }}"
-          --instance "${{ vars.GCP_SQL_INSTANCE_NAME }}"
-          --description "pre-release-${GITHUB_SHA}"
+        run: |
+          # The arguments are filled in here on purpose; the server checks each one.
+          # shellcheck disable=SC2029
+          ssh production backup "$GITHUB_SHA"
 
       - name: Verify commit before production mutation
         run: |
@@ -136,28 +170,12 @@ jobs:
           printf 'Production mutation authorized for current commit: %s\n' "$GITHUB_SHA"
 
       - name: Migrate, deploy candidate, and promote
-        id: api
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          REGION: ${{ vars.GCP_REGION }}
-          SERVICE_NAME: ${{ vars.GCP_API_SERVICE }}
-          MIGRATION_JOB: ${{ vars.GCP_MIGRATION_JOB }}
           IMAGE: ${{ steps.image.outputs.image }}
-          CLOUD_SQL_INSTANCE: ${{ vars.GCP_CLOUD_SQL_CONNECTION_NAME }}
-          SERVICE_ACCOUNT: ${{ vars.GCP_RUNTIME_SERVICE_ACCOUNT }}
-          MIGRATION_SERVICE_ACCOUNT: ${{ vars.GCP_MIGRATION_SERVICE_ACCOUNT }}
-          DATABASE_SECRET: ${{ vars.GCP_DATABASE_URL_SECRET }}
-          OTP_PEPPER_SECRET: ${{ vars.GCP_OTP_PEPPER_SECRET }}
-          DATA_ENCRYPTION_KEY_SECRET: ${{ vars.GCP_DATA_ENCRYPTION_KEY_SECRET }}
-          PUBLIC_BASE_URL: ${{ vars.PRODUCTION_WEB_URL }}
-          SUPPORT_MEDIA_BUCKET: ${{ vars.GCP_SUPPORT_MEDIA_BUCKET }}
-          # Space-separated Cloud Run jobs that run from the API image.
-          FOLLOWING_JOBS: ${{ vars.GCP_FOLLOWING_JOBS }}
         run: |
-          set -euo pipefail
-          ./deploy/cloud-run/deploy.sh
-          url="$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
-          printf 'url=%s\n' "$url" >> "$GITHUB_OUTPUT"
+          # The arguments are filled in here on purpose; the server checks each one.
+          # shellcheck disable=SC2029
+          ssh production api "$GITHUB_SHA" "${IMAGE#*@}"
 
       - name: Verify commit before frontend mutation
         run: |
@@ -172,16 +190,14 @@ jobs:
 
       - name: Deploy production frontends
         env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          REGION: ${{ vars.GCP_REGION }}
-          SERVICE_ACCOUNT: ${{ vars.GCP_FRONTEND_SERVICE_ACCOUNT }}
-          # The static apps reach the API through their own /api proxy.
-          API_ORIGIN: ${{ steps.api.outputs.url }}
+          WEB_IMAGE: ${{ steps.frontends.outputs.web }}
+          ADMIN_IMAGE: ${{ steps.frontends.outputs.admin }}
         run: |
-          set -euo pipefail
-          while IFS='|' read -r service image; do
-            SERVICE_NAME="$service" IMAGE="$image" ./deploy/frontend/deploy.sh
-          done <<EOF
-          ${{ vars.GCP_WEB_SERVICE }}|${{ steps.frontends.outputs.web }}
-          ${{ vars.GCP_ADMIN_SERVICE }}|${{ steps.frontends.outputs.admin }}
-          EOF
+          # The arguments are filled in here on purpose; the server checks each one.
+          # shellcheck disable=SC2029
+          ssh production frontends "$GITHUB_SHA" "${WEB_IMAGE#*@}" "${ADMIN_IMAGE#*@}"
+
+      - name: Check the public site
+        env:
+          WEB_URL: ${{ vars.PRODUCTION_WEB_URL }}
+        run: curl --fail --silent --show-error --max-time 20 "$WEB_URL/api/health/ready"

@@ -153,6 +153,8 @@ onBeforeUnmount(() => clearInterval(timer));
       <p class="sign-in__ask">
         {{ t('驗證碼已發送到') }} <strong>{{ countryCode }} {{ phone }}</strong>
       </p>
+      <!-- An SMS can take a minute; a code asked for earlier still works after 重新發送 (the server takes the three newest). -->
+      <p class="sign-in__wait">{{ t('簡訊可能要 1 分鐘左右才收到，請稍候。重新發送後，收到哪一則驗證碼都可以用。') }}</p>
       <!-- Six slots drawn under one real input, which keeps paste and the phone's one-time-code autofill. -->
       <div class="sign-in__slots">
         <input
@@ -281,6 +283,12 @@ onBeforeUnmount(() => clearInterval(timer));
 .sign-in__closed {
   margin: calc(var(--space-sm) * -1) 0 0;
   color: var(--color-gold-ink);
+  font-size: var(--font-caption);
+  line-height: 1.6;
+}
+.sign-in__wait {
+  margin: calc(var(--space-sm) * -1) 0 0;
+  color: var(--color-text-secondary);
   font-size: var(--font-caption);
   line-height: 1.6;
 }

@@ -495,10 +495,10 @@ onMounted(async () => {
     <div v-if="error" id="new-order-error" class="notice error">{{ error }}</div>
 
     <div v-if="fromBooking && form.transfer" class="notice">
-      {{ t('已帶入名片頁預約的資料，乘客要接駁（中途換車）。填接駁位置和每段的出單價後出單。') }}
+      {{ t('已帶入客人詢價的資料，乘客要接駁（中途換車）。填接駁位置和每段的出單價後出單。') }}
     </div>
     <div v-else-if="fromBooking" class="notice">
-      {{ form.passengerPrice ? t('已帶入名片頁預約的資料和你的報價（作為乘客價）。填出單價後出單，貼到群裡派給其他司機。') : t('已帶入名片頁預約的資料。填出單價後出單，貼到群裡派給其他司機。') }}
+      {{ form.passengerPrice ? t('已帶入客人詢價的資料和你的報價（作為乘客價）。填出單價後出單，貼到群裡派給其他司機。') : t('已帶入客人詢價的資料。填出單價後出單，貼到群裡派給其他司機。') }}
     </div>
 
     <div v-if="returnFrom" class="notice">{{ t(`回程：已帶入「${returnFrom}」的路線（對調）、人數、乘客和價錢。填回程的時間後出單。`) }}</div>

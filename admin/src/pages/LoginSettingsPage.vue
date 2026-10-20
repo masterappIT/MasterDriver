@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, can } from '../api';
 import { dateTime } from '../format';
+import OtpWaitTable, { type RouteWait } from '../components/OtpWaitTable.vue';
 
 /**
  * 登入配置, laid out as Master Travel's 登入配置 (see docs/REUSE.md): one page with a tab per
@@ -122,6 +123,7 @@ async function saveDevelopment() {
 const smsRoute = ref<Route>('DOMESTIC');
 const channels = ref<Channel[]>([]);
 const messages = ref<Message[]>([]);
+const waits = ref<{ days: number; routes: RouteWait[] } | null>(null);
 const historyLoading = ref(false);
 type ChannelForm = { enabled: boolean; endpoint: string; account: string; password: string; template: string; testPhone: string };
 const forms = reactive<Record<Route, ChannelForm>>({
@@ -199,7 +201,11 @@ const spugMessages = computed(() => messages.value.filter((item) => item.provide
 async function loadHistory() {
   historyLoading.value = true;
   try {
-    messages.value = await api<Message[]>('GET', '/sms-messages');
+    [messages.value, waits.value] = await Promise.all([
+      api<Message[]>('GET', '/sms-messages'),
+      // The figures are extra: the records still show if they cannot be read.
+      api<{ days: number; routes: RouteWait[] }>('GET', '/sms-waits').catch(() => waits.value),
+    ]);
   } catch (e) {
     smsError.value = (e as Error).message;
   } finally {
@@ -390,10 +396,11 @@ onMounted(async () => {
 
 <template>
   <section class="login-settings-admin">
-    <div class="login-settings-header">
-      <span class="eyebrow">ACCESS &amp; AUTHENTICATION</span>
-      <h2>登入配置</h2>
-      <p class="section-desc">司機以手機號碼和簡訊驗證碼登入。這裡設定驗證碼怎樣發出，以及開發、測試和上架審核時使用的指定驗證碼。</p>
+    <div class="page-head">
+      <div>
+        <h1>登入配置</h1>
+        <p class="page-head__desc">司機以手機號碼和簡訊驗證碼登入。這裡設定驗證碼怎樣發出，以及開發、測試和上架審核時使用的指定驗證碼。</p>
+      </div>
     </div>
 
     <div class="login-settings-scope">
@@ -414,7 +421,6 @@ onMounted(async () => {
     <section v-show="tab === 'development'" class="phone-login-development-settings login-settings-card" aria-labelledby="development-title">
       <div class="login-settings-card-header">
         <div>
-          <span class="section-kicker">DEVELOPMENT ACCESS</span>
           <h3 id="development-title">開發模式登入</h3>
           <p>獨立控制手機號碼登入的開發驗證模式，不會修改簡訊設定。</p>
         </div>
@@ -487,6 +493,8 @@ onMounted(async () => {
 
       <p v-if="channel && routeOnSpug" class="sms-route-note">{{ ROUTE[smsRoute].tab }}目前不經 253 發送，這裡的帳號暫不使用。</p>
       <p v-else-if="channel && !routeReady" class="sms-route-note sms-sender-warning">這個號碼區的 253 帳號尚未啟用或未填好，{{ ROUTE[smsRoute].numbers }}目前收不到驗證碼。</p>
+
+      <OtpWaitTable v-if="waits" :days="waits.days" :routes="waits.routes" />
 
       <div class="sms-history">
         <div class="sms-history-header">
@@ -571,7 +579,6 @@ onMounted(async () => {
     <div v-show="tab === 'spug'" class="login-settings-card sms-settings-card">
       <div class="login-settings-card-header">
         <div>
-          <span class="section-kicker">SPUG PUSH</span>
           <h3>Spug 推送助手</h3>
           <p>用 Spug 自己已報備的簽名和官方驗證碼範本代發，不用報備我們的公司；簡訊文字不能自訂。國內、國際共用這一份設定；勾選的號碼區經這裡發送，沒勾選的用「簡訊登入」分頁裡各自的 253 帳號。</p>
         </div>
@@ -600,6 +607,8 @@ onMounted(async () => {
         </div>
         <p v-for="message in spugWarnings" :key="message" class="sms-sender-warning">{{ message }}</p>
       </div>
+
+      <OtpWaitTable v-if="waits" :days="waits.days" :routes="waits.routes" />
 
       <div class="sms-history">
         <div class="sms-history-header">

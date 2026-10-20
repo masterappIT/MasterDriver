@@ -13,6 +13,7 @@ import { t } from '../i18n';
 import { PAYMENT_KINDS, type PassengerPayment } from '../payment';
 import { toast } from '../toast';
 import type { PlateType } from '@masterdriver/shared/vehicle-plate';
+import LinkProblem from '../components/LinkProblem.vue';
 
 interface TripDriver {
   name: string | null;
@@ -57,7 +58,15 @@ interface PassengerView {
   price: { amount: number; currency: string } | null;
   dispatcherName: string | null;
   /** Who arranged the trip and how to reach them; null when they are the driver. */
-  dispatcher: { name: string | null; phone: string; phones: string[]; wechatId: string | null; whatsapp: string | null } | null;
+  dispatcher: {
+    name: string | null;
+    phone: string;
+    phones: string[];
+    wechatId: string | null;
+    whatsapp: string | null;
+    /** Their 名片頁, when public: the passenger books them directly next time. */
+    pageCode: string | null;
+  } | null;
   passengerConfirmedAt: string | null;
   /** 行程群: the group made for this trip, when the person who arranged it gave one. */
   tripGroup: TripGroup | null;
@@ -139,7 +148,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page confirm-page">
-    <div v-if="error" class="notice error">{{ error }}</div>
+    <LinkProblem v-if="error && !trip" :message="error" next="請聯絡為你安排行程的司機，取得新的連結。" />
+    <div v-else-if="error" class="notice error">{{ error }}</div>
     <template v-if="trip">
       <h1 class="confirm-page__title">{{ trip.dispatcherName ? t(`${trip.dispatcherName} 為你安排的行程`) : t('你的行程') }}</h1>
 
@@ -217,6 +227,10 @@ onBeforeUnmount(() => {
         <p class="confirm-page__label">{{ t('行程有問題或要更改，聯絡為你安排的人') }}</p>
         <strong class="confirm-page__arranger">{{ trip.dispatcher.name ? t(trip.dispatcher.name) : t('安排行程的人') }}</strong>
         <ContactLines :phones="trip.dispatcher.phones" :wechat-id="trip.dispatcher.wechatId" :whatsapp="trip.dispatcher.whatsapp" />
+        <!-- The customer stays the dispatcher's whoever drives: their page is where to book next time. -->
+        <RouterLink v-if="trip.dispatcher.pageCode" class="button secondary block confirm-page__their-page" :to="`/p/${trip.dispatcher.pageCode}`">
+          {{ trip.dispatcher.name ? t(`看${trip.dispatcher.name}的名片頁，下次直接約`) : t('看他的名片頁，下次直接約') }}
+        </RouterLink>
       </section>
 
       <section v-if="trip.tripGroup && trip.status !== 'CANCELLED'" class="card">
@@ -317,6 +331,9 @@ onBeforeUnmount(() => {
 .confirm-page__ended strong {
   color: var(--status-confirmed);
   font-size: 20px;
+}
+.confirm-page__their-page {
+  margin-top: var(--space-md);
 }
 .confirm-page__arranger {
   display: block;

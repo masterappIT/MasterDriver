@@ -126,7 +126,7 @@ onBeforeUnmount(() => clearInterval(clock));
     <section v-if="waiting" class="card home__waiting">
       <h2 class="home__label">{{ t('待處理') }}</h2>
       <RouterLink v-if="unread.bookings" to="/app/bookings" class="home__row">
-        <span>{{ t(`${unread.bookings} 個新預約等你回覆`) }}</span>
+        <span>{{ t(`${unread.bookings} 個客人詢價等你報價`) }}</span>
         <span class="home__go">{{ t('查看') }}</span>
       </RouterLink>
       <RouterLink v-if="unread.carpools" to="/app/carpools" class="home__row">
@@ -142,7 +142,7 @@ onBeforeUnmount(() => clearInterval(clock));
     <!-- For a driver who has just joined: what the 名片頁 is for, said once. -->
     <section v-if="showGuide" class="card home__guide">
       <strong>{{ t('想有自己的客人？用名片頁') }}</strong>
-      <p>{{ t('一條屬於你的連結，放到朋友圈或傳給熟客，客人就能直接向你預約。') }}</p>
+      <p>{{ t('一條屬於你的連結，放到朋友圈或傳給熟客，客人就能直接向你詢價、約車。') }}</p>
       <div class="home__guide-actions">
         <RouterLink class="button" to="/app/guide/customers" @click="closeGuide">{{ t('看怎麼用') }}</RouterLink>
         <button class="home__guide-later" type="button" @click="closeGuide">{{ t('知道了') }}</button>

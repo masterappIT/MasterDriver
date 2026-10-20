@@ -175,6 +175,8 @@ test('還沒人接: the dispatcher is told 3 hours and 1 hour before an open ord
   const created = new Date('2026-10-15T08:00:00+08:00');
   const open = await ctx.orders.create(dispatcher, sampleOrder, created);
   const taken = await ctx.orders.create(dispatcher, sampleOrder, created);
+  // The database dates a new order by the real clock; put it out at the simulated time instead.
+  await ctx.prisma.order.updateMany({ where: { id: { in: [open.id, taken.id] } }, data: { createdAt: created } });
   await ctx.orders.claim(taken.code, driver);
   const unclaimed = () => ctx.prisma.notification.findMany({ where: { userId: dispatcher, kind: 'ORDER_UNCLAIMED' }, orderBy: { createdAt: 'asc' } });
 

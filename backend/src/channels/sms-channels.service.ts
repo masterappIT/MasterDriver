@@ -8,10 +8,13 @@ import { apiError } from '../common/errors';
 import { SECRET_BOX, SecretBox } from '../common/secret-box';
 import { telemetry } from '../observability/telemetry';
 import { PrismaService } from '../prisma.service';
+import { summarizeWaits } from './otp-wait';
 import { call253, destinationFor, routeFor, SMS253_DEFAULT_ENDPOINT, SMS253_DEFAULT_TEMPLATE, type Fetch } from './sms253';
 import { callSpug, isSpugTemplateCode, SPUG_CODE_MINUTES, SPUG_DEFAULT_ENDPOINT, spugTemplateCode } from './spug';
 
 const ROUTES: SmsRoute[] = ['DOMESTIC', 'INTERNATIONAL'];
+/** The 驗證碼等待時間 figures cover this many days. */
+const WAIT_DAYS = 7;
 
 function view(row: SmsChannel) {
   return {
@@ -211,6 +214,16 @@ export class SmsChannelsService implements SmsProvider {
   async messages() {
     const rows = await this.prisma.smsMessage.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
     return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
+  }
+
+  /** 驗證碼等待時間: how long sign-ins by SMS code took over the last week, per route. */
+  async waits(now = new Date()) {
+    const since = new Date(now.getTime() - WAIT_DAYS * 24 * 60 * 60 * 1000);
+    const rows = await this.prisma.verificationCode.findMany({
+      where: { mode: 'SMS', createdAt: { gte: since } },
+      select: { countryCode: true, phone: true, createdAt: true, consumedAt: true },
+    });
+    return { days: WAIT_DAYS, routes: summarizeWaits(rows, routeFor, ROUTES) };
   }
 
   /** Whether the provider the route chose is switched on and filled in. */

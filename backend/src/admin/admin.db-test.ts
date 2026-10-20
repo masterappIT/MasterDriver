@@ -184,6 +184,7 @@ test('a complaint about a 名片頁: found by its link, taken down until restore
 
   const detail = await ctx.adminData.getUser(owner);
   assert.equal(detail.profilePage?.intro, '十年經驗');
+  assert.equal(detail.profilePage?.url, `https://md.test/p/${page.code}`, 'the same link the driver shares');
   assert.deepEqual(detail.profilePage?.photoIds, [photoId]);
   assert.equal(detail.groupInvites[0].hasQr, true);
   assert.equal((await ctx.adminData.pagePhoto(owner, photoId)).mime, 'image/jpeg');
@@ -272,4 +273,103 @@ test('one user\'s orders: those they put out, those they drove, or both; with a 
   assert.deepEqual(await ids({ user: dispatcher, role: 'driver' }), [driven.id]);
   assert.deepEqual(await ids({ user: dispatcher }), [theirs.id, driven.id].sort());
   assert.deepEqual(await ids({ user: dispatcher, money: 'UNPAID', status: 'COMPLETED' }), [driven.id], 'a status and a money mark narrow together');
+});
+
+test('刪除用戶: refused while a trip with someone else is under way, then everything of the user goes', async () => {
+  const boss = await superAdmin();
+  const gone = await createDriver(ctx, '要刪的師傅');
+  const driver = await createDriver(ctx, '接單師傅');
+  const other = await createDriver(ctx, '別的出單者');
+
+  // The user's own orders: one another driver has, one they drive themselves, one nobody took.
+  const taken = await ctx.orders.create(gone, sampleOrder);
+  await ctx.orders.claim(taken.code, driver);
+  const own = await ctx.orders.create(gone, { ...sampleOrder, selfDrive: true });
+  const open = await ctx.orders.create(gone, sampleOrder);
+  // Another dispatcher's order the user took.
+  const theirs = await ctx.orders.create(other, sampleOrder);
+  await ctx.orders.claim(theirs.code, gone);
+
+  const before = await ctx.adminData.userDeletion(gone);
+  assert.deepEqual(new Set(before.blocking.map((order) => `${order.id}:${order.role}`)), new Set([`${taken.id}:DISPATCHED`, `${theirs.id}:CLAIMED`]));
+  assert.deepEqual([before.dispatchedOrders, before.claimedOrdersKept], [3, 1]);
+  await rejectsWith(ctx.adminData.deleteUser(gone, { reason: '用戶要求刪除' }, boss), 'USER_HAS_ACTIVE_ORDERS');
+  assert.ok(await ctx.prisma.user.findUnique({ where: { id: gone } }), 'nothing deleted');
+
+  await ctx.orders.complete(driver, taken.id);
+  await ctx.orders.setSettlement(gone, taken.id, { settled: true });
+  await ctx.orders.complete(gone, theirs.id);
+  assert.equal((await ctx.adminData.userDeletion(gone)).blocking.length, 0);
+
+  // What else the user has: a 名片頁 photo, a 客服 file, a sign-in code, another dispatcher's note on them.
+  const page = await ctx.prisma.profilePage.create({ data: { userId: gone, code: 'DELME001' } });
+  await ctx.mediaStorage.put(`profile/${page.id}/photo1.jpg`, Buffer.from('photo'), 'image/jpeg');
+  await ctx.prisma.profilePhoto.create({ data: { id: 'photo1', pageId: page.id, storageKey: `profile/${page.id}/photo1.jpg`, mimeType: 'image/jpeg', sizeBytes: 5 } });
+  const conversation = await ctx.prisma.supportConversation.create({ data: { userId: gone } });
+  await ctx.mediaStorage.put(`support/${conversation.id}/media1.jpg`, Buffer.from('media'), 'image/jpeg');
+  await ctx.prisma.supportMedia.create({
+    data: { id: 'media1', conversationId: conversation.id, kind: 'IMAGE', mimeType: 'image/jpeg', sizeBytes: 5, storageKey: `support/${conversation.id}/media1.jpg`, checksum: 'x', expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+  });
+  const user = await ctx.prisma.user.findUniqueOrThrow({ where: { id: gone } });
+  await ctx.prisma.verificationCode.create({ data: { countryCode: user.countryCode, phone: user.phone, codeHash: 'x', expiresAt: new Date() } });
+  await ctx.prisma.driverNote.create({ data: { ownerId: other, driverId: gone, favorite: true, note: '準時' } });
+  assert.ok(await ctx.prisma.notification.findFirst({ where: { userId: driver, orderId: taken.id } }), 'the driver was told about the user’s order');
+
+  assert.deepEqual(await ctx.adminData.deleteUser(gone, { reason: '用戶要求刪除' }, boss, '1.1.1.1'), {
+    deleted: true,
+    dispatchedOrders: 3,
+    claimedOrdersKept: 1,
+  });
+
+  assert.equal(await ctx.prisma.user.findUnique({ where: { id: gone } }), null);
+  assert.equal(await ctx.prisma.order.count({ where: { id: { in: [taken.id, own.id, open.id] } } }), 0, 'the user’s orders are gone');
+  assert.equal(await ctx.prisma.orderClaim.count({ where: { OR: [{ driverId: gone }, { orderId: taken.id }] } }), 0);
+  assert.equal(await ctx.prisma.notification.count({ where: { orderId: { in: [taken.id, own.id, open.id] } } }), 0, 'nobody keeps a line about them');
+  assert.equal(await ctx.prisma.profilePage.count({ where: { userId: gone } }), 0);
+  assert.equal(await ctx.prisma.supportConversation.count({ where: { userId: gone } }), 0);
+  assert.equal(await ctx.mediaStorage.read(`profile/${page.id}/photo1.jpg`), null, 'photo file removed');
+  assert.equal(await ctx.mediaStorage.read(`support/${conversation.id}/media1.jpg`), null, '客服 file removed');
+  assert.equal(await ctx.prisma.verificationCode.count({ where: { countryCode: user.countryCode, phone: user.phone } }), 0);
+  assert.equal(await ctx.prisma.driverNote.count({ where: { driverId: gone } }), 0);
+
+  // The other dispatcher's order stays theirs, finished, with no trace of the user but when it was taken.
+  const kept = await ctx.prisma.order.findUniqueOrThrow({ where: { id: theirs.id } });
+  assert.deepEqual([kept.status, kept.dispatcherId, kept.claimedById], ['COMPLETED', other, null]);
+  assert.ok(kept.claimedAt);
+  const detail = await ctx.adminData.getOrder(theirs.id, boss);
+  assert.deepEqual([detail.driver, detail.driverDeleted, detail.claims.length], [null, true, 0]);
+  const listed = await ctx.adminData.listOrders({ page: 1, by: 'pickup', user: other, role: 'dispatcher' }, 'SUPER_ADMIN');
+  assert.deepEqual(listed.items.map((item) => [item.id, item.driverDeleted]), [[theirs.id, true]]);
+  assert.ok(await ctx.prisma.user.findUnique({ where: { id: driver } }), 'the other users stay');
+
+  const audit = await ctx.prisma.adminAuditLog.findFirstOrThrow({ where: { action: 'user.delete' } });
+  assert.equal(audit.targetId, gone);
+  assert.deepEqual(audit.detail, { phone: `${user.countryCode} ${user.phone}`, name: '要刪的師傅', dispatchedOrders: 3, claimedOrdersKept: 1, reason: '用戶要求刪除' });
+  await rejectsWith(ctx.adminData.deleteUser(gone, { reason: 'again' }, boss), 'USER_NOT_FOUND');
+});
+
+test('刪除用戶: a 接駁 order goes with every leg; a leg another driver still has stops it', async () => {
+  const boss = await superAdmin();
+  const gone = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  const transfer = {
+    ...sampleOrder,
+    origin: '香港',
+    destination: '廣州',
+    transfer: { place: '深圳灣口岸', pickupAt: '2026-10-15T16:00:00+08:00', requiredPlates: ['MAINLAND' as const], selfDriveLeg: null },
+  };
+  const order = await ctx.orders.create(gone, transfer);
+  const legs = order.journey!.legs;
+  assert.equal(legs.length, 2);
+  const second = await ctx.prisma.order.findUniqueOrThrow({ where: { journeyId_legIndex: { journeyId: order.id, legIndex: 2 } } });
+  await ctx.orders.claim(second.code, driver);
+
+  const blocked = await ctx.adminData.userDeletion(gone);
+  assert.deepEqual(blocked.blocking.map((leg) => [leg.id, leg.legIndex]), [[second.id, 2]]);
+  await rejectsWith(ctx.adminData.deleteUser(gone, { reason: '測試' }, boss), 'USER_HAS_ACTIVE_ORDERS');
+
+  await ctx.orders.complete(driver, second.id);
+  const result = await ctx.adminData.deleteUser(gone, { reason: '測試' }, boss);
+  assert.equal(result.dispatchedOrders, 2);
+  assert.equal(await ctx.prisma.order.count({ where: { OR: [{ id: order.id }, { journeyId: order.id }] } }), 0);
 });

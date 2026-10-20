@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { PROFILE_PHOTO_MAX, PROFILE_PHOTO_MAX_BYTES, type BookingCreate, type BookingQuote, type ProfilePageUpdate } from '@masterdriver/shared';
+import { PROFILE_PHOTO_MAX, PROFILE_PHOTO_MAX_BYTES, plateRegions, type BookingCreate, type BookingQuote, type ProfilePageUpdate } from '@masterdriver/shared';
 import { Prisma, type BookingStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
@@ -26,7 +26,9 @@ const pageInclude = {
     select: {
       countryCode: true,
       phone: true,
-      profile: { select: { name: true, vehicleType: true, seats: true, color: true, plateType: true, hkMacauPhone: true, mainlandPhone: true } },
+      profile: {
+        select: { name: true, vehicleType: true, seats: true, color: true, plateType: true, hkMacauPhone: true, mainlandPhone: true, hkPlate: true, macauPlate: true, mainlandPlate: true },
+      },
     },
   },
 } satisfies Prisma.ProfilePageInclude;
@@ -327,15 +329,22 @@ export class ProfilePagesService {
     };
   }
 
+  /** The address passengers open a 名片頁 at: what the driver shares, and what the admin opens. */
+  pageUrl(code: string): string {
+    return `${this.config.publicBaseUrl}/p/${code}`;
+  }
+
   private async ownerView(page: PageRow) {
     const view = await this.view(page);
-    const url = `${this.config.publicBaseUrl}/p/${page.code}`;
+    const url = this.pageUrl(page.code);
     return {
       ...view,
       published: page.published,
       /** 下架 by the platform after a complaint, with the reason the owner is shown. */
       blocked: page.blockedAt ? { at: page.blockedAt.toISOString(), reason: page.blockedReason ?? '' } : null,
       hasDriverProfile: Boolean(page.user.profile),
+      // For the owner's 名片圖: where their plates are from (「香港」「粵Z」), never the numbers.
+      plateRegions: page.user.profile ? plateRegions(page.user.profile) : [],
       url,
       /** What the driver pastes to share the page: a few lines about them, then the link. */
       shareText: profileShareText(view, url),

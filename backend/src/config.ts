@@ -9,9 +9,10 @@ export interface AppConfig {
   /** Key for provider secrets stored in the database (base64, 32 bytes). */
   dataEncryptionKey: string;
   /**
-   * Where 客服 pictures and videos are kept. A private Cloud Storage bucket in
-   * every real environment; a local directory only outside production, because
-   * a Cloud Run instance's own disk is lost whenever the instance stops.
+   * Where 客服 pictures and videos (and 名片頁 photos) are kept: a private Cloud
+   * Storage bucket, or a directory. On Cloud Run only the bucket will do, because
+   * an instance's own disk is lost whenever it stops; on a server (deploy/hostkvm)
+   * the directory is a persistent disk that is backed up every day.
    */
   supportMediaBucket: string | null;
   supportMediaDir: string | null;
@@ -36,7 +37,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     sessionCookieSecure: env.SESSION_COOKIE_SECURE === 'true',
     dataEncryptionKey: dataEncryptionKey || 'local-development-only-key',
     supportMediaBucket: env.SUPPORT_MEDIA_BUCKET?.trim() || null,
-    supportMediaDir: isProduction ? null : env.SUPPORT_MEDIA_DIR?.trim() || null,
+    supportMediaDir: env.SUPPORT_MEDIA_DIR?.trim() || null,
   };
 }
 

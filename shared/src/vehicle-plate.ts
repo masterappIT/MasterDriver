@@ -141,3 +141,17 @@ export function inferVehiclePlates(plates: { hkPlate?: string | null; macauPlate
   const plateType: PlateType = plates.hkPlate && plates.macauPlate ? 'TRIPLE' : mainland || count === 0 ? 'DUAL' : 'SINGLE';
   return { vehicleOwnership, plateType };
 }
+
+/**
+ * The places a car's plates are from, never the numbers: 「香港」, 「澳門」, and the mainland plate's
+ * prefix (「粵Z」 for a cross-border car, 「粵A」 for a mainland one). For the brand band on a 名片頁
+ * preview and 名片圖, drawn like the plates themselves (docs/DESIGN.md, 車牌顯示).
+ */
+export function plateRegions(plates: { hkPlate?: string | null; macauPlate?: string | null; mainlandPlate?: string | null }): string[] {
+  const regions: string[] = [];
+  if (plates.hkPlate) regions.push('香港');
+  if (plates.macauPlate) regions.push('澳門');
+  const prefix = plates.mainlandPlate?.split('·')[0];
+  if (prefix && /^粵[A-Z]$/.test(prefix)) regions.push(prefix);
+  return regions;
+}

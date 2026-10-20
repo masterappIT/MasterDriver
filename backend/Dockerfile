@@ -22,10 +22,11 @@ COPY web/package.json ./web/package.json
 RUN npm ci --workspace shared --workspace backend --include-workspace-root
 
 # A release that cannot be downloaded does not stop the deployment: regions then show 未知地區.
+# Time limits: a download that stalls once kept a release waiting for an hour (2026-10-19).
 RUN set -u; \
   mkdir -p backend/geoip; \
   for release in "${DBIP_RELEASE:-$(date -u +%Y-%m)}" "$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%Y-%m)"; do \
-    if curl --fail --location --retry 3 --silent --show-error "https://download.db-ip.com/free/dbip-city-lite-${release}.mmdb.gz" --output /tmp/dbip.mmdb.gz \
+    if curl --fail --location --retry 3 --connect-timeout 20 --max-time 300 --retry-max-time 600 --silent --show-error "https://download.db-ip.com/free/dbip-city-lite-${release}.mmdb.gz" --output /tmp/dbip.mmdb.gz \
       && gzip -t /tmp/dbip.mmdb.gz \
       && gunzip -c /tmp/dbip.mmdb.gz > /tmp/dbip-city-lite.mmdb \
       && node -e 'require("maxmind").open("/tmp/dbip-city-lite.mmdb").then((r) => { if (r.metadata.databaseType !== "DBIP-City-Lite" || !r.get("8.8.8.8")?.country?.names?.en) process.exit(1); }).catch((e) => { console.error(e); process.exit(1); })'; then \
@@ -46,8 +47,10 @@ FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app/backend
+# fonts-noto-cjk: the link-preview cards (src/link-preview) are drawn on the server, and their
+# Chinese needs a font; without one every character comes out as a box.
 RUN apt-get update \
-  && apt-get install --yes --no-install-recommends ca-certificates openssl \
+  && apt-get install --yes --no-install-recommends ca-certificates openssl fontconfig fonts-noto-cjk \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app/package.json /app/package-lock.json /app/

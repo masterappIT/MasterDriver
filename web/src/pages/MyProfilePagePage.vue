@@ -1,16 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api, apiFetch, errorText } from '../api';
-import { copyText } from '../device';
+import { copyText, inWeChat } from '../device';
 import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GroupText from '../components/GroupText.vue';
 import PhotoCrop from '../components/PhotoCrop.vue';
+import NameCardSheet from '../components/NameCardSheet.vue';
 import { t } from '../i18n';
+import { plateKind } from '../format';
 import { toast } from '../toast';
 
 interface MyPage {
   code: string;
+  /** From the driver profile, as the public page shows it. */
+  name: string | null;
+  vehicleType: string | null;
+  seats: number | null;
+  color: string | null;
+  plateType: 'SINGLE' | 'DUAL' | 'TRIPLE' | null;
+  /** Where their plates are from (「香港」「粵Z」), never the numbers: for the 名片圖. */
+  plateRegions: string[];
   url: string;
   /** A few lines about the driver and the link, to paste where the page is shared. */
   shareText: string;
@@ -40,6 +50,15 @@ const busy = ref(false);
 const picker = ref<HTMLInputElement | null>(null);
 /** The photo just picked, while the driver places it in the frame. */
 const cropping = ref<File | null>(null);
+/** 名片圖: the square picture with the QR code, made on the phone when asked for. */
+const nameCardOpen = ref(false);
+/** 名片圖: the car's type and colour in the text; its plates and seats go in the band under the photo. */
+const vehicleSummary = computed(() => [page.value?.vehicleType, page.value?.color].filter(Boolean).join('・') || null);
+const plateLabel = computed(() => {
+  const shown = page.value;
+  if (!shown) return null;
+  return [plateKind(shown), shown.seats ? `${shown.seats}座` : ''].filter(Boolean).join('・') || null;
+});
 const form = reactive({ intro: '', languages: [] as string[], otherLanguages: '', wechatId: '', whatsapp: '' });
 
 /**
@@ -147,6 +166,27 @@ async function copyShare() {
   toast((await copyText(t(page.value.shareText))) ? '已複製名片文字和連結，到群裡或聊天長按貼上' : '複製失敗，請長按文字自行複製');
 }
 
+/**
+ * The phone's own share menu with the link alone: picking WeChat there sends a card with this
+ * page's picture and words, which pasting a link into WeChat never does. WeChat's own browser has
+ * no share menu, so there it says how to open the page in the phone's browser instead.
+ */
+const canShare = typeof navigator.share === 'function';
+const shareHint = ref(false);
+async function sharePage() {
+  if (!page.value) return;
+  if (inWeChat || !canShare) {
+    shareHint.value = true;
+    return;
+  }
+  try {
+    await navigator.share({ url: page.value.url });
+  } catch (e) {
+    // Closing the menu is not a failure; anything else falls back to copying.
+    if ((e as DOMException).name !== 'AbortError') await copyLink();
+  }
+}
+
 async function copyLink() {
   if (!page.value) return;
   toast((await copyText(page.value.url)) ? '已複製名片頁連結' : '複製失敗，請長按連結自行複製');
@@ -165,7 +205,7 @@ onMounted(async () => {
 
 <template>
   <div class="page my-page">
-    <!-- Opened from 首頁, 我的, 預約, the guide and the share page: 返回 goes back to whichever it was. -->
+    <!-- Opened from 首頁, 我的, 等我報價, the guide and the share page: 返回 goes back to whichever it was. -->
     <PageBack :title="t('我的名片頁')" fallback="/app/me" history />
     <div v-if="error" class="notice error">{{ error }}</div>
     <RouterLink class="my-page__guide" to="/app/guide/customers">{{ t('名片頁可以做什麼？連結放在哪裡？看教學') }}</RouterLink>
@@ -181,11 +221,17 @@ onMounted(async () => {
           <RouterLink to="/support">{{ t('聯絡客服') }}</RouterLink>
         </div>
         <GroupText :text="page.shareText" :link-note="t('藍色是你的名片頁連結，會和文字一起複製')" />
+        <template v-if="canShare || inWeChat">
+          <button class="button block my-page__share" type="button" @click="sharePage">{{ t('分享名片頁') }}</button>
+          <p v-if="shareHint" class="my-page__share-hint">{{ t('在微信裡不能直接分享卡片：點右上角「…」→「在瀏覽器打開」，再按「分享名片頁」。') }}</p>
+        </template>
         <div class="my-page__actions">
-          <button class="button" type="button" @click="copyShare">{{ t('複製名片') }}</button>
+          <button class="button" :class="{ secondary: canShare || inWeChat }" type="button" @click="copyShare">{{ t('複製名片') }}</button>
           <RouterLink class="button secondary" :to="`/p/${page.code}`">{{ t('預覽') }}</RouterLink>
         </div>
         <button class="my-page__link-only" type="button" @click="copyLink">{{ t('只複製連結') }}</button>
+        <!-- For where a link shows no preview: WeChat, 朋友圈, 小紅書. -->
+        <button class="button secondary block my-page__name-card" type="button" @click="nameCardOpen = true">{{ t('做成名片圖') }}</button>
         <p v-if="!page.hasDriverProfile" class="my-page__notice">{{ t('公開之前，請先在「我的」填寫司機資料（姓名、車型）。') }}</p>
         <p class="hint my-page__from">{{ t('姓名、車型、電話取自司機資料，公開後名片頁會顯示你的港澳和內地號碼。完成單數由系統計算。') }}</p>
       </section>
@@ -270,10 +316,29 @@ onMounted(async () => {
       </button>
       <button v-else class="my-page__unpublish" type="button" :disabled="busy" @click="save(false)">{{ t('改為不公開') }}</button>
     </template>
+
+    <NameCardSheet
+      v-if="nameCardOpen && page"
+      :name="page.name ?? t('司機')"
+      :vehicle="vehicleSummary"
+      :languages="page.languages"
+      :plate-regions="page.plateRegions"
+      :plate-label="plateLabel"
+      :contacts="{ whatsapp: Boolean(page.whatsapp), wechat: Boolean(page.wechatId), phone: true }"
+      :completed-trips="page.completedTrips"
+      :photo-url="page.photos[0]?.url ?? null"
+      :url="page.url"
+      :published="page.published"
+      @close="nameCardOpen = false"
+    />
   </div>
 </template>
 
 <style scoped>
+.my-page__name-card {
+  margin-top: var(--space-md);
+}
+
 .my-page__guide {
   display: block;
   margin: 0 var(--space-xs) var(--space-md);
@@ -297,6 +362,18 @@ onMounted(async () => {
 .my-page__state--on {
   background: var(--status-confirmed-tint);
   color: var(--status-confirmed);
+}
+.my-page__share {
+  margin-bottom: var(--space-sm);
+}
+.my-page__share-hint {
+  margin: 0 0 var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-input);
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+  font-size: var(--font-label);
+  line-height: 1.5;
 }
 .my-page__actions {
   display: grid;
