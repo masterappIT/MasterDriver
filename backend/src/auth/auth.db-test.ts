@@ -56,6 +56,32 @@ test('a wrong code counts against the limit and then locks', async () => {
   await rejectsWith(ctx.auth.verifyCode({ ...phone, code: ctx.sms.sent[0].code }, undefined), 'OTP_LOCKED');
 });
 
+test('a code asked for before 重新發送 still signs in, once, and the others stop working', async () => {
+  await ctx.auth.requestCode(phone, '1.1.1.1');
+  await ctx.auth.requestCode(phone, '1.1.1.1', later(61));
+  const [first, second] = ctx.sms.sent.map((sent) => sent.code);
+  await ctx.auth.verifyCode({ ...phone, code: first }, undefined, later(62));
+  await rejectsWith(ctx.auth.verifyCode({ ...phone, code: second }, undefined, later(63)), 'OTP_INVALID');
+});
+
+test('only the three newest live codes sign in', async () => {
+  for (let i = 0; i < 4; i += 1) await ctx.auth.requestCode(phone, '1.1.1.1', later(61 * i));
+  const codes = ctx.sms.sent.map((sent) => sent.code);
+  if (!codes.slice(1).includes(codes[0])) {
+    await rejectsWith(ctx.auth.verifyCode({ ...phone, code: codes[0] }, undefined, later(200)), 'OTP_INVALID');
+  }
+  await ctx.auth.verifyCode({ ...phone, code: codes[1] }, undefined, later(200));
+});
+
+test('a wrong code counts against every live code, so five wrong tries lock them all', async () => {
+  await ctx.auth.requestCode(phone, '1.1.1.1');
+  await ctx.auth.requestCode(phone, '1.1.1.1', later(61));
+  const codes = ctx.sms.sent.map((sent) => sent.code);
+  const wrong = ['111111', '222222', '333333'].find((candidate) => !codes.includes(candidate))!;
+  for (let i = 0; i < 5; i += 1) await rejectsWith(ctx.auth.verifyCode({ ...phone, code: wrong }, undefined, later(62)), 'OTP_INVALID');
+  for (const code of codes) await rejectsWith(ctx.auth.verifyCode({ ...phone, code }, undefined, later(63)), 'OTP_LOCKED');
+});
+
 test('codes cannot be requested again within a minute', async () => {
   await ctx.auth.requestCode(phone, '1.1.1.1');
   await rejectsWith(ctx.auth.requestCode(phone, '1.1.1.1'), 'OTP_TOO_FREQUENT');
