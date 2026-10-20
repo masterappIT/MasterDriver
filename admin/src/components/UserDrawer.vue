@@ -168,11 +168,14 @@ async function suspend() {
 /** A trip with someone else still under way, which stops 刪除用戶 until it is dealt with. */
 interface DeletionBlocker {
   id: string;
-  role: 'DISPATCHED' | 'CLAIMED';
+  /** CARPOOL: a 拼車 of theirs still taking seats or with passengers holding seats; the driver cancels it in the app. */
+  role: 'DISPATCHED' | 'CLAIMED' | 'CARPOOL';
   pickupAt: string;
   origin: string;
   destination: string;
   legIndex: number | null;
+  /** Parties holding seats, for a 拼車. */
+  parties: number | null;
 }
 const deletionBlockers = ref<DeletionBlocker[]>([]);
 
@@ -191,13 +194,13 @@ async function removeUser() {
   }
   deletionBlockers.value = preview.blocking;
   if (preview.blocking.length > 0) {
-    notify('還有進行中的單，處理完才能刪除', true);
+    notify('還有進行中的單或拼車，處理完才能刪除', true);
     return;
   }
   const kept = preview.claimedOrdersKept > 0 ? `他接過的 ${preview.claimedOrdersKept} 張別人的單會留給出單者，單上顯示「司機已刪除」。` : '';
   const reason = await ask({
     title: '刪除這個用戶',
-    text: `帳號、他出的 ${preview.dispatchedOrders} 張單（連同搶單紀錄和相關通知）、名片頁與預約、照片、客服對話、點數紀錄、收款方式和派單群都會刪除。${kept}刪除後無法復原。`,
+    text: `帳號、他出的 ${preview.dispatchedOrders} 張單（連同搶單紀錄和相關通知）、名片頁與預約、開過的拼車、照片、客服對話、點數紀錄、收款方式和派單群都會刪除。${kept}刪除後無法復原。`,
     reason: '原因（會記在操作紀錄）',
     confirm: '刪除用戶',
     danger: true,
@@ -484,13 +487,19 @@ onBeforeUnmount(() => {
     <div v-if="user" class="mt-drawer-body">
       <div v-if="user.suspendedAt" class="notice error">{{ dateTime(user.suspendedAt) }} 停用，原因：{{ user.suspendedReason ?? '—' }}</div>
       <div v-if="deletionBlockers.length > 0" class="notice error">
-        還不能刪除：以下的單還在進行中，先處理（例如代為取消，或等行程完成）再刪除。
+        還不能刪除：以下的單或拼車還在進行中，先處理（例如代為取消、等行程完成，或請司機在 app 裡取消拼車）再刪除。
         <ul>
           <li v-for="order in deletionBlockers" :key="order.id">
-            <RouterLink :to="`/orders/${order.id}`">
-              {{ dateTime(order.pickupAt) }} {{ order.origin }} 至 {{ order.destination }}{{ order.legIndex ? `（接駁第 ${order.legIndex} 段）` : '' }}
-            </RouterLink>
-            · {{ order.role === 'DISPATCHED' ? '他出的單，別的司機接了' : '他接了別人的單' }}
+            <template v-if="order.role === 'CARPOOL'">
+              {{ dateTime(order.pickupAt) }} {{ order.origin }} 至 {{ order.destination }}
+              · 他開的拼車，{{ order.parties ? `${order.parties} 組乘客已報位` : '還在招募' }}
+            </template>
+            <template v-else>
+              <RouterLink :to="`/orders/${order.id}`">
+                {{ dateTime(order.pickupAt) }} {{ order.origin }} 至 {{ order.destination }}{{ order.legIndex ? `（接駁第 ${order.legIndex} 段）` : '' }}
+              </RouterLink>
+              · {{ order.role === 'DISPATCHED' ? '他出的單，別的司機接了' : '他接了別人的單' }}
+            </template>
           </li>
         </ul>
       </div>

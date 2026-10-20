@@ -1,6 +1,6 @@
 import type { Money } from './format';
 
-/** 拼車 (docs/CARPOOL.md on its trial branch): a trip a driver opens for passengers to ask for seats on. */
+/** 拼車 (docs/DECISIONS.md, 2026-10-20): a trip a driver opens for passengers to ask for seats on. */
 export type CarpoolStatus = 'OPEN' | 'CLOSED' | 'ORDERED' | 'CANCELLED';
 export type SeatStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED' | 'EXPIRED' | 'CANCELLED' | 'REMOVED';
 

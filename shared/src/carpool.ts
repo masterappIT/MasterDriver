@@ -4,7 +4,7 @@ import { CURRENCIES, contactReveal, passengerPhoneSchema } from './schemas';
 /**
  * 拼車: a driver opens a trip and gives passengers its link; each party asks for seats there.
  * The platform keeps the seats and passes requests and answers between them; it never lists,
- * matches or prices a carpool (docs/CARPOOL.md, on its trial branch).
+ * matches or prices a carpool (docs/DECISIONS.md, 2026-10-20 拼車).
  */
 
 /** A seat the driver must confirm holds its seats this long, or until asking closes, whichever is first. */

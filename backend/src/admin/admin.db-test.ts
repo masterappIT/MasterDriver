@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
+import { carpoolCreateSchema, carpoolSeatCreateSchema } from '@masterdriver/shared';
 import { createDriver, rejectsWith, sampleOrder, seedPlans, setupDatabase, type TestContext } from '../test/database';
 
 let ctx: TestContext;
@@ -372,4 +373,33 @@ test('刪除用戶: a 接駁 order goes with every leg; a leg another driver sti
   const result = await ctx.adminData.deleteUser(gone, { reason: '測試' }, boss);
   assert.equal(result.dispatchedOrders, 2);
   assert.equal(await ctx.prisma.order.count({ where: { OR: [{ id: order.id }, { journeyId: order.id }] } }), 0);
+});
+
+test('刪除用戶: a 拼車 still taking seats, or with passengers holding seats, stops it until the driver cancels it', async () => {
+  const boss = await superAdmin();
+  const gone = await createDriver(ctx, '開拼車師傅');
+  await ctx.prisma.driverProfile.update({ where: { userId: gone }, data: { seats: 7, vehicleType: '7座' } });
+  const pickupAt = new Date(Date.now() + 24 * 3_600_000).toISOString();
+  const trip = { pickupAt, origin: '深圳灣口岸', destination: '香港國際機場', seats: 4, seatPrice: { amount: 200, currency: 'HKD' } };
+
+  // Still taking seats, nobody yet: the link is out there.
+  const open = await ctx.carpools.create(gone, carpoolCreateSchema.parse(trip));
+  let blocking = (await ctx.adminData.userDeletion(gone)).blocking;
+  assert.deepEqual(blocking.map((item) => [item.id, item.role, item.parties]), [[open.id, 'CARPOOL', 0]]);
+
+  // Stopped taking seats, one party waiting for the driver: still stops it.
+  await ctx.carpools.createSeat(open.code, carpoolSeatCreateSchema.parse({ passengers: 2, luggage: 1, pickupPoint: '深圳灣口岸', passengerName: '乘客', passengerContact: '+852 61234567' }), '10.0.0.9');
+  await ctx.carpools.close(gone, open.id);
+  blocking = (await ctx.adminData.userDeletion(gone)).blocking;
+  assert.deepEqual(blocking.map((item) => [item.id, item.parties]), [[open.id, 1]]);
+  await rejectsWith(ctx.adminData.deleteUser(gone, { reason: '用戶要求刪除' }, boss), 'USER_HAS_ACTIVE_ORDERS');
+
+  // Stopped with nobody holding a seat does not stop it, nor does a cancelled one.
+  const empty = await ctx.carpools.create(gone, carpoolCreateSchema.parse({ ...trip, origin: '福田口岸' }));
+  await ctx.carpools.close(gone, empty.id);
+  await ctx.carpools.cancel(gone, open.id);
+  assert.equal((await ctx.adminData.userDeletion(gone)).blocking.length, 0);
+  await ctx.adminData.deleteUser(gone, { reason: '用戶要求刪除' }, boss);
+  assert.equal(await ctx.prisma.carpool.count({ where: { driverId: gone } }), 0);
+  assert.equal(await ctx.prisma.carpoolSeat.count({ where: { carpoolId: open.id } }), 0);
 });

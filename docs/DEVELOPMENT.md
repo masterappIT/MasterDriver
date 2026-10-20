@@ -80,6 +80,43 @@ npm run dev:admin
 - 上限在後台「防濫用設定」：同一 IP 每天預約數、每個名片頁每天預約數。
 - 名片頁網址可帶 `?from=<來源>`（英數字、底線、連字號，30 字以內），預約會記下來源，供司機自己看哪個平台帶來預約。
 
+## 拼車
+
+決定與規則見 `docs/DECISIONS.md` 2026-10-20「採用拼車」。
+
+- 資料表：`Carpool`（一趟拼車；成單後 `orderId` 指向那張單）、`CarpoolSeat`（一組乘客的報位與行程進度）；`Notification` 多了 `carpoolId`。程式在 `backend/src/carpools/`、`shared/src/carpool.ts`、`web/src/carpool.ts` 與 `web/src/pages/Carpool*.vue`。
+- 報位、確認、婉拒、取消與成單都先鎖住該趟拼車那一列（`SELECT … FOR UPDATE`），兩組同時搶最後的座位只有一組成功；後台刪除用戶時也先鎖住他還沒成單的拼車。
+- 司機確認的報位在 `expiresAt` 前佔位（`CARPOOL_PENDING_HOURS`，或到報位截止）；過期與「報位已截止」通知都在讀取時補寫，不靠排程。
+- 乘客的 `/s/{code}` 就是乘客的憑證；車輛照片與收款碼經 `/api/s/:code/...` 提供，只在報位確認後。
+
+| 頁面 | 用途 |
+|---|---|
+| `/app/carpools` | 我開的拼車 |
+| `/app/carpools/new` | 開拼車 |
+| `/app/carpools/:id` | 管理一趟拼車：乘客版文字、報位、修改、停止報位、成單、取消 |
+| `/r/:code` | 給乘客的拼車連結：行程、剩幾位、報位 |
+| `/s/:code` | 乘客自己的報位連結：狀態、司機、行程進度、收款方式、取消 |
+
+| 方法與路徑 | 登入 | 用途 |
+|---|---|---|
+| `POST /api/carpools` | 要 | 開拼車（要先有司機資料與座位數） |
+| `GET /api/carpools` | 要 | 我開的拼車 |
+| `GET /api/carpools/unread` | 要 | 等待確認的新報位數 |
+| `GET /api/carpools/:id` | 要 | 一趟拼車與它的報位；打開即標為已讀 |
+| `PATCH /api/carpools/:id` | 要 | 修改（成單前）；改時間或價錢要乘客重新接受；改截止時間可重新開放 |
+| `POST /api/carpools/:id/close` | 要 | 停止報位 |
+| `POST /api/carpools/:id/cancel` | 要 | 取消整趟（成單前；成單後取消那張單） |
+| `POST /api/carpools/:id/start` | 要 | 成單：`{ mode: 'SELF' }` 自己開，`{ mode: 'DISPATCH', driverPrice, vehicleType, inPool }` 派出去 |
+| `POST /api/carpools/:id/seats/:seatId/confirm\|decline\|remove` | 要 | 確認、婉拒、取消某個報位 |
+| `POST /api/orders/:id/carpool-seats/:seatId/progress` | 要 | 接單司機回報某組 `ARRIVED`、`PICKED_UP`、`NO_SHOW`、`DROPPED_OFF` |
+| `PATCH /api/orders/:id/carpool-seats/:seatId/payment` | 要 | 出單者標記某組已收款 |
+| `GET /api/public/carpools/:code` | — | 拼車連結 |
+| `POST /api/public/carpools/:code/seats` | — | 報位 |
+| `GET /api/public/carpool-seats/:code` | — | 乘客自己的報位 |
+| `POST /api/public/carpool-seats/:code/cancel\|reconfirm` | — | 取消報位、接受新的安排 |
+| `GET /api/s/:code/driver-photos/:id`、`GET /api/s/:code/payment-methods/:id/qr` | — | 乘客連結上的車輛照片與收款碼 |
+| `GET /api/public/carpools/:code/photos/:id` | — | 拼車連結上開拼車司機的車輛照片 |
+
 ## 客服
 
 - 司機端 `/support`（登入與否都能用）；後台 `/support`。兩邊都每 5 秒讀取新訊息，頁面在背景時暫停。
@@ -161,7 +198,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET /api/public/logo` | 後台上傳的 Logo 圖片 |
 | `GET /api/public/terms`、`/api/public/privacy` | 服務條款、私隱政策 |
 | `GET /api/public/seo/HOME`、`/PROFILE` | 頁面標題、描述、分享圖、robots、網站驗證碼、百度統計 ID |
-| `GET /api/public/robots.txt` | 未開放收錄時封鎖全站；開放後仍封鎖搶單頁、乘客頁、司機端、後台與 API |
+| `GET /api/public/robots.txt` | 未開放收錄時封鎖全站；開放後仍封鎖搶單頁、乘客頁、拼車連結與乘客報位連結、司機端、後台與 API |
 | `GET /api/public/ads?position=CLAIM_PAGE\|HOME\|MY_ORDERS` | 正在顯示的廣告（每位置最多 3 則） |
 | `POST /api/public/ads/impressions` | 記錄曝光（每次最多 10 則） |
 | `GET /api/public/ads/:id/click` | 記錄點擊並轉到後台設定的連結 |
@@ -177,6 +214,6 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `npm run verify:api` | 共用規則測試、建置、後端單元測試、Prisma schema 檢查 |
 | `npm run verify:admin` | 後台型別檢查與建置 |
 | `npm run verify:web` | 網頁測試（繁簡轉換）、型別檢查與建置 |
-| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁單（一次建立兩段、服務費與額度只算一次、同一人不能接兩段、取消整張單只退一次、乘客只看到一個價格且看不到接駁位置、接單池與列表一筆）、客服（對話權限、訊息去重、檔案類型與大小、訪客限制、過期清理）、名片頁與預約（公開與否、照片、報價到成單、歸屬、上限）、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
+| `npm run test:api:db` | 資料庫整合測試：搶單並發、額度、狀態變化、接駁單（一次建立兩段、服務費與額度只算一次、同一人不能接兩段、取消整張單只退一次、乘客只看到一個價格且看不到接駁位置、接單池與列表一筆）、客服（對話權限、訊息去重、檔案類型與大小、訪客限制、過期清理）、名片頁與預約（公開與否、照片、報價到成單、歸屬、上限）、拼車（座位與成行、司機確認與失效、同時搶最後座位、自己開與派出去、逐組進度與收款、截止通知、刪除用戶時擋下）、連結預覽、登入與開發模式。使用獨立的 `master_driver_test` 資料庫，會自動建立並清空，不影響開發資料 |
 
 修改後端時兩者都要通過。

@@ -40,7 +40,7 @@ const CODE = /^[A-Za-z0-9_-]{4,64}$/;
 const CACHE_MS = 10 * 60 * 1000;
 const CACHE_MAX = 200;
 
-type Kind = 'p' | 'c' | 'o';
+type Kind = 'p' | 'c' | 'o' | 'r';
 type Stored<T> = T extends { photo: string | null } ? Omit<T, 'photo'> & { photoKey: string | null } : T;
 interface Resolved {
   title: string;
@@ -99,7 +99,7 @@ export class LinkPreviewService {
   }
 
   /**
-   * The tags every visitor's page carries for a /p/, /c/ or /o/ link (nginx puts them in, see
+   * The tags every visitor's page carries for a /p/, /c/, /o/ or /r/ link (nginx puts them in, see
    * deploy/frontend/web.conf), with the square: what iOS's share menu hands WeChat. Null when the
    * link has no preview of its own, and the page keeps the home tags it was built with.
    */
@@ -155,11 +155,11 @@ export class LinkPreviewService {
   }
 
   private target(kind: string, code: string): { kind: Kind; code: string } | null {
-    return (kind === 'p' || kind === 'c' || kind === 'o') && CODE.test(code) ? { kind, code } : null;
+    return (kind === 'p' || kind === 'c' || kind === 'o' || kind === 'r') && CODE.test(code) ? { kind, code } : null;
   }
 
   private parse(path: string): { kind: Kind; code: string } | null {
-    const match = /^\/([pco])\/([^/?#]+)\/?$/.exec(path);
+    const match = /^\/([pcor])\/([^/?#]+)\/?$/.exec(path);
     return match ? this.target(match[1], match[2]) : null;
   }
 
@@ -179,6 +179,7 @@ export class LinkPreviewService {
 
   private async resolve(kind: Kind, code: string): Promise<Resolved | null> {
     if (kind === 'p') return this.profile(code);
+    if (kind === 'r') return this.carpool(code);
     return kind === 'c' ? this.confirmation(code) : this.claim(code);
   }
 
@@ -317,6 +318,43 @@ export class LinkPreviewService {
     // 「10/16 02:57」: the weekday would not fit at the square's size.
     const when = first.immediate ? '現在出發' : formatPickup(first.pickupAt).replace(/（.）/, ' ');
     return { title, description, url: `${this.config.publicBaseUrl}/o/${code}`, card: null, square: { kind: 'order', badge, when } };
+  }
+
+  /**
+   * A 拼車 link (/r/): what the driver's own invite text says, the trip and the price a seat, and
+   * whose carpool it is, with the car photo the carpool page shows (2026-10-20). Never the seats
+   * left: chat apps keep a card long after more seats are taken. Never a passenger. Only while it
+   * takes seats; a closed, cancelled or ordered one gets the generic card. A passenger's own link
+   * (/s/) is their credential and always gets the generic card.
+   */
+  private async carpool(code: string): Promise<Resolved | null> {
+    const carpool = await this.prisma.carpool.findUnique({
+      where: { code },
+      select: {
+        status: true,
+        closesAt: true,
+        pickupAt: true,
+        origin: true,
+        destination: true,
+        seatPriceMinor: true,
+        seatCurrency: true,
+        driver: {
+          select: {
+            profile: { select: { name: true } },
+            // The photo the carpool page shows: the newest of a 名片頁 not taken down.
+            profilePage: { select: { blockedAt: true, photos: { orderBy: { createdAt: 'desc' }, take: 1, select: { storageKey: true } } } },
+          },
+        },
+      },
+    });
+    if (!carpool || carpool.status !== 'OPEN' || carpool.closesAt <= new Date()) return null;
+    const name = carpool.driver.profile?.name;
+    const page = carpool.driver.profilePage;
+    const price = carpool.seatPriceMinor !== null ? `每位 ${formatPrice(carpool.seatPriceMinor, carpool.seatCurrency)}` : '每位價錢請私訊';
+    const title = `【拼車】${formatPickup(carpool.pickupAt)} ${carpool.origin} → ${carpool.destination}`;
+    const description = `${price}。${name ? `${name}開的拼車，` : ''}點開報位，不用註冊。`;
+    const photoKey = page && !page.blockedAt ? (page.photos[0]?.storageKey ?? null) : null;
+    return { title, description, url: `${this.config.publicBaseUrl}/r/${code}`, card: null, square: { kind: 'driver', name: name || '司機', photoKey } };
   }
 
   /** The whole stored photo, fitted inside a picture's photo space (never cut), as a data: URL the SVG can draw. */

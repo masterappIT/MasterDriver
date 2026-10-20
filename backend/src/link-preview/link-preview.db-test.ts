@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
+import { carpoolCreateSchema, carpoolSeatCreateSchema } from '@masterdriver/shared';
 import type { AppConfig } from '../config';
 import type { MediaStorage } from '../storage/media-storage';
 import { formatPickup } from '../common/hong-kong-time';
@@ -167,4 +168,34 @@ test('a 搶單 link says when, where, the car and the driver price, whose order 
   await ctx.orders.claim(order.code, driver);
   assert.equal(await previews.tags(`/o/${order.code}`), null, 'taken: no preview of its own');
   assert.equal((await previews.page(`/o/${order.code}`)).title, GENERIC);
+});
+
+test('a 拼車 link says when, where and the price a seat, whose carpool it is, never the seats left nor a passenger', async () => {
+  const owner = await createDriver(ctx, '陳師傅');
+  await ctx.prisma.driverProfile.update({ where: { userId: owner }, data: { seats: 7, vehicleType: '7座' } });
+  const pickupAt = new Date(daysFromNow(2));
+  const carpool = await ctx.carpools.create(
+    owner,
+    carpoolCreateSchema.parse({ pickupAt: pickupAt.toISOString(), origin: '深圳灣口岸', destination: '香港國際機場', seats: 4, seatPrice: { amount: 200, currency: 'HKD' } }),
+  );
+  const seat = await ctx.carpools.createSeat(
+    carpool.code,
+    carpoolSeatCreateSchema.parse({ passengers: 2, pickupPoint: '南山海岸城', passengerName: '王小姐', passengerContact: '+852 61239876' }),
+    '10.0.0.1',
+  );
+
+  const meta = await previews.page(`/r/${carpool.code}`);
+  assert.equal(meta.title, `【拼車】${formatPickup(pickupAt)} 深圳灣口岸 → 香港國際機場`);
+  assert.equal(meta.description, '每位 HK$200。陳師傅開的拼車，點開報位，不用註冊。');
+  assert.equal(meta.square, true);
+  assert.match(meta.image, new RegExp(`/square/r/${carpool.code}\\.jpg\\?v=`));
+  assert.deepEqual(await previews.squareData('r', carpool.code), { kind: 'driver', name: '陳師傅', photoKey: null });
+  assert.ok(await previews.square('r', carpool.code));
+  const everything = JSON.stringify([meta, await previews.tags(`/r/${carpool.code}`)]);
+  for (const secret of ['剩', '王小姐', '9876', '南山海岸城']) assert.ok(!everything.includes(secret), `never ${secret}`);
+
+  assert.equal(await previews.tags(`/s/${seat.code}`), null, "a passenger's own link keeps the home tags");
+  await ctx.carpools.close(owner, carpool.id);
+  assert.equal(await previews.tags(`/r/${carpool.code}`), null, 'closed: no preview of its own');
+  assert.equal((await previews.page(`/r/${carpool.code}`)).title, GENERIC);
 });

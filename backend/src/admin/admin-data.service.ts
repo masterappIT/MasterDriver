@@ -412,6 +412,8 @@ export class AdminDataService {
     const counts = await this.prisma.$transaction(async (tx) => {
       // Holds the user row: a claim of theirs still running waits, then fails on the missing user.
       await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`;
+      // Holds their carpools too: a seat being taken waits, as it locks its carpool first.
+      await tx.$queryRaw`SELECT "id" FROM "Carpool" WHERE "driverId" = ${id} AND "status" IN ('OPEN', 'CLOSED') FOR UPDATE`;
       const now = await this.deletionOf(tx, id);
       if (now.blocking.length > 0) throw this.activeOrders(now.blocking);
       const dispatched = (await tx.order.findMany({ where: { dispatcherId: id }, select: { id: true } })).map((order) => order.id);
@@ -437,8 +439,8 @@ export class AdminDataService {
     return { deleted: true, ...counts };
   }
 
-  private async deletionOf(db: Prisma.TransactionClient, id: string) {
-    const [blocking, dispatched, claimedKept] = await Promise.all([
+  private async deletionOf(db: Prisma.TransactionClient, id: string, now = new Date()) {
+    const [blocking, dispatched, claimedKept, carpools] = await Promise.all([
       db.order.findMany({
         where: {
           status: 'ASSIGNED',
@@ -452,21 +454,56 @@ export class AdminDataService {
       }),
       db.order.count({ where: { dispatcherId: id } }),
       db.order.count({ where: { claimedById: id, dispatcherId: { not: id } } }),
+      // 拼車 not yet made into an order, still taking seats or with passengers holding seats:
+      // deleting it would leave those passengers' links dead without a word. Once it is an
+      // order, the order rules above apply.
+      db.carpool.findMany({
+        where: {
+          driverId: id,
+          status: { in: ['OPEN', 'CLOSED'] },
+          OR: [
+            { status: 'OPEN', closesAt: { gt: now } },
+            { seatsList: { some: { OR: [{ status: 'CONFIRMED' }, { status: 'PENDING', expiresAt: { gt: now } }] } } },
+          ],
+        },
+        orderBy: { pickupAt: 'asc' },
+        select: {
+          id: true,
+          pickupAt: true,
+          origin: true,
+          destination: true,
+          seatsList: { where: { OR: [{ status: 'CONFIRMED' }, { status: 'PENDING', expiresAt: { gt: now } }] }, select: { id: true } },
+        },
+      }),
     ]);
     return {
       /** Orders put out by the user, every leg counted; all of them are deleted. */
       dispatchedOrders: dispatched,
       /** Other dispatchers' orders the user took; they stay, without the user. */
       claimedOrdersKept: claimedKept,
-      blocking: blocking.map((order) => ({
-        id: order.id,
-        /** DISPATCHED: the user put it out and another driver has it. CLAIMED: the user has another dispatcher's order. */
-        role: order.dispatcherId === id ? ('DISPATCHED' as const) : ('CLAIMED' as const),
-        pickupAt: order.pickupAt.toISOString(),
-        origin: order.origin,
-        destination: order.destination,
-        legIndex: order.legIndex,
-      })),
+      blocking: [
+        ...blocking.map((order) => ({
+          id: order.id,
+          /** DISPATCHED: the user put it out and another driver has it. CLAIMED: the user has another dispatcher's order. */
+          role: order.dispatcherId === id ? ('DISPATCHED' as const) : ('CLAIMED' as const),
+          pickupAt: order.pickupAt.toISOString(),
+          origin: order.origin,
+          destination: order.destination,
+          legIndex: order.legIndex,
+          parties: null,
+        })),
+        // CARPOOL: a 拼車 of theirs still taking seats, or with passengers holding seats; the driver cancels it first.
+        ...carpools.map((carpool) => ({
+          id: carpool.id,
+          role: 'CARPOOL' as const,
+          pickupAt: carpool.pickupAt.toISOString(),
+          origin: carpool.origin,
+          destination: carpool.destination,
+          legIndex: null,
+          /** Parties holding seats now. */
+          parties: carpool.seatsList.length,
+        })),
+      ],
     };
   }
 
