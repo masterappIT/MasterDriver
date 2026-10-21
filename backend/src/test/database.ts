@@ -22,6 +22,7 @@ import { ObservabilityService } from '../observability/observability.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OrdersService } from '../orders/orders.service';
 import { CarpoolsService } from '../carpools/carpools.service';
+import { DealsService } from '../deals/deals.service';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { SiteService } from '../site/site.service';
@@ -39,6 +40,7 @@ const TABLES = [
   'Notification',
   'CarpoolSeat',
   'Carpool',
+  'Deal',
   'DriverNote',
   'BookingRequest',
   'ProfilePhoto',
@@ -134,10 +136,12 @@ export async function setupDatabase() {
   const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config, notifications);
   const paymentMethods = new PaymentMethodsService(prisma);
   const carpools = new CarpoolsService(prisma, orders, notifications, paymentMethods, mediaStorage, config);
+  const deals = new DealsService(prisma, profilePages, notifications, mediaStorage, config);
   return {
     prisma,
     sms,
     carpools,
+    deals,
     developmentLogin,
     auth: new AuthService(prisma, config, sms, developmentLogin),
     entitlements,
@@ -148,7 +152,7 @@ export async function setupDatabase() {
     orders,
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
-    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders, profilePages, new GroupInvitesService(prisma), mediaStorage),
+    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders, profilePages, deals, new GroupInvitesService(prisma), mediaStorage),
     profilePages,
     site: new SiteService(prisma),
     mediaStorage,

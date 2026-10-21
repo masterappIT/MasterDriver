@@ -166,7 +166,7 @@ onBeforeUnmount(() => clearInterval(clock));
       </RouterLink>
       <p v-if="loaded && myTrips.length === 0" class="home__empty">{{ t('今天和明天沒有行程。在群裡看到單，點連結就能搶。') }}</p>
     </section>
-    <!-- The driver's own customers: the 名片頁 and 拼車, side by side under the trips, each with one line. -->
+    <!-- The driver's own customers: the 名片頁, 拼車 and 特價車, side by side under the trips, each with one line. -->
     <div class="home__own">
       <RouterLink to="/app/profile-page" class="home__own-item home__own-item--card">
         <strong>{{ t('分享名片') }}</strong>
@@ -175,6 +175,10 @@ onBeforeUnmount(() => clearInterval(clock));
       <RouterLink to="/app/carpools" class="home__own-item home__own-item--carpool">
         <strong>{{ t('開拼車') }}</strong>
         <span>{{ t('乘客自己報位') }}</span>
+      </RouterLink>
+      <RouterLink to="/app/deals" class="home__own-item home__own-item--deal">
+        <strong>{{ t('特價車') }}</strong>
+        <span>{{ t('空車便宜賣') }}</span>
       </RouterLink>
     </div>
 
@@ -279,8 +283,8 @@ onBeforeUnmount(() => clearInterval(clock));
 }
 .home__own {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-sm);
   margin-bottom: var(--space-lg);
 }
 .home__own-item {
@@ -307,6 +311,10 @@ onBeforeUnmount(() => clearInterval(clock));
 .home__own-item--carpool {
   background: var(--color-gold-tint);
   color: var(--color-gold-ink);
+}
+.home__own-item--deal {
+  background: var(--status-confirmed-tint);
+  color: var(--status-confirmed);
 }
 .home__fee {
   margin: 0 0 var(--space-lg);

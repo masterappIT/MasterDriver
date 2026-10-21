@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { formatPassengerPhone, isValidPassengerPhone, splitPassengerPhone, type CountryCode } from '@masterdriver/shared/phone';
 import { api, errorText } from '../api';
-import { BOOKING_STATUS, bookingOpen, returnRoute, bookingTone, type DriverBooking } from '../booking';
+import { bookingOpen, bookingStatusText, returnRoute, bookingTone, type DriverBooking } from '../booking';
 import { copyText } from '../device';
 import { loadLine, money, pickup, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
@@ -22,7 +22,7 @@ const busy = ref(false);
 const quote = reactive({ amount: '', currency: 'CNY', note: '' });
 const open = computed(() => (booking.value ? bookingOpen(booking.value.status) : false));
 /** Once the passenger has agreed, the agreed price stands; the server refuses a new quote too. */
-const quotable = computed(() => booking.value?.status === 'PENDING' || booking.value?.status === 'QUOTED');
+const quotable = computed(() => !booking.value?.deal && (booking.value?.status === 'PENDING' || booking.value?.status === 'QUOTED'));
 
 /**
  * Requests sent before 2026-10-14 may hold a WeChat ID or any text instead of a phone. The driver
@@ -69,7 +69,7 @@ const sendQuote = () =>
   );
 
 function decline() {
-  if (!confirm(t('確定婉拒這個詢價？乘客會在自己的連結看到。'))) return;
+  if (!confirm(t(booking.value?.deal ? '確定婉拒這組預約？乘客會在自己的連結看到。' : '確定婉拒這個詢價？乘客會在自己的連結看到。'))) return;
   return run(() => api<DriverBooking>('POST', `/me/bookings/${id}/decline`), '已婉拒');
 }
 
@@ -169,13 +169,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <PageBack :title="t('詢價詳情')" fallback="/app/bookings" />
+    <PageBack :title="booking?.deal ? t('特價車預約') : t('詢價詳情')" :fallback="booking?.deal ? `/app/deals/${booking.deal.id}` : '/app/bookings'" />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="booking">
       <!-- The request as one short story: when, where, who, then what they wrote. -->
       <section class="card booking-detail__trip">
-        <span class="booking-detail__status" :class="`booking-detail__status--${bookingTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].driver) }}</span>
+        <span class="booking-detail__status" :class="`booking-detail__status--${bookingTone(booking.status)}`">{{ t(bookingStatusText(booking, 'driver')) }}</span>
         <strong class="booking-detail__time">{{ pickup(booking.pickupAt) }}</strong>
         <div class="booking-detail__route">{{ t(`${booking.origin} ${booking.roundTrip && !returnRoute(booking) ? '往返' : '至'} ${booking.destination}`) }}</div>
         <!-- 往返: when and, if not the way there reversed, from where to where the passenger comes back. -->
@@ -188,7 +188,10 @@ onBeforeUnmount(() => {
           <span v-else-if="booking.roundTrip" class="leg-tag">{{ t('往返') }}</span>
         </p>
         <p v-if="booking.notes" class="booking-detail__note">{{ t(booking.notes) }}</p>
-        <p class="hint">
+        <p v-if="booking.deal" class="hint">
+          {{ t(`${shortTime(booking.createdAt)} 從`) }}<RouterLink :to="`/app/deals/${booking.deal.id}`">{{ t('特價車') }}</RouterLink>{{ t('送出') }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>
+        </p>
+        <p v-else class="hint">
           {{ t(`${shortTime(booking.createdAt)} 從名片頁送出`) }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>
         </p>
       </section>
@@ -208,7 +211,9 @@ onBeforeUnmount(() => {
         </div>
         <button class="button secondary" type="button" @click="copy(booking.passengerWechat)">{{ t('複製') }}</button>
       </section>
-      <p class="hint booking-detail__tip">{{ t('乘客不一定會回來看自己的連結，報價後最好也直接聯絡對方。') }}</p>
+      <p class="hint booking-detail__tip">
+        {{ booking.deal ? t('乘客不一定會回來看自己的連結，成單後最好也直接聯絡對方。') : t('乘客不一定會回來看自己的連結，報價後最好也直接聯絡對方。') }}
+      </p>
 
       <form v-if="quotable" class="card" @submit.prevent="sendQuote">
         <span class="section-label">{{ booking.quote ? t('修改報價') : t('你的報價') }}</span>
@@ -233,13 +238,16 @@ onBeforeUnmount(() => {
         <button class="button block" type="submit" :disabled="busy">{{ booking.quote ? t('更新報價') : t('送出報價') }}</button>
       </form>
       <section v-else-if="booking.quote" class="card">
-        <span class="section-label">{{ booking.status === 'ACCEPTED' ? t('乘客已同意的報價') : t('你的報價') }}</span>
+        <span class="section-label">{{ booking.deal ? t('特價（乘客按這個價預約）') : booking.status === 'ACCEPTED' ? t('乘客已同意的報價') : t('你的報價') }}</span>
         <strong class="booking-detail__quoted">{{ money(booking.quote) }}</strong>
         <p v-if="booking.quoteNote" class="booking-detail__load">{{ t(booking.quoteNote) }}</p>
       </section>
 
       <template v-if="open">
-        <p v-if="booking.status === 'ACCEPTED'" class="booking-detail__agreed">{{ t('乘客已同意報價，安排行程吧') }}</p>
+        <p v-if="booking.deal" class="booking-detail__agreed">
+          {{ booking.status === 'ACCEPTED' ? t('這組已訂到你的特價車，安排行程吧') : t('成單就是接受這一組，其他預約會自動婉拒') }}
+        </p>
+        <p v-else-if="booking.status === 'ACCEPTED'" class="booking-detail__agreed">{{ t('乘客已同意報價，安排行程吧') }}</p>
         <div v-if="!contactPhone" class="card booking-detail__add-phone">
           <label for="booking-added-phone" class="section-label">{{ t('乘客沒有留電話，成單前請補上') }}</label>
           <PhoneField id="booking-added-phone" v-model:country="added.country" v-model:phone="added.phone" />
@@ -256,10 +264,10 @@ onBeforeUnmount(() => {
           <button class="button secondary block booking-detail__order" type="button" :disabled="busy" @click="dispatchToOthers">{{ t('派給其他司機') }}</button>
           <p class="hint booking-detail__tip">
             <template v-if="booking.roundTrip">{{ t('乘客要往返。自己做：去程和回程都成為你的行程；派給其他司機：帶入出單表格，選同一位司機來回或可分開出，填每程的出單價。') }}</template>
-            <template v-else>{{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}</template>
+            <template v-else>{{ booking.status === 'ACCEPTED' || booking.deal ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}</template>
           </p>
         </template>
-        <button class="booking-detail__decline" type="button" :disabled="busy" @click="decline">{{ t('婉拒這個詢價') }}</button>
+        <button class="booking-detail__decline" type="button" :disabled="busy" @click="decline">{{ booking.deal ? t('婉拒這組預約') : t('婉拒這個詢價') }}</button>
       </template>
       <RouterLink v-else-if="booking.orderId" class="button block" :to="`/app/orders/${booking.orderId}`">{{ t('查看這張單') }}</RouterLink>
     </template>

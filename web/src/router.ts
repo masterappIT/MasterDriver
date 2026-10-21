@@ -25,6 +25,8 @@ const routes: RouteRecordRaw[] = [
   // 拼車: the link a driver gives passengers, and a passenger's own seats. Public, no account.
   { path: '/r/:code', component: () => import('./pages/CarpoolPublicPage.vue'), meta: { copyright: true, sessionLater: true } },
   { path: '/s/:code', component: () => import('./pages/CarpoolSeatPage.vue'), meta: { copyright: true } },
+  // 特價車: the link a driver gives passengers; the booking it makes is followed on /b/. Public, no account.
+  { path: '/d/:code', component: () => import('./pages/DealPublicPage.vue'), meta: { copyright: true, sessionLater: true } },
   { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { copyright: true } },
   // 客服: for signed-in users and for guests, so it sits outside the signed-in app.
   { path: '/support', component: () => import('./pages/SupportPage.vue') },
@@ -48,6 +50,10 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/carpools', component: () => import('./pages/CarpoolsPage.vue'), meta: { app: true } },
   { path: '/app/carpools/new', component: () => import('./pages/CarpoolNewPage.vue'), meta: { app: true } },
   { path: '/app/carpools/:id', component: () => import('./pages/CarpoolDetailPage.vue'), meta: { app: true } },
+  { path: '/app/deals', component: () => import('./pages/DealsPage.vue'), meta: { app: true } },
+  { path: '/app/deals/new', component: () => import('./pages/DealFormPage.vue'), meta: { app: true } },
+  { path: '/app/deals/:id/edit', component: () => import('./pages/DealFormPage.vue'), meta: { app: true } },
+  { path: '/app/deals/:id', component: () => import('./pages/DealDetailPage.vue'), meta: { app: true } },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ];
 

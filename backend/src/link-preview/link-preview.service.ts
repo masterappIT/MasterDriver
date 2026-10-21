@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma.service';
 import { renderSeoTemplate } from '../site/seo-rules';
 import { formatPickup } from '../common/hong-kong-time';
 import { formatPrice, isReversed, roundTripTotal } from '../orders/share-text';
+import { dealPriceText, formatDealTime } from '../deals/deal-share-text';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import {
   PHOTO_HEIGHT,
@@ -40,7 +41,7 @@ const CODE = /^[A-Za-z0-9_-]{4,64}$/;
 const CACHE_MS = 10 * 60 * 1000;
 const CACHE_MAX = 200;
 
-type Kind = 'p' | 'c' | 'o' | 'r';
+type Kind = 'p' | 'c' | 'o' | 'r' | 'd';
 type Stored<T> = T extends { photo: string | null } ? Omit<T, 'photo'> & { photoKey: string | null } : T;
 interface Resolved {
   title: string;
@@ -99,7 +100,7 @@ export class LinkPreviewService {
   }
 
   /**
-   * The tags every visitor's page carries for a /p/, /c/, /o/ or /r/ link (nginx puts them in, see
+   * The tags every visitor's page carries for a /p/, /c/, /o/, /r/ or /d/ link (nginx puts them in, see
    * deploy/frontend/web.conf), with the square: what iOS's share menu hands WeChat. Null when the
    * link has no preview of its own, and the page keeps the home tags it was built with.
    */
@@ -155,11 +156,11 @@ export class LinkPreviewService {
   }
 
   private target(kind: string, code: string): { kind: Kind; code: string } | null {
-    return (kind === 'p' || kind === 'c' || kind === 'o' || kind === 'r') && CODE.test(code) ? { kind, code } : null;
+    return (kind === 'p' || kind === 'c' || kind === 'o' || kind === 'r' || kind === 'd') && CODE.test(code) ? { kind, code } : null;
   }
 
   private parse(path: string): { kind: Kind; code: string } | null {
-    const match = /^\/([pcor])\/([^/?#]+)\/?$/.exec(path);
+    const match = /^\/([pcord])\/([^/?#]+)\/?$/.exec(path);
     return match ? this.target(match[1], match[2]) : null;
   }
 
@@ -180,6 +181,7 @@ export class LinkPreviewService {
   private async resolve(kind: Kind, code: string): Promise<Resolved | null> {
     if (kind === 'p') return this.profile(code);
     if (kind === 'r') return this.carpool(code);
+    if (kind === 'd') return this.deal(code);
     return kind === 'c' ? this.confirmation(code) : this.claim(code);
   }
 
@@ -377,6 +379,40 @@ export class LinkPreviewService {
     const description = `${price}。${name ? `${name}開的拼車，` : ''}點開報位，不用註冊。`;
     const photoKey = page && !page.blockedAt ? (page.photos[0]?.storageKey ?? null) : null;
     return { title, description, url: `${this.config.publicBaseUrl}/r/${code}`, card: null, square: { kind: 'driver', name: name || '司機', photoKey } };
+  }
+
+  /**
+   * A 特價車 link (/d/): what the driver's own text says, the time, the route and the price, and
+   * whose deal it is, with the car photo the deal page shows (2026-10-21). Only while it takes
+   * bookings; a sold, taken down or expired one gets the generic card.
+   */
+  private async deal(code: string): Promise<Resolved | null> {
+    const deal = await this.prisma.deal.findUnique({
+      where: { code },
+      select: {
+        status: true,
+        pickupAt: true,
+        pickupUntil: true,
+        origin: true,
+        destination: true,
+        priceMinor: true,
+        currency: true,
+        originalPriceMinor: true,
+        driver: {
+          select: {
+            profile: { select: { name: true } },
+            profilePage: { select: { blockedAt: true, photos: { orderBy: { createdAt: 'desc' }, take: 1, select: { storageKey: true } } } },
+          },
+        },
+      },
+    });
+    if (!deal || deal.status !== 'OPEN' || (deal.pickupUntil ?? deal.pickupAt) <= new Date()) return null;
+    const name = deal.driver.profile?.name;
+    const page = deal.driver.profilePage;
+    const title = `【特價車】${formatDealTime(deal)} ${deal.origin} → ${deal.destination}`;
+    const description = `${dealPriceText(deal)}。${name ? `${name}的特價車，` : ''}點開預約，不用註冊。`;
+    const photoKey = page && !page.blockedAt ? (page.photos[0]?.storageKey ?? null) : null;
+    return { title, description, url: `${this.config.publicBaseUrl}/d/${code}`, card: null, square: { kind: 'driver', name: name || '司機', photoKey } };
   }
 
   /** The whole stored photo, fitted inside a picture's photo space (never cut), as a data: URL the SVG can draw. */

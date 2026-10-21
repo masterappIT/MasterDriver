@@ -117,6 +117,33 @@ npm run dev:admin
 | `GET /api/s/:code/driver-photos/:id`、`GET /api/s/:code/payment-methods/:id/qr` | — | 乘客連結上的車輛照片與收款碼 |
 | `GET /api/public/carpools/:code/photos/:id` | — | 拼車連結上開拼車司機的車輛照片 |
 
+## 特價車
+
+決定與規則見 `docs/DECISIONS.md` 2026-10-21「特價車」。
+
+- 資料表：`Deal`（一個特價車）；乘客的預約就是 `BookingRequest`，多了 `dealId`，`quoteMinor` 是預約當時的特價；預約放在司機的名片頁底下（沒有名片頁就建一個未公開的），所以司機在「等我報價」回覆、用原本的「這單我自己做／派給其他司機」成單。`Notification` 多了 `DEAL_BOOKING_NEW`、`DEAL_SOLD`。程式在 `backend/src/deals/`、`shared/src/deal.ts`、`web/src/deal.ts`、`web/src/pages/Deal*.vue` 與分享圖 `web/src/components/DealCardSheet.vue`。
+- 一部車只接一組：成單時（`OrdersService.takeBooking` 呼叫 `deals/deal-hold.ts` 的 `takeDeal`）、預約、下架都先鎖住特價車那一列（`SELECT … FOR UPDATE`）；成單即接受那一組，其他等待中的預約同一個交易裡改為婉拒。訂到但還沒成單的那組被取消或婉拒時，`releaseDeal` 把特價車放回開放。
+- 「已過期」不寫入資料庫：開放中而最後可出發時間（時段結束或出發時間）已過，就顯示為已過期。
+
+| 頁面 | 用途 |
+|---|---|
+| `/app/deals` | 我的特價車 |
+| `/app/deals/new`、`/app/deals/:id/edit` | 發特價車、修改 |
+| `/app/deals/:id` | 管理一個特價車：乘客版文字、分享圖、等待中的預約、修改、下架 |
+| `/d/:code` | 給乘客的特價車連結：行程、整車特價、預約；預約後到 `/b/:code` |
+
+| 方法與路徑 | 登入 | 用途 |
+|---|---|---|
+| `POST /api/deals` | 要 | 發特價車（要先有司機資料） |
+| `GET /api/deals` | 要 | 我的特價車 |
+| `GET /api/deals/:id` | 要 | 一個特價車與它的預約 |
+| `PATCH /api/deals/:id` | 要 | 修改（開放中；已送出的預約不變） |
+| `POST /api/deals/:id/cancel` | 要 | 下架（已成單的不行） |
+| `GET /api/public/deals/:code` | — | 特價車連結 |
+| `POST /api/public/deals/:code/bookings` | — | 預約 |
+| `GET /api/public/deals/:code/photos/:id` | — | 特價車連結上司機的車輛照片 |
+| `GET /api/admin/users/:id/deals`、`POST /api/admin/users/:id/deals/:dealId/cancel` | 後台 | 用戶的特價車、下架（要原因） |
+
 ## 客服
 
 - 司機端 `/support`（登入與否都能用）；後台 `/support`。兩邊都每 5 秒讀取新訊息，頁面在背景時暫停。

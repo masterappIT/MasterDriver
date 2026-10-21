@@ -6,6 +6,7 @@ import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
 import { NotificationsService } from '../notifications/notifications.service';
+import { releaseDeal } from '../deals/deal-hold';
 import { telemetry } from '../observability/telemetry';
 import { phonesOf } from '../orders/order-view';
 import { PrismaService } from '../prisma.service';
@@ -33,7 +34,12 @@ const pageInclude = {
   },
 } satisfies Prisma.ProfilePageInclude;
 type PageRow = Prisma.ProfilePageGetPayload<{ include: typeof pageInclude }>;
-type BookingRow = Prisma.BookingRequestGetPayload<{ include: { order: { select: { id: true; confirmCode: true } } } }>;
+const bookingInclude = {
+  order: { select: { id: true, confirmCode: true } },
+  // 特價車: the deal the request was sent from, at its price.
+  deal: { select: { id: true, code: true } },
+} satisfies Prisma.BookingRequestInclude;
+type BookingRow = Prisma.BookingRequestGetPayload<{ include: typeof bookingInclude }>;
 
 const money = (minor: number | null, currency: string) => (minor === null ? null : { amount: minor / 100, currency });
 
@@ -134,6 +140,12 @@ export class ProfilePagesService {
     return { mime: photo.mimeType, bytes };
   }
 
+  /** The user's page, made (unpublished) if they have none: 特價車 bookings are kept under it. */
+  async ensurePage(userId: string) {
+    const page = await this.findOrCreate(userId);
+    return { id: page.id, code: page.code };
+  }
+
   // ------------------------------------------------- the platform's staff
 
   /**
@@ -228,7 +240,7 @@ export class ProfilePagesService {
   async passengerBooking(code: string) {
     const booking = await this.prisma.bookingRequest.findUnique({
       where: { code },
-      include: { order: { select: { id: true, confirmCode: true } }, page: { include: pageInclude } },
+      include: { ...bookingInclude, page: { include: pageInclude } },
     });
     if (!booking) throw this.bookingNotFound();
     return {
@@ -259,7 +271,7 @@ export class ProfilePagesService {
       where: { page: { userId } },
       orderBy: { createdAt: 'desc' },
       take: LIST_LIMIT,
-      include: { order: { select: { id: true, confirmCode: true } } },
+      include: bookingInclude,
     });
     return rows.map((row) => this.driverView(row));
   }
@@ -276,6 +288,9 @@ export class ProfilePagesService {
    * the agreed price stands (2026-10-14).
    */
   async quote(userId: string, id: string, input: BookingQuote, now = new Date()) {
+    if ((await this.ownBooking(userId, id)).dealId) {
+      throw apiError(HttpStatus.CONFLICT, 'DEAL_PRICE_FIXED', 'A 特價車 booking is at the deal price');
+    }
     return this.driverMove(userId, id, ['PENDING', 'QUOTED'], {
       status: 'QUOTED',
       quoteMinor: Math.round(input.amount * 100),
@@ -361,6 +376,8 @@ export class ProfilePagesService {
   private bookingFields(row: Omit<BookingRow, 'order'>) {
     return {
       code: row.code,
+      /** 特價車: sent from that deal at its price, which the driver cannot change. */
+      deal: row.deal ? { id: row.deal.id, code: row.deal.code } : null,
       status: row.status,
       pickupAt: row.pickupAt.toISOString(),
       origin: row.origin,
@@ -391,7 +408,7 @@ export class ProfilePagesService {
   private async ownBooking(userId: string, id: string) {
     const row = await this.prisma.bookingRequest.findFirst({
       where: { id, page: { userId } },
-      include: { order: { select: { id: true, confirmCode: true } } },
+      include: bookingInclude,
     });
     if (!row) throw this.bookingNotFound();
     return row;
@@ -407,7 +424,10 @@ export class ProfilePagesService {
       await this.ownBooking(userId, id);
       throw this.closed();
     }
-    return this.booking(userId, id);
+    const row = await this.booking(userId, id);
+    // 特價車: declining the party that had it lets the deal take bookings again.
+    if (row.deal && data.status === 'DECLINED') await releaseDeal(this.prisma, row.deal.id);
+    return row;
   }
 
   private async passengerMove(code: string, from: BookingStatus[], status: BookingStatus) {
@@ -422,8 +442,9 @@ export class ProfilePagesService {
     }
     const booking = await this.prisma.bookingRequest.findUnique({
       where: { code },
-      select: { id: true, origin: true, destination: true, pickupAt: true, page: { select: { userId: true } } },
+      select: { id: true, origin: true, destination: true, pickupAt: true, dealId: true, page: { select: { userId: true } } },
     });
+    if (booking?.dealId && status === 'CANCELLED') await releaseDeal(this.prisma, booking.dealId);
     if (booking) {
       await this.notifications.send({
         userId: booking.page.userId,

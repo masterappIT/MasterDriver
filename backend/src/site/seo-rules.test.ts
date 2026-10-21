@@ -25,7 +25,7 @@ test('with indexing off the whole site is closed to crawlers', () => {
 
 test('with indexing on, trip pages, the app, the admin and the API stay closed', () => {
   const text = robotsTxt({ allowIndexing: true, sitemapEnabled: true, canonicalOrigin: 'https://md.example' });
-  for (const path of ['/o/', '/c/', '/r/', '/s/', '/app', '/admin', '/api/']) assert.ok(text.includes(`Disallow: ${path}\n`), path);
+  for (const path of ['/o/', '/c/', '/r/', '/s/', '/d/', '/app', '/admin', '/api/']) assert.ok(text.includes(`Disallow: ${path}\n`), path);
   assert.ok(text.endsWith('Sitemap: https://md.example/sitemap.xml\n'));
   assert.ok(!robotsTxt({ allowIndexing: true, sitemapEnabled: true, canonicalOrigin: '' }).includes('Sitemap'));
 });

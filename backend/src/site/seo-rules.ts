@@ -4,7 +4,7 @@
  * passenger's seats (the platform never lists a carpool), the driver app, the
  * admin and the API.
  */
-export const ALWAYS_PRIVATE_PATHS = ['/o/', '/c/', '/r/', '/s/', '/app', '/admin', '/api/'] as const;
+export const ALWAYS_PRIVATE_PATHS = ['/o/', '/c/', '/r/', '/s/', '/d/', '/app', '/admin', '/api/'] as const;
 
 export const TEMPLATE_VARIABLES = ['司機', '路線', '車型', '地區'] as const;
 export type TemplateVariable = (typeof TEMPLATE_VARIABLES)[number];

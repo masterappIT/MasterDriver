@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
-import { BOOKING_STATUS, bookingOpen, returnRoute, passengerTone, type Booking } from '../booking';
+import { bookingOpen, bookingStatusText, returnRoute, passengerTone, type Booking } from '../booking';
 import PoolRadar from '../components/PoolRadar.vue';
 import { copyText } from '../device';
 import { loadLine, money, pickup } from '../format';
@@ -29,8 +29,9 @@ let poller: ReturnType<typeof setInterval> | undefined;
 /** While it waits on the driver, the page says so with a turning radar: it is still being looked at. */
 const waiting = computed(() => {
   const status = booking.value?.status;
-  if (status === 'PENDING') return '正在等司機報價';
-  if (status === 'ACCEPTED') return '你已同意報價，正在等司機安排行程';
+  const deal = Boolean(booking.value?.deal);
+  if (status === 'PENDING') return deal ? '正在等司機確認你的預約' : '正在等司機報價';
+  if (status === 'ACCEPTED') return deal ? '你已訂到，正在等司機安排行程' : '你已同意報價，正在等司機安排行程';
   return null;
 });
 
@@ -97,7 +98,7 @@ onBeforeUnmount(() => {
       </section>
 
       <section class="card booking__trip">
-        <span class="booking__status" :class="`booking__status--${passengerTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].passenger) }}</span>
+        <span class="booking__status" :class="`booking__status--${passengerTone(booking.status)}`">{{ t(bookingStatusText(booking, 'passenger')) }}</span>
         <strong class="booking__time">{{ pickup(booking.pickupAt) }}</strong>
         <div class="booking__route">{{ t(`${booking.origin} ${booking.roundTrip && !returnRoute(booking) ? '往返' : '至'} ${booking.destination}`) }}</div>
         <!-- 往返: when and, if not the way there reversed, from where to where the passenger comes back. -->
@@ -114,7 +115,7 @@ onBeforeUnmount(() => {
       </section>
 
       <section v-if="booking.quote && booking.status !== 'CANCELLED' && booking.status !== 'DECLINED'" class="card">
-        <span class="section-label">{{ t('司機的報價') }}</span>
+        <span class="section-label">{{ booking.deal ? t('特價（整車）') : t('司機的報價') }}</span>
         <strong class="booking__price">{{ money(booking.quote) }}</strong>
         <p v-if="booking.quoteNote" class="booking__load">{{ t(booking.quoteNote) }}</p>
         <p class="hint">{{ t('車費由你和司機自行約定並直接支付給司機，平台不收款。') }}</p>
@@ -128,6 +129,10 @@ onBeforeUnmount(() => {
       <button v-if="bookingOpen(booking.status)" class="booking__cancel" type="button" :disabled="busy" @click="act('cancel', '確定取消這個預約？')">
         {{ t('取消預約') }}
       </button>
+      <!-- 特價車: back to the deal, which says whether it is still open. -->
+      <RouterLink v-else-if="booking.deal && booking.status !== 'ORDERED'" class="button secondary block" :to="`/d/${booking.deal.code}`">
+        {{ t('回到特價車') }}
+      </RouterLink>
       <RouterLink v-else-if="booking.pageCode && booking.status !== 'ORDERED'" class="button secondary block" :to="`/p/${booking.pageCode}`">
         {{ t('再預約一次') }}
       </RouterLink>

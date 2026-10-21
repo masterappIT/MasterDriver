@@ -116,6 +116,13 @@ const NOTIFICATION_KIND: Record<string, string> = {
   BOOKING_NEW: '新預約',
   BOOKING_ACCEPTED: '乘客同意報價',
   BOOKING_CANCELLED: '乘客取消預約',
+  CARPOOL_SEAT_NEW: '拼車有人報位',
+  CARPOOL_SEAT_WAITING: '拼車報位等確認',
+  CARPOOL_SEAT_CANCELLED: '乘客取消拼車報位',
+  CARPOOL_FORMED: '拼車已成行',
+  CARPOOL_CLOSED: '拼車已截止報位',
+  DEAL_BOOKING_NEW: '特價車有人預約',
+  DEAL_SOLD: '特價車已被訂走',
   SUPPORT_REPLY: '客服回覆',
 };
 
@@ -412,6 +419,54 @@ watch(orderRole, () => void loadOrders());
 const otherSide = (order: OrderRow) => (order.selfDrive ? null : orderRole.value === 'dispatcher' ? order.claimedBy : order.dispatcher);
 const ORDERS_SHOWN = 10;
 
+// ---- 特價車: what this user put up; 下架 after a complaint, with a reason the driver sees.
+interface DealRow {
+  id: string;
+  url: string;
+  state: 'OPEN' | 'SOLD' | 'CANCELLED' | 'EXPIRED';
+  pickupAt: string;
+  pickupUntil: string | null;
+  origin: string;
+  destination: string;
+  price: { amount: number; currency: string };
+  originalPrice: { amount: number; currency: string } | null;
+  bookings: number;
+  staffReason: string | null;
+  createdAt: string;
+}
+const DEAL_STATE: Record<DealRow['state'], { label: string; tone: string }> = {
+  OPEN: { label: '開放預約', tone: 'pending' },
+  SOLD: { label: '已訂出', tone: 'completed' },
+  CANCELLED: { label: '已下架', tone: 'cancelled' },
+  EXPIRED: { label: '已過期', tone: '' },
+};
+const deals = ref<DealRow[] | null>(null);
+const dealsError = ref('');
+async function loadDeals() {
+  dealsError.value = '';
+  try {
+    deals.value = await api<DealRow[]>('GET', `${base.value}/deals`);
+  } catch (e) {
+    dealsError.value = (e as Error).message;
+  }
+}
+async function cancelDeal(deal: DealRow) {
+  const reason = await ask({
+    title: '下架這個特價車',
+    text: '乘客不能再預約，還在等的預約會婉拒；司機看得到你寫的原因。已成單的不能下架，請取消那張單。',
+    reason: '原因（司機看得到，也會記在操作紀錄）',
+    confirm: '下架',
+    danger: true,
+  });
+  if (!reason) return;
+  try {
+    deals.value = await api<DealRow[]>('POST', `${base.value}/deals/${deal.id}/cancel`, { reason });
+    notify('特價車已下架');
+  } catch (e) {
+    notify((e as Error).message, true);
+  }
+}
+
 function openOrder(id: string) {
   void router.push(`/orders/${id}`);
 }
@@ -438,14 +493,17 @@ watch(
     crediting.value = false;
     gifting.value = false;
     deletionBlockers.value = [];
+    deals.value = null;
     void load();
     void loadOrders();
+    void loadDeals();
   },
 );
 
 onMounted(() => {
   void load();
   void loadOrders();
+  void loadDeals();
   document.addEventListener('keydown', onKey);
   document.body.classList.add('mt-overlay-open');
 });
@@ -626,6 +684,37 @@ onBeforeUnmount(() => {
           最近 {{ Math.min(orders.items.length, ORDERS_SHOWN) }} 張，共 {{ orders.total }} 張。
           <RouterLink :to="{ path: '/orders', query: { user: userId, role: orderRole } }">在訂單列表查看全部</RouterLink>
         </p>
+      </section>
+
+      <section class="mt-section">
+        <div class="mt-section-head">
+          <div><h3>特價車</h3></div>
+        </div>
+        <div v-if="dealsError" class="notice error">{{ dealsError }} <button class="button secondary" type="button" @click="loadDeals">重試</button></div>
+        <p v-else-if="!deals" class="mt-muted">載入中…</p>
+        <p v-else-if="deals.length === 0" class="mt-muted">沒有發過特價車。</p>
+        <div v-else class="mt-history-wrap">
+          <table class="mt-history">
+            <thead>
+              <tr><th>出發時間</th><th>路線</th><th>狀態</th><th class="num">整車特價</th><th class="num">預約</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="deal in deals" :key="deal.id">
+                <td>{{ dateTime(deal.pickupAt) }}<template v-if="deal.pickupUntil"><br /><span class="mt-muted">至 {{ dateTime(deal.pickupUntil) }}</span></template></td>
+                <td>
+                  <a :href="deal.url" target="_blank" rel="noopener noreferrer">{{ deal.origin }} 至 {{ deal.destination }}</a>
+                  <br v-if="deal.staffReason" /><span v-if="deal.staffReason" class="mt-muted">平台下架：{{ deal.staffReason }}</span>
+                </td>
+                <td><span class="mt-status" :class="DEAL_STATE[deal.state].tone">{{ DEAL_STATE[deal.state].label }}</span></td>
+                <td class="num">{{ money(deal.price) }}<template v-if="deal.originalPrice"><br /><s class="mt-muted">{{ money(deal.originalPrice) }}</s></template></td>
+                <td class="num">{{ deal.bookings }}</td>
+                <td>
+                  <button v-if="can.write() && (deal.state === 'OPEN' || deal.state === 'SOLD')" type="button" class="mt-action is-danger" @click="cancelDeal(deal)">下架</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="mt-section">

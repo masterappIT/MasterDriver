@@ -8,3 +8,4 @@ export * from './support';
 export * from './profile-page';
 export * from './notifications';
 export * from './carpool';
+export * from './deal';

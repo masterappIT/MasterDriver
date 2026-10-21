@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { api, errorText } from '../api';
-import { BOOKING_STATUS, bookingTone, returnRoute, type DriverBooking } from '../booking';
-import { loadLine, pickup, shortTime } from '../format';
+import { bookingStatusText, bookingTone, returnRoute, type DriverBooking } from '../booking';
+import { loadLine, money, pickup, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 
@@ -43,7 +43,7 @@ onBeforeUnmount(() => {
     <PageBack :title="t('等我報價')" fallback="/app/me" />
     <div v-if="error" class="notice error">{{ error }}</div>
     <p v-if="bookings && bookings.length === 0" class="bookings__empty">
-      {{ t('還沒有客人詢價。把名片頁的連結放到朋友圈、小紅書或傳給熟客，客人就可以在上面向你問價。') }}
+      {{ t('還沒有客人詢價。把名片頁或特價車的連結放到朋友圈、小紅書或傳給熟客，客人就可以向你問價、預約。') }}
       <RouterLink to="/app/guide/customers">{{ t('看教學：怎麼用名片頁找客人') }}</RouterLink>
       <RouterLink to="/app/profile-page">{{ t('打開我的名片頁') }}</RouterLink>
     </p>
@@ -51,11 +51,12 @@ onBeforeUnmount(() => {
       <div class="bookings__top">
         <strong class="bookings__time">{{ pickup(booking.pickupAt) }}</strong>
         <span class="bookings__status" :class="`bookings__status--${bookingTone(booking.status)}`">
-          <span v-if="booking.unread" class="bookings__dot" :aria-label="t('未讀')"></span>{{ t(BOOKING_STATUS[booking.status].driver) }}
+          <span v-if="booking.unread" class="bookings__dot" :aria-label="t('未讀')"></span>{{ t(bookingStatusText(booking, 'driver')) }}
         </span>
       </div>
       <div class="bookings__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
-      <span v-if="booking.transfer" class="leg-tag bookings__tag">{{ t('接駁（中途換車）') }}</span>
+      <span v-if="booking.deal" class="leg-tag bookings__tag">{{ t(`特價車・${money(booking.quote)}`) }}</span>
+      <span v-else-if="booking.transfer" class="leg-tag bookings__tag">{{ t('接駁（中途換車）') }}</span>
       <span v-else-if="booking.roundTrip" class="leg-tag bookings__tag">
         {{ t([booking.returnPickupAt ? `往返・回程 ${pickup(booking.returnPickupAt)}` : '往返', returnRoute(booking)].filter(Boolean).join('・')) }}
       </span>

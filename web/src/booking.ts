@@ -3,6 +3,8 @@ import type { Money } from './format';
 /** A booking request, as the passenger's link and the driver's list both show it. */
 export interface Booking {
   code: string;
+  /** 特價車: sent from that deal at its price, which is not quoted again. */
+  deal: { id: string; code: string } | null;
   status: 'PENDING' | 'QUOTED' | 'ACCEPTED' | 'ORDERED' | 'DECLINED' | 'CANCELLED';
   pickupAt: string;
   origin: string;
@@ -43,6 +45,20 @@ export const BOOKING_STATUS: Record<Booking['status'], { driver: string; passeng
   DECLINED: { driver: '已婉拒', passenger: '司機未能接這個行程' },
   CANCELLED: { driver: '乘客已取消', passenger: '你已取消' },
 };
+
+/**
+ * A 特價車 booking at the same states: the price was the deal's, and the driver making the order
+ * is them accepting this party (docs/DECISIONS.md, 2026-10-21 特價車).
+ */
+const DEAL_BOOKING_STATUS: Partial<Record<Booking['status'], { driver: string; passenger: string }>> = {
+  PENDING: { driver: '特價車預約，等你確認', passenger: '已送出，等司機確認' },
+  ACCEPTED: { driver: '已訂到，等你成單', passenger: '你已訂到，等司機安排行程' },
+  DECLINED: { driver: '已婉拒', passenger: '司機未能接這個預約' },
+};
+
+/** What a request's state reads as to either side, a 特價車 booking in its own words. */
+export const bookingStatusText = (booking: Pick<Booking, 'status' | 'deal'>, side: 'driver' | 'passenger') =>
+  ((booking.deal && DEAL_BOOKING_STATUS[booking.status]) || BOOKING_STATUS[booking.status])[side];
 
 export const bookingOpen = (status: Booking['status']) => status === 'PENDING' || status === 'QUOTED' || status === 'ACCEPTED';
 

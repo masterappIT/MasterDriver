@@ -60,6 +60,7 @@ const ACTION: Record<string, string> = {
   'user.profile.update': '代改司機資料',
   'order.cancel': '代出單者取消訂單',
   'profile-page.block': '下架名片頁',
+  'deal.cancel': '下架特價車',
   'profile-page.restore': '恢復名片頁',
   'profile-page.photo.remove': '刪除名片頁照片',
   'group-invite.remove': '移除派單群',

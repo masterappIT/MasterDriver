@@ -212,6 +212,26 @@ export class AdminController {
     return this.data.restorePage(id, admin, request.ip);
   }
 
+  // ---- 特價車: what a user put up, and 下架 after a complaint
+
+  @Get('users/:id/deals')
+  userDeals(@Param('id') id: string) {
+    return this.data.userDeals(id);
+  }
+
+  @Post('users/:id/deals/:dealId/cancel')
+  @HttpCode(200)
+  @AdminRoles(...WRITE_ROLES)
+  cancelDeal(
+    @Param('id') id: string,
+    @Param('dealId') dealId: string,
+    @Body(new ZodPipe(adminReasonSchema)) body: AdminReason,
+    @CurrentAdmin() admin: AdminUser,
+    @Req() request: Request,
+  ) {
+    return this.data.cancelDeal(id, dealId, body, admin, request.ip);
+  }
+
   @Get('users/:id/page/photos/:photoId')
   async pagePhoto(@Param('id') id: string, @Param('photoId') photoId: string, @Res() response: Response) {
     sendPrivateImage(response, await this.data.pagePhoto(id, photoId));

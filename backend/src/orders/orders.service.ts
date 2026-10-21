@@ -24,6 +24,7 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { CommissionService } from '../billing/commission.service';
+import { takeDeal } from '../deals/deal-hold';
 import { CreditsService } from '../billing/credits.service';
 import { EntitlementsService, FEATURES } from '../entitlements/entitlements.service';
 import { GroupInvitesService, WECHAT_GROUP_QR_DAYS } from '../groups/group-invites.service';
@@ -966,6 +967,8 @@ export class OrdersService {
    * stops the order from being created at all.
    */
   private async takeBooking(tx: Prisma.TransactionClient, userId: string, bookingId: string, orderId: string) {
+    // 特價車: making the order is accepting this party; the others waiting are declined.
+    await takeDeal(tx, bookingId, new Date());
     const taken = await tx.bookingRequest.updateMany({
       where: { id: bookingId, page: { userId }, orderId: null, status: { in: ['PENDING', 'QUOTED', 'ACCEPTED'] } },
       data: { status: 'ORDERED', orderId },

@@ -19,6 +19,7 @@ import { EntitlementsService, FEATURES } from '../entitlements/entitlements.serv
 import { driverPriceOf, isSelfDriven, passengerPriceOf, marginOf, orderInclude } from '../orders/order-view';
 import { GroupInvitesService } from '../groups/group-invites.service';
 import { OrdersService } from '../orders/orders.service';
+import { DealsService } from '../deals/deals.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { PrismaService } from '../prisma.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
@@ -48,6 +49,7 @@ export class AdminDataService {
     @Inject(EntitlementsService) private readonly entitlements: EntitlementsService,
     @Inject(OrdersService) private readonly orders: OrdersService,
     @Inject(ProfilePagesService) private readonly profilePages: ProfilePagesService,
+    @Inject(DealsService) private readonly deals: DealsService,
     @Inject(GroupInvitesService) private readonly groupInvites: GroupInvitesService,
     @Inject(MEDIA_STORAGE) private readonly storage: MediaStorage,
   ) {}
@@ -528,6 +530,20 @@ export class AdminDataService {
     await this.profilePages.staffRestore(userId);
     await this.audit.log({ adminId: admin.id, action: 'profile-page.restore', targetType: 'user', targetId: userId, ip });
     return this.getUser(userId);
+  }
+
+  /** The user's 特價車, newest first. */
+  async userDeals(userId: string) {
+    await this.ensureUser(userId);
+    return this.deals.staffList(userId);
+  }
+
+  /** 下架 a 特價車 after a complaint; the driver sees the reason, and parties still waiting are declined. */
+  async cancelDeal(userId: string, dealId: string, input: AdminReason, admin: AdminUser, ip?: string, now = new Date()) {
+    await this.ensureUser(userId);
+    await this.deals.staffCancel(userId, dealId, input.reason, now);
+    await this.audit.log({ adminId: admin.id, action: 'deal.cancel', targetType: 'user', targetId: userId, detail: { dealId, reason: input.reason }, ip });
+    return this.deals.staffList(userId, now);
   }
 
   pagePhoto(userId: string, photoId: string) {
