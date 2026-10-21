@@ -255,7 +255,7 @@ onBeforeUnmount(() => {
           <button class="button block large booking-detail__order" type="button" :disabled="busy" @click="driveMyself">{{ booking.roundTrip ? t('這單我自己做（來回）') : t('這單我自己做') }}</button>
           <button class="button secondary block booking-detail__order" type="button" :disabled="busy" @click="dispatchToOthers">{{ t('派給其他司機') }}</button>
           <p class="hint booking-detail__tip">
-            <template v-if="booking.roundTrip">{{ t('乘客要往返。自己做：去程和回程都成為你的行程；派給其他司機：帶入出單表格，選同一位司機來回或可分開接，填每程的出單價。') }}</template>
+            <template v-if="booking.roundTrip">{{ t('乘客要往返。自己做：去程和回程都成為你的行程；派給其他司機：帶入出單表格，選同一位司機來回或可分開出，填每程的出單價。') }}</template>
             <template v-else>{{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}</template>
           </p>
         </template>

@@ -603,7 +603,7 @@ onMounted(async () => {
       {{ t('已帶入客人詢價的資料，乘客要接駁（中途換車）。填接駁位置和每段的出單價後出單。') }}
     </div>
     <div v-else-if="fromBooking && form.roundTrip" class="notice">
-      {{ t('已帶入客人詢價的資料，乘客要往返，回程時間也已帶入。選同一位司機來回或可分開接，填去程和回程的出單價後出單。') }}
+      {{ t('已帶入客人詢價的資料，乘客要往返，回程時間也已帶入。選同一位司機來回或可分開出，填去程和回程的出單價後出單。') }}
     </div>
     <div v-else-if="fromBooking" class="notice">
       {{ form.passengerPrice ? t('已帶入客人詢價的資料和你的報價（作為乘客價）。填出單價後出單，貼到群裡派給其他司機。') : t('已帶入客人詢價的資料。填出單價後出單，貼到群裡派給其他司機。') }}
@@ -647,7 +647,7 @@ onMounted(async () => {
         </p>
         <div class="segment segment--block new-order__mode new-order__drivers" role="group" :aria-label="t('誰開回程')">
           <button type="button" :aria-pressed="form.sameDriver" @click="setSameDriver(true)">{{ t('同一位司機來回') }}</button>
-          <button type="button" :aria-pressed="!form.sameDriver" @click="setSameDriver(false)">{{ t('可分開接') }}</button>
+          <button type="button" :aria-pressed="!form.sameDriver" @click="setSameDriver(false)">{{ t('可分開出') }}</button>
         </div>
         <p class="hint new-order__explain">
           {{ form.sameDriver ? t('司機一搶就是去程和回程。') : t('司機選一程搶，同一位司機也可以兩程都搶。') }}
