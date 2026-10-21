@@ -48,7 +48,9 @@ test('the logo is uploaded as a real picture, served to public pages, and can be
 
 test('SEO is closed to crawlers until indexing is switched on', async () => {
   assert.equal((await ctx.site.publicSeo('HOME')).robots, 'noindex, nofollow');
-  assert.equal(await ctx.site.robots(), 'User-agent: *\nDisallow: /\n');
+  // Link-preview robots are let in apart (2026-10-22); every other robot, search engines too, is shut out.
+  assert.ok((await ctx.site.robots()).endsWith('\n\nUser-agent: *\nDisallow: /\n'));
+  assert.ok((await ctx.site.robots()).startsWith('User-agent: facebookexternalhit\n'));
   await ctx.site.updateSeoSite({ allowIndexing: true, canonicalOrigin: 'https://md.example', sitemapEnabled: true }, 'test');
   await ctx.site.updateSeoPage('HOME', { title: 'MasterDriver 跨境師傅幫｜有單就派，有空就接' });
   const home = await ctx.site.publicSeo('HOME');
