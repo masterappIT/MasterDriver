@@ -36,6 +36,7 @@ const NAV: (NavLink | NavGroup)[] = [
     label: '推廣',
     items: [
       { to: '/leads', label: '潛在客戶' },
+      { to: '/guides', label: '教學連結' },
       { to: '/ads', label: '廣告欄位', roles: WRITE },
     ],
   },

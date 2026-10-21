@@ -30,6 +30,7 @@ const routes: RouteRecordRaw[] = [
   // The two pages 登入配置 replaced; old links open the matching tab.
   { path: '/settings/development-login', redirect: { path: '/settings/login', query: { tab: 'development' } } },
   { path: '/leads', component: () => import('./pages/LeadsPage.vue'), meta: { title: '潛在客戶' } },
+  { path: '/guides', component: () => import('./pages/GuideLinksPage.vue'), meta: { title: '教學連結' } },
   { path: '/ads', component: () => import('./pages/AdsPage.vue'), meta: { title: '廣告欄位', roles: WRITE } },
   { path: '/seo', component: () => import('./pages/SeoPage.vue'), meta: { title: 'SEO', roles: WRITE } },
   { path: '/settings/general', component: () => import('./pages/GeneralSettingsPage.vue'), meta: { title: '一般設定', roles: WRITE } },

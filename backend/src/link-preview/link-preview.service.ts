@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { PROFILE_PHOTO_MAX, plateRegions } from '@masterdriver/shared';
+import { GUIDE_INDEX, PROFILE_PHOTO_MAX, findGuide, guidePageTitle, guidePath, plateRegions } from '@masterdriver/shared';
 import sharp from 'sharp';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { PrismaService } from '../prisma.service';
@@ -93,6 +93,8 @@ export class LinkPreviewService {
    * has one (WhatsApp, iMessage), else its square; the home page's for anything else.
    */
   async page(path: string): Promise<PreviewMeta> {
+    const guide = this.guide(path, false);
+    if (guide) return guide;
     const target = this.parse(path);
     const resolved = target ? await this.resolve(target.kind, target.code) : null;
     if (!resolved) return this.home(target ? path : '/', false);
@@ -101,11 +103,13 @@ export class LinkPreviewService {
   }
 
   /**
-   * The tags every visitor's page carries for a /p/, /c/, /o/, /r/ or /d/ link (nginx puts them in, see
+   * The tags every visitor's page carries for a /p/, /c/, /o/, /r/, /d/ or /guide link (nginx puts them in, see
    * deploy/frontend/web.conf), with the square: what iOS's share menu hands WeChat. Null when the
    * link has no preview of its own, and the page keeps the home tags it was built with.
    */
   async tags(path: string): Promise<PreviewMeta | null> {
+    const guide = this.guide(path, true);
+    if (guide) return guide;
     const target = this.parse(path);
     const resolved = target ? await this.resolve(target.kind, target.code) : null;
     if (!target || !resolved) return null;
@@ -163,6 +167,25 @@ export class LinkPreviewService {
   private parse(path: string): { kind: Kind; code: string } | null {
     const match = /^\/([pcord])\/([^/?#]+)\/?$/.exec(path);
     return match ? this.target(match[1], match[2]) : null;
+  }
+
+  /**
+   * 使用教學 (/guide and /guide/{slug}): its own title and one-line summary over the generic
+   * picture, so a guide pasted into a chat says which guide it is. Null for any other path.
+   */
+  guide(path: string, square: boolean): PreviewMeta | null {
+    const match = /^\/guide(?:\/([a-z-]+))?\/?$/.exec(path);
+    if (!match) return null;
+    const guide = match[1] ? findGuide(match[1]) : null;
+    if (match[1] && !guide) return null;
+    const base = this.config.publicBaseUrl;
+    return {
+      title: guidePageTitle(guide?.slug),
+      description: guide?.description ?? GUIDE_INDEX.description,
+      url: `${base}${guidePath(guide?.slug)}`,
+      image: `${base}${square ? HOME.square : HOME.image}`,
+      square,
+    };
   }
 
   private home(path: string, square: boolean): PreviewMeta {

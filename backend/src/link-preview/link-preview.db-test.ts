@@ -232,7 +232,7 @@ test('search engines: nothing is indexed until the admin allows it, and a 名片
   const page = await ctx.prisma.profilePage.findUniqueOrThrow({ where: { userId: owner } });
 
   // Indexing off (the default): every page says noindex and the sitemap is off.
-  for (const path of ['/', `/p/${page.code}`, '/o/abcdEFGH', '/app']) {
+  for (const path of ['/', '/guide', '/guide/deal', `/p/${page.code}`, '/o/abcdEFGH', '/app']) {
     const off = await pages.page(path);
     assert.equal(off.indexable, false, path);
     assert.match(off.html, /<meta name="robots" content="noindex, nofollow" \/>/);
@@ -250,6 +250,16 @@ test('search engines: nothing is indexed until the admin allows it, and a 名片
   assert.match(home.html, /<meta name="google-site-verification" content="g-code" \/>/);
   assert.match(home.html, /<meta name="baidu-site-verification" content="b-code" \/>/);
   assert.match(home.html, /有單就派，有空就接/);
+
+  // 使用教學: indexed like the home page, with every guide listed, and in the sitemap.
+  const guide = await pages.page('/guide/deal');
+  assert.equal(guide.indexable, true);
+  assert.match(guide.html, /<link rel="canonical" href="https:\/\/md.example\/guide\/deal" \/>/);
+  assert.match(guide.html, /<h1>特價車｜跨境師傅幫使用教學<\/h1>/);
+  assert.match(guide.html, /<a href="https:\/\/md.example\/guide\/dispatch">出單派到群<\/a>/);
+  assert.equal((await pages.page('/guide/nope')).indexable, false, 'an unknown guide is not a page');
+  assert.ok((await pages.sitemap())!.includes('<loc>https://md.example/guide</loc>'));
+  assert.ok((await pages.sitemap())!.includes('<loc>https://md.example/guide/deal</loc>'));
 
   // Published but not chosen by its driver: still noindex, and not in the sitemap.
   assert.equal((await pages.page(`/p/${page.code}`)).indexable, false);
@@ -272,6 +282,21 @@ test('search engines: nothing is indexed until the admin allows it, and a 名片
   await ctx.profilePages.staffBlock(owner, '投訴');
   assert.equal((await pages.page(`/p/${page.code}`)).indexable, false);
   assert.ok(!(await pages.sitemap())!.includes('/p/'));
+});
+
+test('a 使用教學 link names its guide over the generic picture; an unknown guide gets the generic preview', async () => {
+  const deal = await previews.page('/guide/deal');
+  assert.equal(deal.title, '特價車｜跨境師傅幫使用教學');
+  assert.equal(deal.description, '開你自己的專屬路線，乘客用專屬連結直接向你下單，不經任何中介。');
+  assert.equal(deal.url, 'https://md.test/guide/deal');
+  assert.equal(deal.image, 'https://md.test/share-card.jpg');
+  assert.equal((await previews.page('/guide/')).title, '跨境師傅幫使用教學');
+  // What nginx puts into the page a visitor opens: the square, as iOS hands WeChat.
+  const tags = await previews.tags('/guide');
+  assert.equal(tags?.title, '跨境師傅幫使用教學');
+  assert.equal(tags?.image, 'https://md.test/share-square.jpg');
+  assert.equal((await previews.page('/guide/nope')).title, GENERIC);
+  assert.equal(await previews.tags('/guide/nope'), null);
 });
 
 test('link previews are the same whatever the search settings say', async () => {

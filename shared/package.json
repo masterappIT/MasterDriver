@@ -23,6 +23,7 @@
     },
     "./quick-order": "./src/quick-order.ts",
     "./vehicle-plate": "./src/vehicle-plate.ts",
-    "./phone": "./src/phone.ts"
+    "./phone": "./src/phone.ts",
+    "./guides": "./src/guides.ts"
   }
 }

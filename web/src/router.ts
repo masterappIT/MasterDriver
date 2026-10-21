@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+import { GUIDE_SLUGS } from '@masterdriver/shared/guides';
 import { ensureSession, session } from './api';
 
 declare module 'vue-router' {
@@ -27,6 +28,14 @@ const routes: RouteRecordRaw[] = [
   { path: '/s/:code', component: () => import('./pages/CarpoolSeatPage.vue'), meta: { copyright: true } },
   // 特價車: the link a driver gives passengers; the booking it makes is followed on /b/. Public, no account.
   { path: '/d/:code', component: () => import('./pages/DealPublicPage.vue'), meta: { copyright: true, sessionLater: true } },
+  // 使用教學: public, so a driver can be sent a guide before signing in; an unknown guide goes to the 目錄.
+  { path: '/guide', component: () => import('./pages/guide/GuideIndexPage.vue'), meta: { copyright: true, sessionLater: true } },
+  {
+    path: '/guide/:slug',
+    component: () => import('./pages/guide/GuidePage.vue'),
+    meta: { copyright: true, sessionLater: true },
+    beforeEnter: (to) => (GUIDE_SLUGS.includes(String(to.params.slug)) ? true : '/guide'),
+  },
   { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { copyright: true } },
   // 客服: for signed-in users and for guests, so it sits outside the signed-in app.
   { path: '/support', component: () => import('./pages/SupportPage.vue') },

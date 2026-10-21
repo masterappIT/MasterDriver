@@ -30,6 +30,9 @@ import {
   type CommissionUpdate,
   type DevelopmentLoginUpdate,
   type AdminUserQuery,
+  GUIDE_INDEX,
+  GUIDES,
+  guidePath,
 } from '@masterdriver/shared';
 import type { Request, Response } from 'express';
 import { DevelopmentLoginService } from '../auth/development-login.service';
@@ -117,11 +120,26 @@ export class AdminController {
     @Inject(CommissionService) private readonly commission: CommissionService,
     @Inject(DevelopmentLoginService) private readonly developmentLogin: DevelopmentLoginService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
   @Get('dashboard')
   dashboard() {
     return this.data.dashboard();
+  }
+
+  // ---- 使用教學
+
+  /** 教學連結: the 目錄 and every guide at the live site's address, for any staff to copy and send. */
+  @Get('guides')
+  guides() {
+    const base = this.config.publicBaseUrl;
+    return {
+      items: [
+        { slug: null, title: '教學目錄', description: GUIDE_INDEX.description, url: `${base}${guidePath()}` },
+        ...GUIDES.map((guide) => ({ slug: guide.slug, title: guide.title, description: guide.description, url: `${base}${guidePath(guide.slug)}` })),
+      ],
+    };
   }
 
   // ---- users

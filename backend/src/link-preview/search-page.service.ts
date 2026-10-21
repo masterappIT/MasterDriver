@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { GUIDES, guidePath } from '@masterdriver/shared';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { PrismaService } from '../prisma.service';
 import { HOME, LinkPreviewService } from './link-preview.service';
@@ -27,7 +28,7 @@ export interface SearchPage {
 }
 
 /**
- * What a search engine (Googlebot, Baiduspider, bingbot) gets for the home page and a 名片頁
+ * What a search engine (Googlebot, Baiduspider, bingbot) gets for the home page, 使用教學 and a 名片頁
  * (2026-10-22): the words written into the HTML, since the app draws them only with scripts, which
  * Baidu does not run and Google skips once index.html says noindex. Indexed only while the admin's
  * SEO setting allows it, and a 名片頁 only when it is published and its driver chose 讓搜尋引擎找到我;
@@ -46,6 +47,8 @@ export class SearchPageService {
     const site = await this.site();
     const clean = path.split(/[?#]/)[0].replace(/\/+$/, '') || '/';
     if (clean === '/') return this.home(site);
+    const guide = this.guide(site, clean);
+    if (guide) return guide;
     const match = /^\/p\/([^/]+)$/.exec(clean);
     if (match && CODE.test(match[1])) {
       const profile = await this.profile(site, match[1]);
@@ -54,7 +57,7 @@ export class SearchPageService {
     return this.closed(site, clean);
   }
 
-  /** The sitemap: the home page and every 名片頁 its driver let be found. Null while it is switched off. */
+  /** The sitemap: the home page, 使用教學 and every 名片頁 its driver let be found. Null while it is switched off. */
   async sitemap(): Promise<string | null> {
     const site = await this.site();
     if (!site.allowIndexing || !site.sitemapEnabled || !site.canonicalOrigin) return null;
@@ -70,6 +73,7 @@ export class SearchPageService {
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
       url(`${site.canonicalOrigin}/`),
+      ...[guidePath(), ...GUIDES.map((guide) => guidePath(guide.slug))].map((path) => url(`${site.canonicalOrigin}${path}`)),
       ...pages.map((page) => url(`${site.canonicalOrigin}/p/${page.code}`, page.updatedAt)),
       '</urlset>',
       '',
@@ -106,6 +110,23 @@ export class SearchPageService {
     const meta: PreviewMeta = { title, description, url, image: `${this.config.publicBaseUrl}${HOME.image}`, square: false };
     // The site's verification codes go on the home page, where Google, Bing and Baidu look for them.
     return this.render({ meta, keywords: settings?.keywords || '', indexable: site.allowIndexing, verification: site.verification, body });
+  }
+
+  /**
+   * 使用教學 (/guide, /guide/{slug}): indexed while the admin allows it, like the home page. The page
+   * draws its steps with scripts, so what is written here is the guide's summary and the list of
+   * guides; null for any other path.
+   */
+  private guide(site: Awaited<ReturnType<SearchPageService['site']>>, path: string): SearchPage | null {
+    const preview = this.previews.guide(path, false);
+    if (!preview) return null;
+    const url = `${site.origin}${new URL(preview.url).pathname}`;
+    const body = [
+      `<h1>${escapeHtml(preview.title)}</h1>`,
+      `<p>${escapeHtml(preview.description)}</p>`,
+      `<ul>${GUIDES.map((guide) => `<li><a href="${escapeHtml(`${site.origin}${guidePath(guide.slug)}`)}">${escapeHtml(guide.title)}</a>：${escapeHtml(guide.description)}</li>`).join('')}</ul>`,
+    ];
+    return this.render({ meta: { ...preview, url }, keywords: '', indexable: site.allowIndexing, verification: [], body });
   }
 
   /** A published 名片頁 not taken down; null for anything else, which gets the closed page. */
