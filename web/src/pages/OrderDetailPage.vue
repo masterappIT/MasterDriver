@@ -842,7 +842,7 @@ watch(id, () => {
           @paid="setPartyPaid"
         />
         <template v-else>
-        <span class="section-label">{{ isDispatcher && order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
+        <span :class="isDispatcher ? 'section-label' : 'detail__role detail__role--passenger'">{{ isDispatcher && order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
         <div v-if="!isDispatcher" class="detail__person">
           <strong>{{ order.passengerName ? t(order.passengerName) : t('沒有留名') }}</strong>
         </div>
@@ -1104,7 +1104,7 @@ watch(id, () => {
       </section>
 
       <section v-if="order.driver && !ownTrip && !endedForDriver" class="card" style="order: 7">
-        <span class="section-label">{{ selfDriven ? t('這單你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
+        <span :class="isDispatcher ? 'section-label' : 'detail__role detail__role--car'">{{ selfDriven ? t('這單你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
         <div class="detail__person">
           <strong>{{ order.driver.name ? t(order.driver.name) : t('沒有留名') }}</strong>
           <span class="hint">{{ t(`${shortTime(order.claimedAt)} 搶到`) }}</span>
@@ -1130,7 +1130,7 @@ watch(id, () => {
 
       <!-- The driver who took the order: how to reach whoever put it out. -->
       <section v-if="!isDispatcher && order.dispatcherPhone" class="card" style="order: 9">
-        <span class="section-label">{{ t('出單者') }}</span>
+        <span class="detail__role detail__role--dispatcher">{{ t('出單者') }}</span>
         <div class="detail__person">
           <strong>{{ order.dispatcherName ? t(order.dispatcherName) : t('沒有留名') }}</strong>
           <span v-if="!endedForDriver" class="hint">{{ order.dispatcherPhone }}</span>
@@ -1581,6 +1581,27 @@ watch(id, () => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-sm);
+}
+/* The driver's cards say whose they are at a glance: 乘客, 出單者 and 你的車 each in their own colour. */
+.detail__role {
+  display: inline-block;
+  margin: 0 0 var(--space-sm);
+  padding: 2px var(--space-md);
+  border-radius: var(--radius-pill);
+  font-size: 15px;
+  font-weight: 700;
+}
+.detail__role--passenger {
+  background: var(--color-teal-tint);
+  color: var(--color-teal-ink);
+}
+.detail__role--dispatcher {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+.detail__role--car {
+  background: var(--color-divider);
+  color: var(--color-label);
 }
 .detail__person {
   display: flex;

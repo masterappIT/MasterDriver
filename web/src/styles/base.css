@@ -23,6 +23,8 @@
   --color-on-primary: #ffffff;
   --color-tint: #e5edfb;
   --color-teal: #0e9f9a;
+  --color-teal-tint: #e0f4f3;
+  --color-teal-ink: #0a6f6b;
   /* Hong Kong plate gold: fills for chips and dots, a darker ink where gold is text. */
   --color-gold: #e6a206;
   --color-gold-ink: #8a5a00;
