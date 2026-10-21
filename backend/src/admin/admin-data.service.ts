@@ -223,6 +223,7 @@ export class AdminDataService {
         code: user.profilePage.code,
         url: this.profilePages.pageUrl(user.profilePage.code),
         published: user.profilePage.published,
+        searchable: user.profilePage.searchable,
         blockedAt: iso(user.profilePage.blockedAt),
         blockedReason: user.profilePage.blockedReason,
         intro: user.profilePage.intro,

@@ -16,6 +16,8 @@ const list = (items: number, max: number) =>
 export const profilePageUpdateSchema = z
   .object({
     published: z.boolean(),
+    /** 讓搜尋引擎找到我: index the published page (while the platform allows indexing). */
+    searchable: z.boolean(),
     intro: z.string().trim().max(500),
     /** e.g. 「香港 ⇄ 深圳灣」; shown as written. */
     routes: list(8, 60),

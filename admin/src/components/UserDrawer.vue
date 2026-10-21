@@ -46,6 +46,8 @@ interface UserDetail {
     /** The address passengers open it at, the one the driver shares. */
     url: string;
     published: boolean;
+    /** 讓搜尋引擎找到我. */
+    searchable: boolean;
     blockedAt: string | null;
     blockedReason: string | null;
     intro: string;
@@ -749,6 +751,7 @@ onBeforeUnmount(() => {
               </dd>
             </div>
             <div><dt>收到預約</dt><dd>{{ user.profilePage.bookings }} 個</dd></div>
+            <div><dt>讓搜尋引擎找到</dt><dd>{{ user.profilePage.searchable ? '是' : '否' }}</dd></div>
             <div><dt>微信號</dt><dd>{{ user.profilePage.wechatId ?? '—' }}</dd></div>
             <div><dt>WhatsApp</dt><dd>{{ user.profilePage.whatsapp ?? '—' }}</dd></div>
             <div><dt>收款方式</dt><dd>{{ user.paymentMethods }} 個</dd></div>

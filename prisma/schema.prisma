@@ -1027,6 +1027,9 @@ model ProfilePage {
   code          String    @unique
   /// Nobody but the owner sees the page until it is published.
   published     Boolean   @default(false)
+  /// 讓搜尋引擎找到我 (2026-10-22): the driver lets search engines index the published page and
+  /// list it in the sitemap, while the platform's SEO setting allows indexing. Off by default.
+  searchable    Boolean   @default(false)
   intro         String    @default("")
   routes        String[]  @default([])
   languages     String[]  @default([])

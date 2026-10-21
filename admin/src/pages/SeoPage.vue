@@ -91,12 +91,12 @@ onMounted(() => run(() => api('GET', '/seo'), ''));
     <h1>SEO</h1>
     <div v-if="error" class="notice error">{{ error }}</div>
     <div v-if="message" class="notice">{{ message }}</div>
-    <div class="notice">搶單頁、乘客確認頁、司機端、後台和 API 含行程或帳號資料，<strong>一律不讓搜尋引擎收錄</strong>，這裡的設定改變不了這一點。</div>
+    <div class="notice">搶單頁、乘客確認頁、拼車、特價車、司機端、後台和 API 含行程或帳號資料，<strong>一律不讓搜尋引擎收錄</strong>，這裡的設定改變不了這一點。開放收錄後，搜尋引擎可以收錄首頁，以及司機自己在「我的名片頁」打開「讓 Google、百度找到我」的名片頁（不含電話）。Facebook、WhatsApp 等連結預覽不受這裡的設定影響。</div>
 
     <form class="card seo-page__card" @submit.prevent="saveSite">
       <h2>網站設定</h2>
       <label class="row"><input v-model="site.allowIndexing" type="checkbox" /> 開放搜尋引擎收錄（上線並確認網域後才開啟）</label>
-      <label class="row"><input v-model="site.sitemapEnabled" type="checkbox" /> 提供 sitemap</label>
+      <label class="row"><input v-model="site.sitemapEnabled" type="checkbox" /> 提供 sitemap（網址：正式網域 + /sitemap.xml，列出首頁和司機選擇被找到的名片頁）</label>
       <label class="field">正式網域<input v-model="site.canonicalOrigin" class="input" placeholder="https://example.com（結尾不要加 /）" /></label>
       <div class="form-grid">
         <label class="field">Google 驗證碼<input v-model="site.googleVerification" class="input" /></label>

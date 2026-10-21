@@ -397,6 +397,7 @@ export class ProfilePagesService {
     return {
       ...view,
       published: page.published,
+      searchable: page.searchable,
       /** 下架 by the platform after a complaint, with the reason the owner is shown. */
       blocked: page.blockedAt ? { at: page.blockedAt.toISOString(), reason: page.blockedReason ?? '' } : null,
       hasDriverProfile: Boolean(page.user.profile),

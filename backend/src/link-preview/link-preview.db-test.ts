@@ -6,6 +6,7 @@ import type { MediaStorage } from '../storage/media-storage';
 import { formatPickup } from '../common/hong-kong-time';
 import { createDriver, daysFromNow, sampleOrder, seedPlans, setupDatabase, type TestContext } from '../test/database';
 import { LinkPreviewService } from './link-preview.service';
+import { SearchPageService } from './search-page.service';
 
 let ctx: TestContext;
 let previews: LinkPreviewService;
@@ -221,4 +222,64 @@ test('a 特價車 link says when, where, the price and whose deal it is, only wh
   );
   assert.equal(await previews.tags(`/d/${deal.code}`), null, 'full: no preview of its own');
   assert.equal((await previews.page(`/d/${deal.code}`)).title, GENERIC);
+});
+
+test('search engines: nothing is indexed until the admin allows it, and a 名片頁 only when its driver lets it be found', async () => {
+  const pages = new SearchPageService(ctx.prisma, previews, { publicBaseUrl: 'https://md.test' } as AppConfig);
+  const owner = await createDriver(ctx, '陳師傅');
+  await ctx.prisma.driverProfile.update({ where: { userId: owner }, data: { vehicleType: '埃爾法', seats: 7, hkMacauPhone: '+852 98765432' } });
+  await ctx.profilePages.update(owner, { published: true, intro: '深圳灣過關快', languages: ['粵語'] });
+  const page = await ctx.prisma.profilePage.findUniqueOrThrow({ where: { userId: owner } });
+
+  // Indexing off (the default): every page says noindex and the sitemap is off.
+  for (const path of ['/', `/p/${page.code}`, '/o/abcdEFGH', '/app']) {
+    const off = await pages.page(path);
+    assert.equal(off.indexable, false, path);
+    assert.match(off.html, /<meta name="robots" content="noindex, nofollow" \/>/);
+  }
+  assert.equal(await pages.sitemap(), null);
+
+  await ctx.prisma.seoSiteSetting.upsert({
+    where: { id: 'default' },
+    update: {},
+    create: { id: 'default', allowIndexing: true, sitemapEnabled: true, canonicalOrigin: 'https://md.example', googleVerification: 'g-code', baiduVerification: 'b-code' },
+  });
+  const home = await pages.page('/');
+  assert.equal(home.indexable, true);
+  assert.match(home.html, /<link rel="canonical" href="https:\/\/md.example\/" \/>/);
+  assert.match(home.html, /<meta name="google-site-verification" content="g-code" \/>/);
+  assert.match(home.html, /<meta name="baidu-site-verification" content="b-code" \/>/);
+  assert.match(home.html, /有單就派，有空就接/);
+
+  // Published but not chosen by its driver: still noindex, and not in the sitemap.
+  assert.equal((await pages.page(`/p/${page.code}`)).indexable, false);
+  assert.ok(!(await pages.sitemap())!.includes('/p/'));
+
+  await ctx.profilePages.update(owner, { searchable: true });
+  const card = await pages.page(`/p/${page.code}`);
+  assert.equal(card.indexable, true);
+  assert.match(card.html, /<h1>陳師傅｜跨境司機名片<\/h1>/);
+  assert.match(card.html, /深圳灣過關快/);
+  assert.ok(!card.html.includes('98765432'), 'no phone numbers');
+  const user = await ctx.prisma.user.findUniqueOrThrow({ where: { id: owner } });
+  assert.ok(!card.html.includes(user.phone), 'not the sign-in number either');
+  assert.ok((await pages.sitemap())!.includes(`<loc>https://md.example/p/${page.code}</loc>`));
+
+  // Trip links never: a 特價車, a 搶單 or a passenger's link is noindex whatever the settings.
+  for (const path of ['/d/abcdEFGH', '/c/abcdEFGH', '/o/abcdEFGH']) assert.equal((await pages.page(path)).indexable, false, path);
+
+  // Taken down: out of the index and the sitemap.
+  await ctx.profilePages.staffBlock(owner, '投訴');
+  assert.equal((await pages.page(`/p/${page.code}`)).indexable, false);
+  assert.ok(!(await pages.sitemap())!.includes('/p/'));
+});
+
+test('link previews are the same whatever the search settings say', async () => {
+  const owner = await createDriver(ctx, '陳師傅');
+  await ctx.profilePages.update(owner, { published: true });
+  const page = await ctx.prisma.profilePage.findUniqueOrThrow({ where: { userId: owner } });
+  const before = [await previews.page('/'), await previews.page(`/p/${page.code}`)];
+  await ctx.prisma.seoSiteSetting.upsert({ where: { id: 'default' }, update: { allowIndexing: true }, create: { id: 'default', allowIndexing: true } });
+  await ctx.profilePages.update(owner, { searchable: true });
+  assert.deepEqual([await previews.page('/'), await previews.page(`/p/${page.code}`)], before);
 });

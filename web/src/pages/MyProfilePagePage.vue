@@ -25,6 +25,8 @@ interface MyPage {
   /** A few lines about the driver and the link, to paste where the page is shared. */
   shareText: string;
   published: boolean;
+  /** 讓搜尋引擎找到我 (2026-10-22). */
+  searchable: boolean;
   /** 下架 by the platform after a complaint; it cannot be published until restored. */
   blocked: { at: string; reason: string } | null;
   hasDriverProfile: boolean;
@@ -113,6 +115,23 @@ async function save(published?: boolean) {
     );
     if (wasEditing) contentOpen.value = false;
     toast(published === true ? '已公開，乘客可以打開了' : published === false ? '已改為不公開' : '已儲存');
+  } catch (e) {
+    error.value = errorText(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+/**
+ * 讓搜尋引擎找到我: saved at once, apart from the page's words. Off by default: the page shows the
+ * driver's phones, and being found by strangers is the driver's choice.
+ */
+async function setSearchable(searchable: boolean) {
+  error.value = '';
+  busy.value = true;
+  try {
+    fill(await api<MyPage>('PUT', '/me/profile-page', { searchable }));
+    toast(searchable ? '已打開，搜尋引擎之後可以找到你的名片頁' : '已關閉，搜尋引擎不會再收錄你的名片頁');
   } catch (e) {
     error.value = errorText(e);
   } finally {
@@ -311,6 +330,28 @@ onMounted(async () => {
         <p class="hint">{{ t('只放一張自己車輛的照片，不要拍到他人車牌；要換請先刪除現有的。你接單後，乘客在確認頁也看得到，方便認車。') }}</p>
       </details>
 
+      <section class="card">
+        <label class="my-page__switch">
+          <span>
+            {{ t('讓 Google、百度找到我的名片頁') }}
+            <small>
+              {{
+                page.published
+                  ? t('打開後，名片頁的姓名、車型、語言和介紹可能出現在搜尋結果；電話不會放進搜尋結果。平台開放收錄後才生效，搜尋引擎收錄要幾天到幾星期。')
+                  : t('名片頁公開後才可以打開。')
+              }}
+            </small>
+          </span>
+          <input
+            class="switch"
+            type="checkbox"
+            :checked="page.searchable"
+            :disabled="busy || !page.published || Boolean(page.blocked)"
+            @change="setSearchable(($event.target as HTMLInputElement).checked)"
+          />
+        </label>
+      </section>
+
       <button v-if="!page.published" class="button block large" type="button" :disabled="busy || !page.hasDriverProfile || Boolean(page.blocked)" @click="save(true)">
         {{ t('儲存並公開') }}
       </button>
@@ -335,6 +376,26 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.my-page__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 48px;
+  font-weight: 600;
+}
+.my-page__switch > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.my-page__switch small {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+  font-weight: 400;
+  line-height: 1.5;
+}
 .my-page__name-card {
   margin-top: var(--space-md);
 }

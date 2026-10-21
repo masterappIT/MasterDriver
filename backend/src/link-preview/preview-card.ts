@@ -85,7 +85,8 @@ export const SQUARE = 600;
 const SQUARE_BAND = 84;
 export const SQUARE_PHOTO_HEIGHT = SQUARE - SQUARE_BAND;
 
-const escape = (text: string) =>
+/** Text made safe for HTML and XML: also used by the search-engine pages and the sitemap. */
+export const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** The preview tags themselves, one per line. */
@@ -103,7 +104,7 @@ export function previewTags(meta: PreviewMeta): string[] {
     ['name', 'twitter:card', meta.square ? 'summary' : 'summary_large_image'],
     ['name', 'description', meta.description],
   ];
-  return tags.map(([attribute, key, value]) => `<meta ${attribute}="${key}" content="${escape(value)}" />`);
+  return tags.map(([attribute, key, value]) => `<meta ${attribute}="${key}" content="${escapeHtml(value)}" />`);
 }
 
 /** The page a link-preview robot reads: the tags and nothing else. People are never sent here. */
@@ -111,10 +112,10 @@ export function previewHtml(meta: PreviewMeta): string {
   return [
     '<!doctype html>',
     '<html lang="zh-Hant"><head><meta charset="utf-8" />',
-    `<title>${escape(meta.title)}</title>`,
+    `<title>${escapeHtml(meta.title)}</title>`,
     ...previewTags(meta),
     '<meta name="robots" content="noindex, nofollow" />',
-    `</head><body><a href="${escape(meta.url)}">${escape(meta.title)}</a></body></html>`,
+    `</head><body><a href="${escapeHtml(meta.url)}">${escapeHtml(meta.title)}</a></body></html>`,
   ].join('\n');
 }
 
@@ -167,7 +168,7 @@ export function cardSvg(card: CardData): string {
   const left = PHOTO_WIDTH + 44;
   const column = CARD_WIDTH - left - 44;
   const text = (content: string, x: number, y: number, size: number, weight: number, fill: string, max = column - (x - left), anchor = 'start') =>
-    `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" fill="${fill}">${escape(fit(content, size, max))}</text>`;
+    `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${FONT}" font-size="${size}" font-weight="${weight}" fill="${fill}">${escapeHtml(fit(content, size, max))}</text>`;
   const pill = (label: string, x: number, y: number, size: number, fill: string, ink: string) => {
     const width = textWidth(label, size) + size * 1.3;
     return { width, svg: `<rect x="${x}" y="${y}" width="${width}" height="${size * 1.9}" rx="${size * 0.95}" fill="${fill}" />${text(label, x + size * 0.65, y + size * 1.32, size, 700, ink, width)}` };
@@ -254,7 +255,7 @@ export function cardSvg(card: CardData): string {
   if (card.photo) {
     frame.push(`<image href="${card.photo}" x="0" y="${BAND}" width="${PHOTO_WIDTH}" height="${PHOTO_HEIGHT}" preserveAspectRatio="xMidYMid meet" />`);
   } else {
-    const initial = escape([...card.name.trim()][0] ?? '師');
+    const initial = escapeHtml([...card.name.trim()][0] ?? '師');
     frame.push(
       `<circle cx="${PHOTO_WIDTH / 2}" cy="${CARD_HEIGHT / 2}" r="132" fill="#ffffff" fill-opacity="0.16" stroke="#ffffff" stroke-opacity="0.6" stroke-width="4" />`,
       `<text x="${PHOTO_WIDTH / 2}" y="${CARD_HEIGHT / 2 + 52}" text-anchor="middle" font-family="${FONT}" font-size="150" font-weight="800" fill="#ffffff">${initial}</text>`,
@@ -295,7 +296,7 @@ export function squareSvg(square: SquareData): string {
   const mark = (x: number, y: number, scale: number) =>
     `<g transform="translate(${x} ${y}) scale(${scale})">${MARK_PATHS.map((d) => `<path d="${d}" fill="#fff" />`).join('')}</g>`;
   const label = (content: string, x: number, y: number, size: number, weight: number, fill: string, max = SQUARE - 40) =>
-    `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="${size}" font-weight="${weight}" fill="${fill}" letter-spacing="${size * 0.06}">${escape(fit(content, size * 1.06, max))}</text>`;
+    `<text x="${x}" y="${y}" text-anchor="middle" font-family="${FONT}" font-size="${size}" font-weight="${weight}" fill="${fill}" letter-spacing="${size * 0.06}">${escapeHtml(fit(content, size * 1.06, max))}</text>`;
   const body: string[] = [];
   if (square.kind === 'driver') {
     // A thin brand band, then the car whole, or the initial.
@@ -308,7 +309,7 @@ export function squareSvg(square: SquareData): string {
       const cy = SQUARE_BAND + SQUARE_PHOTO_HEIGHT / 2;
       body.push(
         `<circle cx="${SQUARE / 2}" cy="${cy}" r="160" fill="#ffffff" fill-opacity="0.16" stroke="#ffffff" stroke-opacity="0.6" stroke-width="6" />`,
-        `<text x="${SQUARE / 2}" y="${cy + 66}" text-anchor="middle" font-family="${FONT}" font-size="190" font-weight="800" fill="#ffffff">${escape([...square.name.trim()][0] ?? '師')}</text>`,
+        `<text x="${SQUARE / 2}" y="${cy + 66}" text-anchor="middle" font-family="${FONT}" font-size="190" font-weight="800" fill="#ffffff">${escapeHtml([...square.name.trim()][0] ?? '師')}</text>`,
       );
     }
   } else if (square.kind === 'order') {

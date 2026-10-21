@@ -27,7 +27,7 @@ const PLATE_KIND = { SINGLE: '單牌', DUAL: '兩地牌', TRIPLE: '三地牌' } 
  * The home page, and any link that has no card of its own: the same words as web/index.html,
  * whose tags every other page carries. Robots get the wide picture, a visitor's tags the square.
  */
-const HOME = {
+export const HOME = {
   title: 'MasterDriver 跨境師傅幫｜跨境司機派單、接單、獲客',
   description: '一條連結派單到多個群，司機搶單；名片頁讓客人直接約你。免費。',
   image: '/share-card.jpg',
@@ -37,7 +37,7 @@ const HOME = {
  * 名片頁 has no routes or regions since 2026-10-14, so the default title names only the driver.
  * Short enough for the two lines a WeChat card gives a title (2026-10-15).
  */
-const PROFILE_TITLE = '{司機}｜跨境司機名片';
+export const PROFILE_TITLE = '{司機}｜跨境司機名片';
 const CODE = /^[A-Za-z0-9_-]{4,64}$/;
 const CACHE_MS = 10 * 60 * 1000;
 const CACHE_MAX = 200;
