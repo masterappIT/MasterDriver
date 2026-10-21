@@ -114,6 +114,8 @@ const trip = ref<PassengerView | null>(null);
 const error = ref('');
 const busy = ref(false);
 const ended = ref<HTMLElement | null>(null);
+/** Who arranged the trip, by name: the one the fare goes to. */
+const arranger = computed(() => trip.value?.dispatcherName ?? '為你安排的人');
 
 async function load() {
   try {
@@ -320,8 +322,10 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
+      <!-- The fare goes to whoever arranged the trip, named, never "the driver": the passenger
+           would take that for the driver above. -->
       <p v-if="trip.status !== 'COMPLETED'" class="confirm-page__note">
-        {{ trip.payment ? t('車費直接付給為你安排的司機，平台不經手。付款後請告訴對方。') : t('車費由你和司機直接約定和支付，平台不收款。') }}
+        {{ trip.payment ? t(`車費付給 ${arranger}，平台不經手。付款後請告訴 ${arranger}。`) : t(`車費按你和 ${arranger} 的約定支付，平台不收款。`) }}
       </p>
 
       <footer class="confirm-page__footer">
