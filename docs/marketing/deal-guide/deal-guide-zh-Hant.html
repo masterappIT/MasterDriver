@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>特價車教學圖</title>
+<style>
+  /* 特價車 tutorial for drivers, 1080×1920 (9:16): what it is for (a driver's own route, opened as orders), then the steps from posting one to
+     closing it, with the one place the way splits (doing a booking yourself or sending it to a group).
+     Wording follows the app's own screens (web/src/pages/Deal*.vue); colours from docs/DESIGN.md and
+     the update-notice picture. deal-guide-zh-Hans.html is made from this file (README.md here). */
+  :root {
+    --text: #142033;
+    --text-2: #556579;
+    --muted: #8f9db0;
+    --line: #d9e2ee;
+    --primary: #1f5fd6;
+    --primary-dark: #1749a8;
+    --tint: #e5edfb;
+    --teal: #0e9f9a;
+    --teal-tint: #dff4f2;
+    --gold-ink: #8a5a00;
+    --gold-tint: #fff3d6;
+    --red: #d64545;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1920px; overflow: hidden; }
+  body {
+    position: relative;
+    background: #edf2f7;
+    font-family: 'PingFang TC', 'PingFang HK', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+    color: var(--text);
+  }
+
+  /* The blue panel across the top, curving at its foot, as in the update notice. */
+  .panel {
+    position: absolute; inset: 0 0 auto 0; height: 500px;
+    background:
+      radial-gradient(560px 460px at 100% 0%, rgba(14, 159, 154, 0.5), transparent 70%),
+      linear-gradient(160deg, #2a6be6 0%, #1f5fd6 45%, #1749a8 100%);
+    border-radius: 0 0 50% 50% / 0 0 80px 80px;
+  }
+  .content { position: relative; padding: 52px 60px 0; }
+
+  .brand { display: flex; align-items: center; gap: 18px; color: #fff; }
+  .brand__mark { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: rgba(255, 255, 255, 0.18); }
+  .brand__name { font-size: 30px; font-weight: 700; letter-spacing: 1px; }
+  .brand__tag {
+    margin-left: auto; padding: 10px 24px; border-radius: 100px;
+    background: #ffd447; color: #5a3b00; font-size: 26px; font-weight: 800;
+  }
+
+  h1 { margin-top: 26px; color: #fff; font-size: 92px; line-height: 1.1; font-weight: 800; letter-spacing: 4px; }
+  h1 small { display: inline-block; margin-left: 20px; font-size: 40px; font-weight: 700; letter-spacing: 1px; color: #ffd447; vertical-align: 12px; }
+  .lede { margin-top: 12px; color: rgba(255, 255, 255, 0.92); font-size: 32px; line-height: 1.5; font-weight: 500; }
+
+  /* Three points about what it is, on white cards across the panel's foot. */
+  .points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
+  .point {
+    background: #fff; border-radius: 24px; padding: 20px 22px;
+    box-shadow: 0 14px 34px rgba(10, 30, 70, 0.14);
+  }
+  .point strong { display: block; font-size: 31px; font-weight: 800; color: var(--primary-dark); }
+  .point span { display: block; margin-top: 6px; font-size: 24px; line-height: 1.4; color: var(--text-2); }
+
+  .section { margin-top: 32px; display: flex; align-items: baseline; gap: 16px; }
+  .section h2 { font-size: 40px; font-weight: 800; }
+  .section span { font-size: 25px; color: var(--muted); }
+
+  /* The steps: a numbered dot on a line, one card each; arrows between them. */
+  .flow { margin-top: 18px; position: relative; }
+  .step { position: relative; display: flex; gap: 20px; }
+  .step + .step { margin-top: 12px; }
+  .dot {
+    flex: none; width: 56px; height: 56px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--primary); color: #fff; font-size: 28px; font-weight: 800;
+    box-shadow: 0 0 0 8px #edf2f7;
+    position: relative; z-index: 1;
+  }
+  .flow::before {
+    content: ''; position: absolute; left: 27px; top: 40px; bottom: 60px; width: 3px;
+    background: repeating-linear-gradient(180deg, #9db6e6 0 10px, transparent 10px 18px);
+  }
+  .card {
+    flex: 1; background: #fff; border-radius: 24px; padding: 18px 26px;
+  }
+  .card h3 { font-size: 32px; font-weight: 800; }
+  .card p { margin-top: 4px; font-size: 24px; line-height: 1.5; color: var(--text-2); }
+  .card b { color: var(--text); font-weight: 700; }
+  .ui {
+    display: inline-block; padding: 1px 12px; border-radius: 10px;
+    background: var(--tint); color: var(--primary-dark); font-weight: 700;
+  }
+
+  /* Step 4 splits in two. */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 12px; }
+  .way { border-radius: 18px; padding: 14px 20px; }
+  .way strong { display: block; font-size: 26px; font-weight: 800; }
+  .way span { display: block; margin-top: 4px; font-size: 22px; line-height: 1.4; }
+  .way--self { background: var(--teal-tint); }
+  .way--self strong { color: #0a7470; }
+  .way--self span { color: #2f5e5b; }
+  .way--group { background: var(--gold-tint); }
+  .way--group strong { color: var(--gold-ink); }
+  .way--group span { color: #6d5427; }
+
+  /* Small print at the foot. */
+  .tips {
+    margin-top: 22px; background: #fff; border-radius: 24px; padding: 18px 26px;
+    border: 2px dashed var(--line);
+  }
+  .tips h3 { font-size: 27px; font-weight: 800; color: var(--primary-dark); }
+  .tips ul { list-style: none; margin-top: 6px; }
+  .tips li { position: relative; padding-left: 26px; font-size: 23px; line-height: 1.55; color: var(--text-2); }
+  .tips li::before { content: ''; position: absolute; left: 4px; top: 14px; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); }
+  .foot { margin-top: 16px; text-align: center; font-size: 23px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="panel"></div>
+  <div class="content">
+    <div class="brand">
+      <div class="brand__mark">
+        <svg width="42" height="32" viewBox="0 0 50 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M33.9404 28.3711V29.5554L34.919 30.1218L35.949 29.5554V28.3711L34.919 27.8047L33.9404 28.3711Z" fill="white"/>
+          <path d="M30.1289 0C23.6396 0 17.9743 3.24391 14.5237 8.13551C6.43779 8.34147 0 14.9323 0 23.0678C0 31.3062 6.6953 38 14.9357 38C15.0387 38 15.1417 38 15.2447 38H29.9743C30.0258 38 30.0774 38 30.1289 38C30.1804 38 30.2319 38 30.2834 38H30.4379C40.7898 37.8455 49.1332 29.4011 49.1332 19C49.1332 8.49595 40.6353 0 30.1289 0ZM13.0816 27.8049L8.9614 26.5176L17.2533 12.3577L21.3735 13.645L13.0816 27.8049ZM16.2232 26.5176L24.5151 12.3577L28.6353 13.645L20.3434 27.8049L16.2232 26.5176ZM37.6482 30.5339L34.9186 32.0786L32.1889 30.5339V27.393L33.7855 26.4661V17.0949L27.5537 27.8049L23.4336 26.5176L31.7254 12.3577L35.8456 13.645H36.1031V26.5176L37.6997 27.4444V30.5339H37.6482Z" fill="white"/>
+        </svg>
+      </div>
+      <span class="brand__name">MasterDriver 跨境師傅幫</span>
+      <span class="brand__tag">新功能教學</span>
+    </div>
+
+    <h1>特價車<small>司機專屬路線</small></h1>
+    <p class="lede">開一條你自己的路線，得到一條專屬連結，<br>乘客直接向你下單，不經任何中介。</p>
+
+    <div class="points">
+      <div class="point"><strong>路線你開</strong><span>起點、終點<br>時間或時段自己定</span></div>
+      <div class="point"><strong>價錢你定</strong><span>每組一個包車價<br>可加劃線原價</span></div>
+      <div class="point"><strong>專屬連結</strong><span>司機乘客直接對接<br>車費直接付給你</span></div>
+    </div>
+
+    <div class="section"><h2>怎樣用</h2><span>五步，從發出到關閉</span></div>
+
+    <div class="flow">
+      <div class="step">
+        <div class="dot">1</div>
+        <div class="card">
+          <h3>發特價車</h3>
+          <p>首頁按 <span class="ui">特價車</span> → <span class="ui">發特價車</span>，填起點、終點、出發時間或一個時段（最長 7 天），和<b>包車特價（每組）</b>。</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="dot">2</div>
+        <div class="card">
+          <h3>發專屬連結給乘客</h3>
+          <p>複製文字和你的專屬連結，發到微信、WhatsApp；朋友圈、小紅書用 <span class="ui">做成分享圖</span>，乘客掃碼就能預約。</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="dot">3</div>
+        <div class="card">
+          <h3>乘客預約</h3>
+          <p>乘客打開連結，不用註冊，在時段內選時間、留電話就下單。多少組都可以訂，首頁會顯示<b>幾組特價車預約等你處理</b>。</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="dot">4</div>
+        <div class="card">
+          <h3>每組各自成單</h3>
+          <p>在特價車頁打開一組預約，選一個做法，不影響其他組：</p>
+          <div class="split">
+            <div class="way way--self">
+              <strong>這單我自己做</strong>
+              <span>不算出單額度<br>不收平台服務費</span>
+            </div>
+            <div class="way way--group">
+              <strong>派給其他司機</strong>
+              <span>坐不下、趕不及時<br>放到群裡給別的司機</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="dot">5</div>
+        <div class="card">
+          <h3>夠了就關閉</h3>
+          <p>按 <span class="ui">關閉，不再接預約</span>。已送出的預約照樣留著，可以成單或婉拒。</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tips">
+      <h3>小提示</h3>
+      <ul>
+        <li>「最多接幾組」選填：接滿自動停止，有人取消名額會放回去</li>
+        <li>確認方式可選「自動接受」：乘客送出就算訂到</li>
+        <li>兩組時間相差 2 小時內會用紅字提醒你，一部車可能趕不及</li>
+      </ul>
+    </div>
+
+    <p class="foot">平台不會把你的特價車列給其他人看，連結只由你自己發</p>
+  </div>
+</body>
+</html>
