@@ -111,6 +111,9 @@ const form = reactive({
   flightNo: '',
   /** 往返: the way back's flight; the way there's is flightNo. */
   returnFlightNo: '',
+  /** 往返: where the way back leaves from and goes to; the way there reversed until changed. */
+  returnOrigin: '',
+  returnDestination: '',
   /** 先給常用司機: the dispatcher's 常用司機 have the first 30 minutes. */
   favoritesFirst: false,
   /** 即時單: leaves now; no time to pick, the API takes the moment it is put out. */
@@ -138,6 +141,18 @@ function setMode(mode: 'direct' | 'roundTrip' | 'transfer') {
   form.selfDriveLeg = null;
 }
 
+/**
+ * 往返: the way back follows the way there reversed while the dispatcher has not changed it (or it
+ * is empty); once changed to another place it stays.
+ */
+watch(
+  () => [form.origin, form.destination] as const,
+  ([origin, destination], [beforeOrigin, beforeDestination]) => {
+    if (!form.returnOrigin || form.returnOrigin === beforeDestination) form.returnOrigin = destination;
+    if (!form.returnDestination || form.returnDestination === beforeOrigin) form.returnDestination = origin;
+  },
+);
+
 /** An hour after a time in the form's local format. */
 const hourAfter = (local: string) => toLocalInput(new Date(new Date(fromLocalInput(local)).getTime() + 60 * 60 * 1000));
 
@@ -163,7 +178,11 @@ const favoritesOffered = computed(
     new Date(fromLocalInput(form.pickupAt)).getTime() - Date.now() > 60 * 60_000,
 );
 /** An airport at either end (or the 接駁位置): the flight number helps the driver at pickup. */
-const airportTrip = computed(() => [form.origin, form.destination, form.transfer ? form.transferPlace : ''].some((place) => /機場|机场|airport/i.test(place)));
+const airportTrip = computed(() =>
+  [form.origin, form.destination, form.transfer ? form.transferPlace : '', ...(form.roundTrip ? [form.returnOrigin, form.returnDestination] : [])].some((place) =>
+    /機場|机场|airport/i.test(place),
+  ),
+);
 /** How many 收款方式 the dispatcher has set; with none there is nothing to show the passenger. */
 const paymentMethodCount = ref<number | null>(null);
 
@@ -385,6 +404,8 @@ async function submit() {
             pickupAt: fromLocalInput(form.secondPickupAt),
             driverPrice: price(form.secondDriverPrice, form.secondCurrency),
             flightNo: airportTrip.value && form.returnFlightNo.trim() ? form.returnFlightNo.trim() : undefined,
+            origin: form.returnOrigin.trim() || undefined,
+            destination: form.returnDestination.trim() || undefined,
             sameDriver: form.sameDriver,
             selfDriveLeg: form.sameDriver ? null : form.selfDriveLeg,
           }
@@ -416,6 +437,8 @@ async function loadBooking() {
       transfer: boolean;
       roundTrip: boolean;
       returnPickupAt: string | null;
+      returnOrigin: string | null;
+      returnDestination: string | null;
       passengerName: string | null;
       passengerContact: string;
       notes: string | null;
@@ -431,7 +454,14 @@ async function loadBooking() {
       transfer: booking.transfer,
       // Or for 往返, with the time to be picked up for the way back.
       roundTrip: booking.roundTrip,
-      ...(booking.roundTrip ? { secondPickupAt: booking.returnPickupAt ? toLocalInput(new Date(booking.returnPickupAt)) : '' } : {}),
+      ...(booking.roundTrip
+        ? {
+            secondPickupAt: booking.returnPickupAt ? toLocalInput(new Date(booking.returnPickupAt)) : '',
+            // The passenger may come back from or to somewhere else; else the way there reversed.
+            returnOrigin: booking.returnOrigin ?? booking.destination,
+            returnDestination: booking.returnDestination ?? booking.origin,
+          }
+        : {}),
       passengerName: booking.passengerName ?? '',
       notes: booking.notes ?? '',
       ...(booking.quote
@@ -613,7 +643,7 @@ onMounted(async () => {
       </p>
       <template v-if="form.roundTrip">
         <p class="hint new-order__explain">
-          {{ t('一張單兩程：去程到目的地，回程原路回來。群裡貼一條訊息，乘客只看到一個價格。') }}
+          {{ t('一張單兩程：回程預設原路回來，地點不同可以改。群裡貼一條訊息，乘客只看到一個價格。') }}
         </p>
         <div class="segment segment--block new-order__mode new-order__drivers" role="group" :aria-label="t('誰開回程')">
           <button type="button" :aria-pressed="form.sameDriver" @click="setSameDriver(true)">{{ t('同一位司機來回') }}</button>
@@ -672,9 +702,21 @@ onMounted(async () => {
         </li>
       </ol>
       <label v-if="twoLegs" class="line-field new-order__second-time">
-        <span>{{ form.roundTrip ? t('回程出發時間（從目的地回出發地）') : t('第 2 段出發時間（在接駁位置換車）') }}</span>
+        <span>{{ form.roundTrip ? t('回程出發時間（香港時間）') : t('第 2 段出發時間（在接駁位置換車）') }}</span>
         <input v-model="form.secondPickupAt" class="line-input new-order__time" type="datetime-local" :min="form.immediate ? undefined : form.pickupAt" required />
       </label>
+      <!-- 往返: the way back, the way there reversed until the dispatcher names other places. -->
+      <template v-if="form.roundTrip">
+        <span class="section-label new-order__return-label">{{ t('回程路線（預設原路，可改）') }}</span>
+        <ol class="route-inputs new-order__return-route">
+          <li class="route-inputs__stop route-inputs__stop--origin">
+            <input v-model="form.returnOrigin" class="line-input" maxlength="120" :aria-label="t('回程上車地點')" :placeholder="t('回程從哪裡上車')" required />
+          </li>
+          <li class="route-inputs__stop route-inputs__stop--destination">
+            <input v-model="form.returnDestination" class="line-input" maxlength="120" :aria-label="t('回程目的地')" :placeholder="t('回程去哪裡')" required />
+          </li>
+        </ol>
+      </template>
       <p
         v-if="twoLegs && form.secondPickupAt && (form.immediate ? form.secondPickupAt < toLocalInput(new Date()) : form.pickupAt && form.secondPickupAt < form.pickupAt)"
         class="hint new-order__time-error"
@@ -962,6 +1004,13 @@ onMounted(async () => {
 }
 .new-order__second-time {
   margin-top: var(--space-md);
+}
+.new-order__return-label {
+  display: block;
+  margin-top: var(--space-md);
+}
+.new-order__return-route {
+  margin-top: var(--space-xs);
 }
 .new-order__leg-label {
   flex: none;

@@ -86,6 +86,10 @@ test('a 往返 order holds its way back; 同一位司機來回 by default, never
   assert.equal(parsed.roundTrip?.sameDriver, true);
   assert.equal(parsed.flightNo, 'CX101');
   assert.equal(parsed.roundTrip?.flightNo, 'CX102', 'the way back has its own flight');
+  assert.equal(parsed.roundTrip?.origin, undefined, 'no places: the way there reversed');
+  const elsewhere = createOrderSchema.parse({ ...order, roundTrip: { ...back, origin: ' 福田口岸 ', destination: '' } });
+  assert.equal(elsewhere.roundTrip?.origin, '福田口岸');
+  assert.equal(elsewhere.roundTrip?.destination, undefined);
   assert.equal(parsed.roundTrip?.selfDriveLeg, null);
   // 同一位司機來回 with 這單我自己做: both legs the dispatcher's.
   assert.equal(createOrderSchema.safeParse({ ...order, roundTrip: back, selfDrive: true }).success, true);
@@ -119,8 +123,13 @@ test('a 名片頁 booking may ask for 往返 with a way back after the way there
   assert.equal(issue({ ...booking, roundTrip: true }), 'RETURN_TIME_REQUIRED');
   assert.equal(issue({ ...booking, roundTrip: true, returnPickupAt: '2026-10-20T09:00:00+08:00' }), 'RETURN_BEFORE_PICKUP');
   assert.equal(issue({ ...booking, roundTrip: true, transfer: true, returnPickupAt: '2026-10-20T18:00:00+08:00' }), 'ONE_JOURNEY_KIND');
-  // A way back sent without 往返 is dropped.
-  assert.equal(bookingCreateSchema.parse({ ...booking, returnPickupAt: '2026-10-20T18:00:00+08:00' }).returnPickupAt, undefined);
+  // A way back sent without 往返 is dropped, its places too.
+  const oneWay = bookingCreateSchema.parse({ ...booking, returnPickupAt: '2026-10-20T18:00:00+08:00', returnOrigin: '福田口岸' });
+  assert.equal(oneWay.returnPickupAt, undefined);
+  assert.equal(oneWay.returnOrigin, undefined);
+  const elsewhere = bookingCreateSchema.parse({ ...booking, roundTrip: true, returnPickupAt: '2026-10-20T18:00:00+08:00', returnOrigin: ' 福田口岸 ', returnDestination: '' });
+  assert.equal(elsewhere.returnOrigin, '福田口岸');
+  assert.equal(elsewhere.returnDestination, undefined, 'empty means where the trip started');
 });
 
 test('order input requires a time zone on the pickup time', () => {

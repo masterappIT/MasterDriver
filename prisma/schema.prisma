@@ -1062,6 +1062,10 @@ model BookingRequest {
   /// 往返 (there and back) rather than 直達, as the passenger asked; returnPickupAt is the way back.
   roundTrip        Boolean       @default(false)
   returnPickupAt   DateTime?
+  /// 往返: where the way back leaves from and goes to, when not the way there reversed; null
+  /// means reversed.
+  returnOrigin     String?
+  returnDestination String?
   passengerName    String?
   /// A phone with its country code since 2026-10-14; older requests may hold any text.
   passengerContact String

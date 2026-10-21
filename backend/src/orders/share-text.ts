@@ -184,7 +184,8 @@ export function roundTripShareText(legs: ShareLeg[], dispatchUrl: string) {
   });
   const total = sameDriver ? roundTripTotal(legs) : null;
   const body = [
-    `${first.origin} ⇄ ${first.destination}`,
+    // The way back the way there reversed reads A ⇄ B; other places are in the leg lines only.
+    isReversed(legs) ? `${first.origin} ⇄ ${first.destination}` : null,
     ...legLines,
     sameDriver ? (total ? `同一位司機來回，來回共 ${total}` : '同一位司機來回') : '可分開接，選一程搶',
     plateRequirement(first.requiredPlates),
@@ -194,6 +195,11 @@ export function roundTripShareText(legs: ShareLeg[], dispatchUrl: string) {
     `${sameDriver ? '搶單（來回）' : '搶單（選一程）'}：${dispatchUrl}`,
   ].filter((line): line is string => line !== null);
   return { wechat: [heading, ...body].join('\n'), whatsapp: [`*${heading}*`, ...body].join('\n') };
+}
+
+/** 往返: the way back is the way there reversed (A to B, then B to A). */
+export function isReversed(legs: Pick<ShareOrder, 'origin' | 'destination'>[]) {
+  return legs.length === 2 && legs[1].origin === legs[0].destination && legs[1].destination === legs[0].origin;
 }
 
 /** What a claimed leg is, after its route: （接駁第 1 段）, （回程）, or （來回） for both legs at once. */

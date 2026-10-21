@@ -355,8 +355,9 @@ function editTrip() {
   if (!o) return;
   Object.assign(tripForm, {
     pickupAt: toLocalInput(new Date(o.pickupAt)),
-    origin: o.journey?.origin ?? o.origin,
-    destination: o.journey?.destination ?? o.destination,
+    // 往返: each leg's places are its own and change on that leg only; 接駁: the trip's ends.
+    origin: o.journey && o.journey.kind !== 'ROUND_TRIP' ? o.journey.origin : o.origin,
+    destination: o.journey && o.journey.kind !== 'ROUND_TRIP' ? o.journey.destination : o.destination,
     transferPlace: o.journey?.transferPlaces[0] ?? '',
     passengers: String(o.passengers),
     luggage: String(o.luggage),
@@ -1213,12 +1214,15 @@ watch(id, () => {
           <p v-if="order.status === 'ASSIGNED' || order.journey?.legs.some((leg) => leg.status === 'ASSIGNED' && !leg.selfDrive)" class="hint">
             {{ t('已有司機接了：改了之後會通知他確認。') }}
           </p>
+          <p v-if="roundTrip && order.journey" class="hint">
+            {{ t(`這裡只改${legName(order.journey.kind, order.journey.legIndex)}的時間、地點和航班；另一程請在上面的行程點進去修改。人數、行李、車型和備註兩程一起改。`) }}
+          </p>
           <label class="line-field">
             <span>{{ order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}出發時間（香港時間）`) : t('出發時間（香港時間）') }}</span>
             <input v-model="tripForm.pickupAt" class="line-input" type="datetime-local" required />
           </label>
           <label class="line-field">
-            <span>{{ t('出發地') }}</span>
+            <span>{{ roundTrip && order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}出發地`) : t('出發地') }}</span>
             <input v-model="tripForm.origin" class="line-input" maxlength="120" required />
           </label>
           <label v-if="order.journey && !roundTrip" class="line-field">
@@ -1226,7 +1230,7 @@ watch(id, () => {
             <input v-model="tripForm.transferPlace" class="line-input" maxlength="120" required />
           </label>
           <label class="line-field">
-            <span>{{ t('目的地') }}</span>
+            <span>{{ roundTrip && order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}目的地`) : t('目的地') }}</span>
             <input v-model="tripForm.destination" class="line-input" maxlength="120" required />
           </label>
           <div class="detail__trip-load">

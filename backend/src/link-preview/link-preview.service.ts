@@ -6,7 +6,7 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { PrismaService } from '../prisma.service';
 import { renderSeoTemplate } from '../site/seo-rules';
 import { formatPickup } from '../common/hong-kong-time';
-import { formatPrice, roundTripTotal } from '../orders/share-text';
+import { formatPrice, isReversed, roundTripTotal } from '../orders/share-text';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import {
   PHOTO_HEIGHT,
@@ -320,8 +320,11 @@ export class LinkPreviewService {
       roundTrip && order.sameDriver ? roundTripTotal(legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId }))) : null;
     const badge = first.immediate ? '即時' : '有單';
     const name = order.dispatcher.profile?.name;
+    // 往返 back the way it went reads A⇄B; back from or to somewhere else, both legs' places.
     const title = roundTrip
-      ? `【${badge}・往返】${first.origin}⇄${first.destination}`
+      ? isReversed(legs)
+        ? `【${badge}・往返】${first.origin}⇄${first.destination}`
+        : `【${badge}・往返】${first.origin}→${first.destination}・回程 ${legs[1].origin}→${legs[1].destination}`
       : `【${badge}${transfer ? '・接駁' : ''}】${first.origin}→${legs[legs.length - 1].destination}`;
     const facts = [
       first.immediate ? '現在出發' : formatPickup(first.pickupAt),

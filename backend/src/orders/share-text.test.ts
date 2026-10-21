@@ -174,6 +174,10 @@ test('a 往返 is one text with both legs, their flights, prices and who takes t
   assert.ok(!roundTripShareText([there, { ...back, driverCurrency: 'CNY' as const }], 'https://x.test/o/abc').wechat.includes('來回共'));
   assert.ok(apart.endsWith('搶單（選一程）：https://x.test/o/abc'));
   assert.ok(!apart.includes('接駁'));
+  // Back from somewhere else: no A ⇄ B line, each leg says its own places.
+  const elsewhere = roundTripShareText([there, { ...back, origin: '福田口岸' }], 'https://x.test/o/abc').wechat;
+  assert.ok(!elsewhere.includes('⇄'));
+  assert.ok(elsewhere.includes('回程：10/15（四）20:00 福田口岸 → 深圳灣口岸'));
 
   const driver = { name: '李師傅', hkPlate: 'AB1234', macauPlate: null, mainlandPlate: null };
   // 同一位司機來回: one job, said with when the way back leaves, from either leg.

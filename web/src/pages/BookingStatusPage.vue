@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
-import { BOOKING_STATUS, bookingOpen, passengerTone, type Booking } from '../booking';
+import { BOOKING_STATUS, bookingOpen, returnRoute, passengerTone, type Booking } from '../booking';
 import PoolRadar from '../components/PoolRadar.vue';
 import { copyText } from '../device';
 import { loadLine, money, pickup } from '../format';
@@ -99,8 +99,11 @@ onBeforeUnmount(() => {
       <section class="card booking__trip">
         <span class="booking__status" :class="`booking__status--${passengerTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].passenger) }}</span>
         <strong class="booking__time">{{ pickup(booking.pickupAt) }}</strong>
-        <div class="booking__route">{{ t(`${booking.origin} ${booking.roundTrip ? '往返' : '至'} ${booking.destination}`) }}</div>
-        <p v-if="booking.roundTrip && booking.returnPickupAt" class="booking__load">{{ t(`回程 ${pickup(booking.returnPickupAt)}`) }}</p>
+        <div class="booking__route">{{ t(`${booking.origin} ${booking.roundTrip && !returnRoute(booking) ? '往返' : '至'} ${booking.destination}`) }}</div>
+        <!-- 往返: when and, if not the way there reversed, from where to where the passenger comes back. -->
+        <p v-if="booking.roundTrip && booking.returnPickupAt" class="booking__load">
+          {{ t([`回程 ${pickup(booking.returnPickupAt)}`, returnRoute(booking)].filter(Boolean).join('・')) }}
+        </p>
         <p class="booking__load">
           {{ t(loadLine(booking.passengers, booking.luggage)) }}
           <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span>

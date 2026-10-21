@@ -103,9 +103,20 @@ export const legName = (kind: Journey['kind'] | undefined, legIndex: number) =>
 /** What the trip is, as its tag reads: 往返, or 接駁（中途換車）. */
 export const journeyTag = (journey: Pick<Journey, 'kind'>) => (journey.kind === 'ROUND_TRIP' ? '往返' : '接駁（中途換車）');
 
-/** The whole trip's route: "香港 往返 深圳" or "香港 至 澳門". */
-export const journeyRoute = (journey: Pick<Journey, 'kind' | 'origin' | 'destination'>) =>
-  journey.kind === 'ROUND_TRIP' ? `${journey.origin} 往返 ${journey.destination}` : `${journey.origin} 至 ${journey.destination}`;
+/** 往返: the way back is the way there reversed (A to B, then B to A). */
+export const isReversed = (legs: Pick<JourneyLeg, 'origin' | 'destination'>[]) =>
+  legs.length === 2 && legs[1].origin === legs[0].destination && legs[1].destination === legs[0].origin;
+
+/**
+ * The whole trip's route: "香港 往返 深圳", or with a way back from or to elsewhere
+ * "香港 至 深圳，回程 福田 至 香港"; 接駁 "香港 至 澳門".
+ */
+export const journeyRoute = (journey: Pick<Journey, 'kind' | 'origin' | 'destination'> & { legs?: Pick<JourneyLeg, 'origin' | 'destination'>[] }) => {
+  if (journey.kind !== 'ROUND_TRIP') return `${journey.origin} 至 ${journey.destination}`;
+  const legs = journey.legs ?? [];
+  if (legs.length < 2 || isReversed(legs)) return `${journey.origin} 往返 ${journey.destination}`;
+  return `${legs[0].origin} 至 ${legs[0].destination}，回程 ${legs[1].origin} 至 ${legs[1].destination}`;
+};
 
 /**
  * 往返 同一位司機來回: what the one driver is paid for both legs, when every leg has a driver price

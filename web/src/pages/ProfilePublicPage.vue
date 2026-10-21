@@ -54,6 +54,10 @@ const form = reactive({
   /** 往返 (there and back) rather than 直達; returnPickupAt is the way back. */
   roundTrip: false,
   returnPickupAt: '',
+  /** 往返 back from or to somewhere else (選填); empty means the way there reversed. */
+  returnElsewhere: false,
+  returnOrigin: '',
+  returnDestination: '',
   passengerName: '',
   // A phone is required so the driver can always reach the passenger and make the trip an order.
   passengerCountry: '+852' as CountryCode,
@@ -101,6 +105,8 @@ async function submit() {
       transfer: form.transfer,
       roundTrip: form.roundTrip,
       returnPickupAt: form.roundTrip ? fromLocalInput(form.returnPickupAt) : undefined,
+      returnOrigin: form.roundTrip && form.returnElsewhere ? form.returnOrigin : undefined,
+      returnDestination: form.roundTrip && form.returnElsewhere ? form.returnDestination : undefined,
       passengerName: form.passengerName,
       passengerContact: formatPassengerPhone(form.passengerCountry, form.passengerPhone),
       passengerWechat: form.passengerWechat,
@@ -182,9 +188,9 @@ onBeforeUnmount(() => watcher?.disconnect());
         </div>
         <p v-if="form.transfer" class="hint profile__mode-hint">{{ t('中途換一次車，由兩位司機接送，你只付一個價錢。在哪裡換車由司機安排。') }}</p>
         <template v-if="form.roundTrip">
-          <p class="hint profile__mode-hint">{{ t('去程到目的地，回程原路回來，一個價錢。') }}</p>
+          <p class="hint profile__mode-hint">{{ t('去程到目的地，回程預設原路回來，一個價錢。') }}</p>
           <label class="line-field">
-            <span>{{ t('回程時間（從目的地回來，香港時間）') }}</span>
+            <span>{{ t('回程時間（香港時間）') }}</span>
             <input id="booking-return" v-model="form.returnPickupAt" class="line-input" type="datetime-local" :min="form.pickupAt" required />
           </label>
         </template>
@@ -196,6 +202,23 @@ onBeforeUnmount(() => watcher?.disconnect());
             <input v-model="form.destination" class="line-input" maxlength="120" :aria-label="t('目的地')" :placeholder="t('去哪裡，例如：深圳灣口岸')" required />
           </li>
         </ol>
+        <!-- 往返: the way back is the way there reversed unless the passenger says otherwise. -->
+        <template v-if="form.roundTrip">
+          <button v-if="!form.returnElsewhere" class="chip profile__return-toggle" type="button" @click="form.returnElsewhere = true">
+            {{ t('回程地點不同？') }}
+          </button>
+          <template v-else>
+            <span class="section-label">{{ t('回程路線（不填就是原路回來）') }}</span>
+            <ol class="route-inputs profile__route">
+              <li class="route-inputs__stop route-inputs__stop--origin">
+                <input v-model="form.returnOrigin" class="line-input" maxlength="120" :aria-label="t('回程上車地點')" :placeholder="form.destination ? t(`回程從哪裡上車，不填就是 ${form.destination}`) : t('回程從哪裡上車')" />
+              </li>
+              <li class="route-inputs__stop route-inputs__stop--destination">
+                <input v-model="form.returnDestination" class="line-input" maxlength="120" :aria-label="t('回程目的地')" :placeholder="form.origin ? t(`回程去哪裡，不填就是 ${form.origin}`) : t('回程去哪裡')" />
+              </li>
+            </ol>
+          </template>
+        </template>
         <div class="profile__load">
           <label class="line-field">
             <span>{{ t('人數') }}</span>
@@ -307,6 +330,9 @@ onBeforeUnmount(() => watcher?.disconnect());
   margin-bottom: var(--space-lg);
 }
 .profile__mode-hint {
+  margin: calc(var(--space-sm) * -1) 0 var(--space-lg);
+}
+.profile__return-toggle {
   margin: calc(var(--space-sm) * -1) 0 var(--space-lg);
 }
 .profile__route {

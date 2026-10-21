@@ -856,7 +856,7 @@ test('來回我自己做: both legs are the dispatcher\'s; nothing to claim', as
   assert.equal((await ctx.orders.claim(order.code, driver)).result, 'LOST');
 });
 
-test('the passenger sees both legs with their times and one price; 修改行程 keeps the way back the way there turned around', async () => {
+test('the passenger sees both legs with their times and one price; 修改行程 changes the places of that leg only', async () => {
   const dispatcher = await createDriver(ctx, '派單師傅');
   const driver = await createDriver(ctx, '來回師傅');
   await freeForAll();
@@ -878,9 +878,14 @@ test('the passenger sees both legs with their times and one price; 修改行程 
   );
 
   const legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  // Each leg's places are its own: the way back may leave from or go to somewhere else.
   await ctx.orders.updateTrip(dispatcher, legs[0].id, { origin: '香港機場', destination: '深圳灣' });
-  const after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
-  assert.deepEqual(after.map((leg) => `${leg.origin}→${leg.destination}`), ['香港機場→深圳灣', '深圳灣→香港機場']);
+  let after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(after.map((leg) => `${leg.origin}→${leg.destination}`), ['香港機場→深圳灣', '深圳→香港']);
+  await ctx.orders.updateTrip(dispatcher, legs[1].id, { origin: '福田口岸' });
+  after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(after.map((leg) => `${leg.origin}→${leg.destination}`), ['香港機場→深圳灣', '福田口岸→香港']);
+  assert.deepEqual(after.map((leg) => leg.changePendingAt !== null), [true, true], 'the driver of each changed leg is told');
   await rejectsWith(ctx.orders.updateTrip(dispatcher, legs[0].id, { transferPlace: '皇崗' }), 'NOT_A_TRANSFER');
 });
 
@@ -913,4 +918,21 @@ test('each leg of a 往返 has its own flight; 修改行程 changes the flight o
   await ctx.orders.claim(order.code, driver);
   const seen = await ctx.orders.getForParticipant(dispatcher, legs[1].id);
   assert.ok('share' in seen && seen.share.claimed?.startsWith('【已派出】10/15（四）14:30 香港 → 香港國際機場（來回，回程 10/15（四）20:00）'));
+});
+
+test('the way back may leave from and go to other places than the way there reversed', async () => {
+  const dispatcher = await createDriver(ctx);
+  await freeForAll();
+  const order = await ctx.orders.create(dispatcher, {
+    ...roundTripOrder,
+    roundTrip: { ...roundTripOrder.roundTrip, origin: '福田口岸', destination: '九龍塘' },
+  });
+  assert.deepEqual(order.journey?.legs.map((leg) => `${leg.origin}→${leg.destination}`), ['香港→深圳', '福田口岸→九龍塘']);
+  const text = order.share.dispatch.wechat;
+  assert.ok(!text.includes('⇄'), 'A ⇄ B only when the way back is the way there reversed');
+  assert.ok(text.includes('回程：10/15（四）20:00 福田口岸 → 九龍塘｜HK$500'));
+  // Without places, the way back is the way there reversed.
+  const reversed = await ctx.orders.create(dispatcher, roundTripOrder);
+  assert.deepEqual(reversed.journey?.legs.map((leg) => `${leg.origin}→${leg.destination}`), ['香港→深圳', '深圳→香港']);
+  assert.ok(reversed.share.dispatch.wechat.includes('香港 ⇄ 深圳'));
 });

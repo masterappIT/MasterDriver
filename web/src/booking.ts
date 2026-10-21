@@ -14,6 +14,9 @@ export interface Booking {
   /** The passenger asked for 往返 (there and back); returnPickupAt is the way back. */
   roundTrip: boolean;
   returnPickupAt: string | null;
+  /** 往返: where the way back leaves from and goes to; null means the way there reversed. */
+  returnOrigin: string | null;
+  returnDestination: string | null;
   passengerName: string | null;
   passengerContact: string;
   passengerWechat: string | null;
@@ -55,4 +58,12 @@ export function passengerTone(status: Booking['status']): 'waiting' | 'passenger
   if (status === 'QUOTED') return 'waiting';
   if (status === 'PENDING' || status === 'ACCEPTED') return 'passenger';
   return status === 'ORDERED' ? 'done' : 'closed';
+}
+
+/** 往返: the way back's route when it is not the way there reversed; null when it is. */
+export function returnRoute(booking: Pick<Booking, 'roundTrip' | 'origin' | 'destination' | 'returnOrigin' | 'returnDestination'>) {
+  if (!booking.roundTrip || (!booking.returnOrigin && !booking.returnDestination)) return null;
+  const from = booking.returnOrigin ?? booking.destination;
+  const to = booking.returnDestination ?? booking.origin;
+  return from === booking.destination && to === booking.origin ? null : `${from} 至 ${to}`;
 }

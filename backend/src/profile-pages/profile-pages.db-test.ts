@@ -216,13 +216,15 @@ test('a 往返 booking: both sides see the way back, and 來回我自己做 make
   const { userId, code } = await publishedPage();
   const pickupAt = inAWeek();
   const returnPickupAt = new Date(Date.parse(pickupAt) + 8 * 3_600_000).toISOString().replace('Z', '+00:00');
-  const sent = await ctx.profilePages.createBooking(code, { ...request(), pickupAt, roundTrip: true, returnPickupAt }, '6.6.6.6');
+  const sent = await ctx.profilePages.createBooking(code, { ...request(), pickupAt, roundTrip: true, returnPickupAt, returnOrigin: '福田口岸' }, '6.6.6.6');
   const seen = await ctx.profilePages.passengerBooking(sent.code);
   assert.equal(seen.roundTrip, true);
   assert.equal(seen.returnPickupAt, new Date(returnPickupAt).toISOString());
   const listed = (await ctx.profilePages.bookings(userId)).find((booking) => booking.code === sent.code)!;
   assert.equal(listed.roundTrip, true);
   assert.equal(listed.returnPickupAt, seen.returnPickupAt);
+  // Back from somewhere else; the destination left empty is where the trip started.
+  assert.deepEqual([listed.returnOrigin, listed.returnDestination], ['福田口岸', null]);
   await ctx.profilePages.quote(userId, listed.id, { amount: 1600, currency: 'HKD' });
   await ctx.profilePages.passengerAccept(sent.code);
 
@@ -234,12 +236,15 @@ test('a 往返 booking: both sides see the way back, and 來回我自己做 make
     passengerContact: listed.passengerContact,
     passengerPrice: { amount: 1600, currency: 'HKD' },
     showPassengerPrice: true,
-    roundTrip: { pickupAt: listed.returnPickupAt!, sameDriver: true, selfDriveLeg: null },
+    roundTrip: { pickupAt: listed.returnPickupAt!, origin: listed.returnOrigin ?? undefined, destination: listed.returnDestination ?? undefined, sameDriver: true, selfDriveLeg: null },
     selfDrive: true,
     bookingId: listed.id,
   });
   assert.equal(order.journey?.kind, 'ROUND_TRIP');
-  assert.deepEqual(order.journey?.legs.map((leg) => [leg.origin, leg.selfDrive]), [['香港國際機場', true], ['深圳灣口岸', true]]);
+  assert.deepEqual(order.journey?.legs.map((leg) => [leg.origin, leg.destination, leg.selfDrive]), [
+    ['香港國際機場', '深圳灣口岸', true],
+    ['福田口岸', '香港國際機場', true],
+  ]);
   const after = await ctx.profilePages.passengerBooking(sent.code);
   assert.equal(after.status, 'ORDERED');
   const page = await ctx.orders.getForPassenger(after.confirmUrl!.split('/c/')[1]);

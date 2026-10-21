@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { formatPassengerPhone, isValidPassengerPhone, splitPassengerPhone, type CountryCode } from '@masterdriver/shared/phone';
 import { api, errorText } from '../api';
-import { BOOKING_STATUS, bookingOpen, bookingTone, type DriverBooking } from '../booking';
+import { BOOKING_STATUS, bookingOpen, returnRoute, bookingTone, type DriverBooking } from '../booking';
 import { copyText } from '../device';
 import { loadLine, money, pickup, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
@@ -100,7 +100,18 @@ async function driveMyself() {
       notes: b.notes ?? undefined,
       ...(b.quote ? { passengerPrice: b.quote, showPassengerPrice: true } : {}),
       // 往返: both legs the driver's own, one driver there and back.
-      ...(b.roundTrip && b.returnPickupAt ? { roundTrip: { pickupAt: b.returnPickupAt, sameDriver: true, selfDriveLeg: null } } : {}),
+      ...(b.roundTrip && b.returnPickupAt
+        ? {
+            roundTrip: {
+              pickupAt: b.returnPickupAt,
+              // Back from or to where the passenger said; else the way there reversed.
+              origin: b.returnOrigin ?? undefined,
+              destination: b.returnDestination ?? undefined,
+              sameDriver: true,
+              selfDriveLeg: null,
+            },
+          }
+        : {}),
       selfDrive: true,
       bookingId: b.id,
     });
@@ -166,8 +177,11 @@ onBeforeUnmount(() => {
       <section class="card booking-detail__trip">
         <span class="booking-detail__status" :class="`booking-detail__status--${bookingTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].driver) }}</span>
         <strong class="booking-detail__time">{{ pickup(booking.pickupAt) }}</strong>
-        <div class="booking-detail__route">{{ t(`${booking.origin} ${booking.roundTrip ? '往返' : '至'} ${booking.destination}`) }}</div>
-        <p v-if="booking.roundTrip && booking.returnPickupAt" class="booking-detail__load">{{ t(`回程 ${pickup(booking.returnPickupAt)}`) }}</p>
+        <div class="booking-detail__route">{{ t(`${booking.origin} ${booking.roundTrip && !returnRoute(booking) ? '往返' : '至'} ${booking.destination}`) }}</div>
+        <!-- 往返: when and, if not the way there reversed, from where to where the passenger comes back. -->
+        <p v-if="booking.roundTrip && booking.returnPickupAt" class="booking-detail__load">
+          {{ t([`回程 ${pickup(booking.returnPickupAt)}`, returnRoute(booking)].filter(Boolean).join('・')) }}
+        </p>
         <p class="booking-detail__load">
           {{ t(loadLine(booking.passengers, booking.luggage)) }}
           <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span>

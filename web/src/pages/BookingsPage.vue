@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { api, errorText } from '../api';
-import { BOOKING_STATUS, bookingTone, type DriverBooking } from '../booking';
+import { BOOKING_STATUS, bookingTone, returnRoute, type DriverBooking } from '../booking';
 import { loadLine, pickup, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
@@ -56,7 +56,9 @@ onBeforeUnmount(() => {
       </div>
       <div class="bookings__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
       <span v-if="booking.transfer" class="leg-tag bookings__tag">{{ t('接駁（中途換車）') }}</span>
-      <span v-else-if="booking.roundTrip" class="leg-tag bookings__tag">{{ t(booking.returnPickupAt ? `往返・回程 ${pickup(booking.returnPickupAt)}` : '往返') }}</span>
+      <span v-else-if="booking.roundTrip" class="leg-tag bookings__tag">
+        {{ t([booking.returnPickupAt ? `往返・回程 ${pickup(booking.returnPickupAt)}` : '往返', returnRoute(booking)].filter(Boolean).join('・')) }}
+      </span>
       <div class="bookings__meta">
         {{ t(`${booking.passengerName ?? '乘客'}｜${loadLine(booking.passengers, booking.luggage)}`) }}
         <span>{{ t(`${shortTime(booking.createdAt)} 送出`) }}</span>

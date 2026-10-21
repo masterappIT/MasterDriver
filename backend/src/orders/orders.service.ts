@@ -97,8 +97,9 @@ export class OrdersService {
               ? {
                   kind: 'ROUND_TRIP' as const,
                   sameDriver: input.roundTrip.sameDriver,
-                  origin: input.destination,
-                  destination: input.origin,
+                  // The way back is the way there reversed unless the dispatcher named other places.
+                  origin: input.roundTrip.origin ?? input.destination,
+                  destination: input.roundTrip.destination ?? input.origin,
                   pickupAt: new Date(input.roundTrip.pickupAt),
                   driverPrice: input.roundTrip.driverPrice,
                   // The way back flies on its own flight.
@@ -158,8 +159,9 @@ export class OrdersService {
               pickupAt,
               immediate: input.immediate,
               origin: input.origin,
-              // The first leg of a 接駁 order ends at the 接駁位置; of a 往返, where the trip turns back.
-              destination: second ? second.origin : input.destination,
+              // The first leg of a 接駁 order ends at the 接駁位置; of a 往返, at its own destination
+              // (the way back may leave from somewhere else).
+              destination: second?.kind === 'TRANSFER' ? second.origin : input.destination,
               waypoints: input.waypoints,
               driverPriceMinor: toMinor(input.driverPrice),
               driverCurrency: input.driverPrice?.currency ?? 'HKD',
@@ -592,13 +594,11 @@ export class OrdersService {
         const data = changes.get(leg.id)!.data as Record<string, unknown>;
         if ('pickupAt' in data) data.immediate = false;
       }
-      if (input.origin !== undefined) put(first, 'origin', input.origin, '上車地點');
-      if (input.destination !== undefined) put(roundTrip ? first : last, 'destination', input.destination, '目的地');
-      // 往返: the way back runs from the destination to where the trip started.
-      if (roundTrip && legs.length > 1) {
-        if (input.destination !== undefined) put(legs[1], 'origin', input.destination, '上車地點');
-        if (input.origin !== undefined) put(legs[1], 'destination', input.origin, '目的地');
-      }
+      // 往返: each leg's places are its own (the way back may leave from or go to somewhere else),
+      // so they change on this leg only. 接駁: the trip's start and end.
+      const placesLeg = roundTrip ? legs.find((candidate) => candidate.id === id)! : null;
+      if (input.origin !== undefined) put(placesLeg ?? first, 'origin', input.origin, '上車地點');
+      if (input.destination !== undefined) put(placesLeg ?? last, 'destination', input.destination, '目的地');
       if (input.transferPlace !== undefined && legs.length > 1) {
         put(first, 'destination', input.transferPlace, '接駁位置');
         put(legs[1], 'origin', input.transferPlace, '接駁位置');

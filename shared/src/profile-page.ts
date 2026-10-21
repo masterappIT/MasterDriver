@@ -42,6 +42,9 @@ export const bookingCreateSchema = z.object({
   roundTrip: z.boolean().default(false),
   /** 往返: when to be picked up for the way back, ISO 8601 with offset; after pickupAt. */
   returnPickupAt: z.string().datetime({ offset: true }).optional(),
+  /** 往返: where the way back leaves from and goes to, when not the way there reversed (選填). */
+  returnOrigin: z.string().trim().max(120).optional().transform((value) => value || undefined),
+  returnDestination: z.string().trim().max(120).optional().transform((value) => value || undefined),
   /** How to address the passenger; asked for since 2026-10-14, so older requests may have none. */
   passengerName: line(40),
   /** A phone with its country code, as on an order (2026-10-14; older requests may hold any text). */
@@ -76,7 +79,7 @@ export const bookingCreateSchema = z.object({
     (value) => !value.roundTrip || !value.returnPickupAt || Date.parse(value.returnPickupAt) > Date.parse(value.pickupAt),
     { message: 'RETURN_BEFORE_PICKUP', path: ['returnPickupAt'] },
   )
-  .transform((value) => (value.roundTrip ? value : { ...value, returnPickupAt: undefined }));
+  .transform((value) => (value.roundTrip ? value : { ...value, returnPickupAt: undefined, returnOrigin: undefined, returnDestination: undefined }));
 export type BookingCreate = z.infer<typeof bookingCreateSchema>;
 
 /** The driver's answer: a price, with an optional note about what it covers. */

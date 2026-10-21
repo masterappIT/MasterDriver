@@ -8,7 +8,7 @@ import TripGroupJoin, { type TripGroup } from '../components/TripGroupJoin.vue';
 import RoutePoints from '../components/RoutePoints.vue';
 import { copyText } from '../device';
 import { loadLine, money, pickup, plateKind, shortTime } from '../format';
-import { progressLine, type TripProgress } from '../journey';
+import { isReversed, progressLine, type TripProgress } from '../journey';
 import { t } from '../i18n';
 import { PAYMENT_KINDS, type PassengerPayment } from '../payment';
 import { toast } from '../toast';
@@ -180,7 +180,7 @@ onBeforeUnmount(() => {
       <div v-if="trip.status === 'CANCELLED'" class="notice error">{{ t('這個行程已取消，如有疑問請聯絡為你安排的司機。') }}</div>
       <div v-if="trip.status === 'COMPLETED'" ref="ended" class="confirm-page__ended">
         <strong>{{ t('行程已完成') }}</strong>
-        <span class="confirm-page__ended-trip">{{ t(`${pickup(trip.pickupAt)}　${trip.origin} ${trip.roundTrip ? '往返' : '至'} ${trip.destination}`) }}</span>
+        <span class="confirm-page__ended-trip">{{ t(`${pickup(trip.pickupAt)}　${trip.origin} ${trip.roundTrip && trip.legs && isReversed(trip.legs.map((leg) => ({ origin: leg.origin ?? '', destination: leg.destination ?? '' }))) ? '往返' : '至'} ${trip.destination}`) }}</span>
         <span>{{ t('多謝乘搭。遺留物品或其他問題，請聯絡為你安排的人。') }}</span>
       </div>
       <p v-else-if="trip.passengerConfirmedAt" class="notice confirm-page__done">{{ t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`) }}</p>

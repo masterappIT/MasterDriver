@@ -199,6 +199,12 @@ export const createOrderSchema = z.object({
       /** The way back's 航班號: a different flight from the way there's. */
       flightNo: optionalText(20),
       /**
+       * Where the way back leaves from and goes to; absent means the way there reversed
+       * (`destination` to `origin`). The passenger may come back from or to somewhere else.
+       */
+      origin: optionalText(120),
+      destination: optionalText(120),
+      /**
        * 同一位司機來回: one claim takes both legs. False: 可分開接, each leg is claimed on its own,
        * and one driver may take both.
        */
