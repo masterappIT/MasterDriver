@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import TabBar from './components/TabBar.vue';
+import UpdateNotice from './components/UpdateNotice.vue';
 import { network, session } from './api';
 import { unlockOnFirstTouch } from './alert-sound';
 import { t } from './i18n';
@@ -73,6 +74,8 @@ async function openBanner() {
     <span>{{ t('網路不穩，部分內容沒有載入') }}</span>
     <button type="button" @click="reload">{{ t('重新載入') }}</button>
   </div>
+  <!-- 更新說明彈窗: once per account, over everything but the toast and new notifications. -->
+  <UpdateNotice />
   <div v-if="toastState.visible" class="toast" role="status">{{ toastState.text }}</div>
 </template>
 

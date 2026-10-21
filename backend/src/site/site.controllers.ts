@@ -11,6 +11,10 @@ import {
   seoPageUpdateSchema,
   seoSiteUpdateSchema,
   siteLogoUpdateSchema,
+  UPDATE_NOTICE_LANGUAGES,
+  updateNoticeImageSchema,
+  updateNoticeSeenSchema,
+  updateNoticeSettingSchema,
   type AdCreate,
   type AdUpdate,
   type AppSettingUpdate,
@@ -21,6 +25,10 @@ import {
   type SeoPageUpdate,
   type SeoSiteUpdate,
   type SiteLogoUpdate,
+  type UpdateNoticeImage,
+  type UpdateNoticeLanguage,
+  type UpdateNoticeSeen,
+  type UpdateNoticeSetting,
 } from '@masterdriver/shared';
 import type { Request, Response } from 'express';
 import type { Prisma } from '../../generated/prisma';
@@ -77,6 +85,18 @@ export class PublicSiteController {
       .send(Buffer.from(logo.image));
   }
 
+  /** 更新說明彈窗's picture; the URL carries the version, so it may be cached. */
+  @Get('update-notice/:language')
+  async updateNoticeImage(@Param('language') language: string, @Res() response: Response) {
+    const picture = (UPDATE_NOTICE_LANGUAGES as readonly string[]).includes(language)
+      ? await this.site.updateNoticeImage(language as UpdateNoticeLanguage)
+      : null;
+    if (!picture) throw apiError(HttpStatus.NOT_FOUND, 'NOTICE_IMAGE_NOT_FOUND', 'No picture has been uploaded');
+    response
+      .set({ 'content-type': picture.mime, 'cache-control': 'public, max-age=86400', 'x-content-type-options': 'nosniff' })
+      .send(Buffer.from(picture.image));
+  }
+
   @Get('seo/:page')
   seo(@Param('page') page: string) {
     return this.site.publicSeo(seoPage(page));
@@ -116,6 +136,24 @@ export class UpgradeController {
   @Get()
   get(@CurrentUser() user: SessionUser) {
     return this.site.upgradeOffer(user.id);
+  }
+}
+
+/** 更新說明彈窗 for the signed-in driver: whether to show it, and closing it for good. */
+@Controller('me/update-notice')
+@UseGuards(AuthGuard)
+export class UpdateNoticeController {
+  constructor(@Inject(SiteService) private readonly site: SiteService) {}
+
+  @Get()
+  get(@CurrentUser() user: SessionUser) {
+    return this.site.updateNoticeFor(user.id);
+  }
+
+  @Post('seen')
+  @HttpCode(204)
+  async seen(@CurrentUser() user: SessionUser, @Body(new ZodPipe(updateNoticeSeenSchema)) body: UpdateNoticeSeen) {
+    await this.site.closeUpdateNotice(user.id, body.version);
   }
 }
 
@@ -194,6 +232,30 @@ export class AdminSiteController {
   async removeLogo(@CurrentAdmin() admin: AdminUser, @Req() request: Request) {
     const result = await this.site.removeLogo();
     await this.log(admin, 'settings.logo', request, { action: 'remove' });
+    return result;
+  }
+
+  // ---- 更新說明彈窗
+
+  @Get('settings/update-notice')
+  @AdminRoles(...WRITE_ROLES)
+  updateNotice() {
+    return this.site.updateNoticeStatus();
+  }
+
+  @Put('settings/update-notice/image')
+  @AdminRoles(...WRITE_ROLES)
+  async setUpdateNoticeImage(@Body(new ZodPipe(updateNoticeImageSchema)) body: UpdateNoticeImage, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    const result = await this.site.setUpdateNoticeImage(body.language, body.image, `admin:${admin.username}`);
+    await this.log(admin, 'settings.updateNotice', request, { action: 'upload', language: body.language, version: result.version });
+    return result;
+  }
+
+  @Put('settings/update-notice')
+  @AdminRoles(...WRITE_ROLES)
+  async setUpdateNotice(@Body(new ZodPipe(updateNoticeSettingSchema)) body: UpdateNoticeSetting, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    const result = await this.site.setUpdateNoticeEnabled(body.enabled, `admin:${admin.username}`);
+    await this.log(admin, 'settings.updateNotice', request, { action: body.enabled ? 'on' : 'off' });
     return result;
   }
 

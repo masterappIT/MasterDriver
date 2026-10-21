@@ -45,6 +45,7 @@ const TABLES = [
   'ProfilePage',
   'LimitSetting',
   'SiteLogo',
+  'UpdateNotice',
   'SupportMessage',
   'SupportMedia',
   'SupportConversation',

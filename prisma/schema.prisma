@@ -30,6 +30,8 @@ model User {
   /// 通知設定: the kinds of notification (NotificationGroup) this user turned off. Nothing is
   /// recorded for them. The alert sound and its tone are kept on each phone, not here.
   notificationsOff     NotificationGroup[] @default([])
+  /// 更新說明彈窗: the version of UpdateNotice this user has closed; a newer one pops up once.
+  updateNoticeSeen     Int                 @default(0)
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -571,6 +573,22 @@ model AppSetting {
   announcementEnabled Boolean  @default(false)
   updatedAt           DateTime @updatedAt
   updatedBy           String?
+}
+
+/// 更新說明彈窗 (2026-10-21): a picture the admin uploads in 一般設定, shown once to every
+/// driver in the app like an ad, closed with one tap. Each new picture raises the version,
+/// so everyone sees it once more. A Simplified picture is optional; without it everyone gets
+/// the Traditional one. Kept apart from AppSetting so reading the settings never carries images.
+model UpdateNotice {
+  id        String   @id @default("default")
+  enabled   Boolean  @default(false)
+  version   Int      @default(0)
+  hantMime  String?
+  hantImage Bytes?
+  hansMime  String?
+  hansImage Bytes?
+  updatedAt DateTime @updatedAt
+  updatedBy String?
 }
 
 /// The platform's logo, uploaded in the admin (一般設定) and shown on the public

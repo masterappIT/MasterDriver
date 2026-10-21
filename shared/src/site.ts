@@ -33,6 +33,20 @@ export type AppSettingUpdate = z.infer<typeof appSettingUpdateSchema>;
 export const siteLogoUpdateSchema = z.object({ image: z.string().max(600_000) });
 export type SiteLogoUpdate = z.infer<typeof siteLogoUpdateSchema>;
 
+/**
+ * 更新說明彈窗: a picture shown once to every driver. A new picture (Traditional or Simplified)
+ * shows again to everyone; switching it on or off does not.
+ */
+export const UPDATE_NOTICE_LANGUAGES = ['zh-Hant', 'zh-Hans'] as const;
+export type UpdateNoticeLanguage = (typeof UPDATE_NOTICE_LANGUAGES)[number];
+export const updateNoticeImageSchema = z.object({ language: z.enum(UPDATE_NOTICE_LANGUAGES), image: z.string().max(600_000) });
+export type UpdateNoticeImage = z.infer<typeof updateNoticeImageSchema>;
+export const updateNoticeSettingSchema = z.object({ enabled: z.boolean() });
+export type UpdateNoticeSetting = z.infer<typeof updateNoticeSettingSchema>;
+/** The driver closed the notice of this version. */
+export const updateNoticeSeenSchema = z.object({ version: z.number().int().min(1) });
+export type UpdateNoticeSeen = z.infer<typeof updateNoticeSeenSchema>;
+
 /** 防濫用設定. Zero switches the thing off: for example no pictures from guests. */
 export const limitSettingUpdateSchema = z
   .object({

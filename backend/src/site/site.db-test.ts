@@ -137,3 +137,46 @@ test('on a new database, settings asked for by several pages at once are made on
   const listed = (await ctx.site.listAds()).find((ad) => ad.id === id)!;
   assert.deepEqual(listed.last30Days, { impressions: 5, clicks: 3 });
 });
+
+// 更新說明彈窗: one picture, shown once to every driver; a new picture shows once more.
+test('更新說明彈窗 shows once per account, comes back with a new picture, and counts who closed it', async () => {
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 7)]);
+  const picture = `data:image/png;base64,${png.toString('base64')}`;
+  const [a, b] = [await createDriver(ctx), await createDriver(ctx)];
+
+  assert.deepEqual(await ctx.site.updateNoticeFor(a), { notice: null }, 'nothing before a picture');
+  await rejectsWith(ctx.site.setUpdateNoticeEnabled(true, 'test'), 'NOTICE_IMAGE_MISSING');
+  await rejectsWith(ctx.site.setUpdateNoticeImage('zh-Hant', 'data:image/svg+xml;base64,PHN2Zz4=', 'test'), 'NOTICE_IMAGE_INVALID');
+
+  await ctx.site.setUpdateNoticeImage('zh-Hant', picture, 'test');
+  assert.deepEqual(await ctx.site.updateNoticeFor(a), { notice: null }, 'off until switched on');
+  const on = await ctx.site.setUpdateNoticeEnabled(true, 'test');
+  assert.equal(on.version, 1);
+  assert.deepEqual(on.images, { hant: '/api/public/update-notice/zh-Hant?v=1', hans: null });
+
+  const shown = await ctx.site.updateNoticeFor(a);
+  assert.equal(shown.notice?.version, 1);
+  assert.equal(shown.notice?.images.hans, null, 'without a Simplified picture everyone gets the Traditional one');
+  assert.equal(Buffer.from((await ctx.site.updateNoticeImage('zh-Hant'))!.image).equals(png), true);
+
+  // Closed once: never again for this version, wherever they sign in; a made-up later version changes nothing.
+  await ctx.site.closeUpdateNotice(a, 99);
+  assert.deepEqual(await ctx.site.updateNoticeFor(a), { notice: null });
+  assert.equal((await ctx.site.updateNoticeFor(b)).notice?.version, 1, 'the other driver still sees it');
+  assert.equal((await ctx.site.updateNoticeStatus()).seen, 1);
+
+  // Switching off and on again does not show it again.
+  await ctx.site.setUpdateNoticeEnabled(false, 'test');
+  assert.deepEqual(await ctx.site.updateNoticeFor(b), { notice: null });
+  await ctx.site.setUpdateNoticeEnabled(true, 'test');
+  assert.deepEqual(await ctx.site.updateNoticeFor(a), { notice: null });
+
+  // A new picture is a new notice: everyone sees it once more, and the count starts again.
+  const next = await ctx.site.setUpdateNoticeImage('zh-Hans', picture, 'test');
+  assert.equal(next.version, 2);
+  assert.equal(next.seen, 0);
+  const again = await ctx.site.updateNoticeFor(a);
+  assert.deepEqual(again.notice?.images, { hant: '/api/public/update-notice/zh-Hant?v=2', hans: '/api/public/update-notice/zh-Hans?v=2' });
+  await ctx.site.closeUpdateNotice(a, 2);
+  assert.equal((await ctx.site.updateNoticeStatus()).seen, 1);
+});

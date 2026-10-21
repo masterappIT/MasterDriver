@@ -65,6 +65,7 @@ const ACTION: Record<string, string> = {
   'group-invite.remove': '移除派單群',
   'settings.limits': '修改防濫用設定',
   'settings.logo': '修改 Logo',
+  'settings.updateNotice': '修改更新說明彈窗',
   'channels.spug.save': '修改 Spug 設定',
   'channels.spug.testSend': 'Spug 發送測試簡訊',
 };

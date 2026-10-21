@@ -10,6 +10,7 @@ import type {
   SeoPageUpdate,
   LimitSettingUpdate,
   SeoSiteUpdate,
+  UpdateNoticeLanguage,
 } from '@masterdriver/shared';
 import { apiError } from '../common/errors';
 import { retryFirstWrite } from '../common/first-write';
@@ -87,6 +88,78 @@ export class SiteService {
 
   logoImage() {
     return this.prisma.siteLogo.findUnique({ where: { id: DEFAULT_ID }, select: { mime: true, image: true } });
+  }
+
+  // ------------------------------------------------------------ 更新說明彈窗
+
+  private updateNotice() {
+    return retryFirstWrite(() => this.prisma.updateNotice.upsert({ where: { id: DEFAULT_ID }, update: {}, create: { id: DEFAULT_ID } }));
+  }
+
+  /** Where the app loads each picture from; the version is in the URL, so a new picture is never served from cache. */
+  private noticeImages(notice: { version: number; hantMime: string | null; hansMime: string | null }) {
+    const url = (language: UpdateNoticeLanguage) => `/api/public/update-notice/${language}?v=${notice.version}`;
+    return { hant: notice.hantMime ? url('zh-Hant') : null, hans: notice.hansMime ? url('zh-Hans') : null };
+  }
+
+  /** What 一般設定 shows: the pictures, the switch, and how many users closed the notice of this version. */
+  async updateNoticeStatus() {
+    const notice = await this.updateNotice();
+    const [seen, users] = await Promise.all([
+      notice.version > 0 ? this.prisma.user.count({ where: { updateNoticeSeen: { gte: notice.version } } }) : 0,
+      this.prisma.user.count({ where: { suspendedAt: null } }),
+    ]);
+    return { enabled: notice.enabled, version: notice.version, images: this.noticeImages(notice), seen, users, updatedAt: notice.updatedAt.toISOString() };
+  }
+
+  /** A new picture is a new notice: the version goes up, so every driver sees it once more. */
+  async setUpdateNoticeImage(language: UpdateNoticeLanguage, dataUrl: string, actor: string) {
+    const image = decodeQrImage(dataUrl);
+    if (!image) throw apiError(HttpStatus.BAD_REQUEST, 'NOTICE_IMAGE_INVALID', 'Upload a PNG, JPEG or WebP image up to 400 KB');
+    await this.updateNotice();
+    const picture = language === 'zh-Hans' ? { hansMime: image.mime, hansImage: image.bytes } : { hantMime: image.mime, hantImage: image.bytes };
+    await this.prisma.updateNotice.update({ where: { id: DEFAULT_ID }, data: { ...picture, version: { increment: 1 }, updatedBy: actor } });
+    return this.updateNoticeStatus();
+  }
+
+  /** On or off; the version stays, so a driver who closed it does not see it again. */
+  async setUpdateNoticeEnabled(enabled: boolean, actor: string) {
+    const notice = await this.updateNotice();
+    if (enabled && !notice.hantMime) throw apiError(HttpStatus.BAD_REQUEST, 'NOTICE_IMAGE_MISSING', 'Upload the Traditional picture first');
+    await this.prisma.updateNotice.update({ where: { id: DEFAULT_ID }, data: { enabled, updatedBy: actor } });
+    return this.updateNoticeStatus();
+  }
+
+  async updateNoticeImage(language: UpdateNoticeLanguage) {
+    const notice = await this.prisma.updateNotice.findUnique({ where: { id: DEFAULT_ID } });
+    if (!notice) return null;
+    return language === 'zh-Hans'
+      ? notice.hansMime && notice.hansImage && { mime: notice.hansMime, image: notice.hansImage }
+      : notice.hantMime && notice.hantImage && { mime: notice.hantMime, image: notice.hantImage };
+  }
+
+  /**
+   * The notice for this user, when it is on and they have not closed this version. Simplified users get
+   * the Simplified picture when there is one; the app picks it, the Traditional one is always there.
+   */
+  async updateNoticeFor(userId: string) {
+    const notice = await this.prisma.updateNotice.findUnique({
+      where: { id: DEFAULT_ID },
+      select: { enabled: true, version: true, hantMime: true, hansMime: true },
+    });
+    if (!notice?.enabled || notice.version === 0 || !notice.hantMime) return { notice: null };
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { updateNoticeSeen: true } });
+    if (!user || user.updateNoticeSeen >= notice.version) return { notice: null };
+    return { notice: { version: notice.version, images: this.noticeImages(notice) } };
+  }
+
+  /** Closed: never again for this version, on any phone. An older version never undoes a newer one. */
+  async closeUpdateNotice(userId: string, version: number) {
+    const notice = await this.prisma.updateNotice.findUnique({ where: { id: DEFAULT_ID }, select: { version: true } });
+    // Never past the notice there is, so the next new picture still shows.
+    const upTo = Math.min(version, notice?.version ?? 0);
+    if (upTo < 1) return;
+    await this.prisma.user.updateMany({ where: { id: userId, updateNoticeSeen: { lt: upTo } }, data: { updateNoticeSeen: upTo } });
   }
 
   /**

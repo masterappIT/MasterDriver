@@ -70,6 +70,48 @@ async function removeLogo() {
   }
 }
 
+/** 更新說明彈窗: a picture every driver sees once in the app; a new picture shows again to everyone. */
+interface UpdateNotice {
+  enabled: boolean;
+  version: number;
+  images: { hant: string | null; hans: string | null };
+  seen: number;
+  users: number;
+  updatedAt: string;
+}
+const notice = ref<UpdateNotice | null>(null);
+
+async function uploadNotice(language: 'zh-Hant' | 'zh-Hans', event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  error.value = '';
+  message.value = '';
+  if (file.size > LOGO_MAX_BYTES) {
+    error.value = `圖片檔案太大（${Math.round(file.size / 1024)} KB），上限 400 KB`;
+    return;
+  }
+  if (notice.value?.enabled && !confirm('換了新圖片，所有司機會再看到一次。確定上傳？')) return;
+  try {
+    notice.value = await api<UpdateNotice>('PUT', '/settings/update-notice/image', { language, image: await readAsDataUrl(file) });
+    message.value = language === 'zh-Hans' ? '簡體圖片已更新' : '繁體圖片已更新';
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
+async function setNoticeEnabled(enabled: boolean) {
+  error.value = '';
+  message.value = '';
+  try {
+    notice.value = await api<UpdateNotice>('PUT', '/settings/update-notice', { enabled });
+    message.value = enabled ? '更新說明彈窗已開啟' : '更新說明彈窗已關閉';
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
 function fill(setting: Setting) {
   const { updatedAt, updatedBy, ...fields } = setting;
   Object.assign(form, Object.fromEntries(Object.keys(form).map((key) => [key, fields[key as keyof typeof fields]])));
@@ -91,6 +133,7 @@ onMounted(async () => {
   try {
     fill(await api<Setting>('GET', '/settings/general'));
     logoUrl.value = (await api<{ logoUrl: string | null }>('GET', '/settings/logo')).logoUrl;
+    notice.value = await api<UpdateNotice>('GET', '/settings/update-notice');
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -125,6 +168,27 @@ onMounted(async () => {
           <input v-model="form.upgradeUrl" class="input" placeholder="https://" form="general-settings-form" />
         </label>
       </div>
+    </div>
+
+    <div v-if="notice" class="card general-settings__card general-settings__notice">
+      <h2>更新說明彈窗</h2>
+      <p class="muted">司機登入後在司機端彈出一張圖片，可以關掉；每個帳號只看一次，換手機也不會再出現。換新圖片後，所有司機會再看到一次。</p>
+      <div class="general-settings__notice-images">
+        <div v-for="item in ([['zh-Hant', '繁體圖片（必須）', notice.images.hant], ['zh-Hans', '簡體圖片（內地號碼的司機看到；沒有就看繁體）', notice.images.hans]] as const)" :key="item[0]" class="general-settings__notice-image">
+          <span class="hint">{{ item[1] }}</span>
+          <img v-if="item[2]" :src="item[2]" :alt="item[1]" />
+          <span v-else class="general-settings__notice-empty">尚未上傳</span>
+          <label class="button secondary general-settings__upload">
+            {{ item[2] ? '更換圖片' : '上傳圖片' }}
+            <input type="file" accept="image/png,image/jpeg,image/webp" @change="uploadNotice(item[0], $event)" />
+          </label>
+        </div>
+      </div>
+      <label class="row"><input type="checkbox" :checked="notice.enabled" :disabled="!notice.images.hant" @change="setNoticeEnabled(($event.target as HTMLInputElement).checked)" /> 顯示更新說明彈窗</label>
+      <p class="hint">
+        {{ notice.version ? `已有 ${notice.seen} 位司機看過這次的更新說明（共 ${notice.users} 位司機）。` : '還沒有上傳過圖片。' }}
+        PNG、JPG 或 WebP，400 KB 以內，建議直向 3:4。上傳和開關都立即生效，不用按「儲存全部」。
+      </p>
     </div>
 
     <form id="general-settings-form" class="general-settings" @submit.prevent="save">
@@ -202,6 +266,40 @@ onMounted(async () => {
 
 .general-settings__upload {
   cursor: pointer;
+}
+
+.general-settings__notice {
+  margin-bottom: 18px;
+}
+
+.general-settings__notice-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-md);
+}
+
+.general-settings__notice-image {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.general-settings__notice-image img {
+  width: 180px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border, #d3dce7);
+}
+
+.general-settings__notice-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 180px;
+  height: 224px;
+  border: 1px dashed var(--color-border, #d3dce7);
+  border-radius: 12px;
+  color: var(--color-text-secondary, #556579);
 }
 
 .general-settings__upload input {
