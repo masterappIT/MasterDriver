@@ -272,6 +272,10 @@ export type OrderPaymentUpdate = z.infer<typeof orderPaymentUpdateSchema>;
 export const orderSettlementUpdateSchema = z.object({ settled: z.boolean() });
 export type OrderSettlementUpdate = z.infer<typeof orderSettlementUpdateSchema>;
 
+/** 出單者代確認: the dispatcher confirms the trip for the passenger, or takes their own confirmation back. */
+export const passengerConfirmUpdateSchema = z.object({ confirmed: z.boolean() });
+export type PassengerConfirmUpdate = z.infer<typeof passengerConfirmUpdateSchema>;
+
 /** Admin update of development-mode sign-in. A missing code keeps the stored one. */
 export const developmentLoginUpdateSchema = z
   .object({

@@ -687,6 +687,7 @@ export class AdminDataService {
         driverDeleted: order.claimedAt !== null && order.claimedById === null,
         claimAttempts: order._count.claims,
         passengerConfirmed: Boolean(order.passengerConfirmedAt),
+        passengerConfirmedByDispatcher: Boolean(order.passengerConfirmedAt) && order.passengerConfirmedByDispatcher,
         selfDrive: isSelfDriven(order),
         legIndex: order.legIndex,
         journeyKind: order.journeyKind,
@@ -761,6 +762,8 @@ export class AdminDataService {
       },
       driverDeleted: order.claimedAt !== null && order.claimedById === null,
       driver: claimer && order.claimedById && { id: order.claimedById, name: claimer.profile?.name ?? null, phone: `${claimer.countryCode} ${claimer.phone}`, profile: claimer.profile },
+      /** 出單者代確認: the dispatcher, not the passenger, confirmed the trip. */
+      passengerConfirmedByDispatcher: Boolean(order.passengerConfirmedAt) && order.passengerConfirmedByDispatcher,
       timeline: {
         createdAt: order.createdAt.toISOString(),
         claimedAt: iso(order.claimedAt),

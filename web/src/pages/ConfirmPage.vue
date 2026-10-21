@@ -76,6 +76,8 @@ interface PassengerView {
     pageCode: string | null;
   } | null;
   passengerConfirmedAt: string | null;
+  /** 出單者代確認: the person who arranged the trip confirmed it for the passenger. */
+  confirmedByDispatcher?: boolean;
   /** 行程群: the group made for this trip, when the person who arranged it gave one. */
   tripGroup: TripGroup | null;
   driver: TripDriver | null;
@@ -183,7 +185,13 @@ onBeforeUnmount(() => {
         <span class="confirm-page__ended-trip">{{ t(`${pickup(trip.pickupAt)}　${trip.origin} ${trip.roundTrip && trip.legs && isReversed(trip.legs.map((leg) => ({ origin: leg.origin ?? '', destination: leg.destination ?? '' }))) ? '往返' : '至'} ${trip.destination}`) }}</span>
         <span>{{ t('多謝乘搭。遺留物品或其他問題，請聯絡為你安排的人。') }}</span>
       </div>
-      <p v-else-if="trip.passengerConfirmedAt" class="notice confirm-page__done">{{ t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`) }}</p>
+      <p v-else-if="trip.passengerConfirmedAt" class="notice confirm-page__done">
+        {{
+          trip.confirmedByDispatcher
+            ? t(`${trip.dispatcherName ?? '為你安排的人'} 已於 ${shortTime(trip.passengerConfirmedAt)} 幫你確認行程。`)
+            : t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`)
+        }}
+      </p>
 
       <!-- A finished trip shows only that it is over and who arranged it. -->
       <template v-if="trip.status === 'COMPLETED'" />

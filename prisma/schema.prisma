@@ -252,6 +252,8 @@ model Order {
   claimedById          String?
   claimedAt            DateTime?
   passengerConfirmedAt DateTime?
+  /// 出單者代確認: the dispatcher confirmed for a passenger who did not press the link themselves.
+  passengerConfirmedByDispatcher Boolean @default(false)
   /// 行程進度, as the driver who took the order reports it: set out, at the pickup, passenger on board.
   departedAt           DateTime?
   arrivedAt            DateTime?

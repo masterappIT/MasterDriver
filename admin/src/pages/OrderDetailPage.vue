@@ -53,6 +53,8 @@ interface OrderDetail {
       hidePlates: boolean;
     } | null;
   } | null;
+  /** 出單者代確認: the dispatcher, not the passenger, confirmed the trip. */
+  passengerConfirmedByDispatcher?: boolean;
   timeline: Record<string, string | null>;
   claims: { result: string; createdAt: string; driver: { id: string; name: string | null; phone: string } }[];
 }
@@ -226,7 +228,7 @@ onMounted(async () => {
         <h2>時間線</h2>
         <ul class="timeline">
           <li v-for="(label, key) in TIMELINE" :key="key" :class="{ pending: !order.timeline[key] }">
-            <span>{{ label }}</span>
+            <span>{{ key === 'passengerConfirmedAt' && order.passengerConfirmedByDispatcher ? '出單者代乘客確認' : label }}</span>
             <span>{{ dateTime(order.timeline[key]) }}</span>
           </li>
         </ul>

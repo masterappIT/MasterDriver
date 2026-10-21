@@ -10,11 +10,13 @@ import {
   contactRevealUpdateSchema,
   orderPaymentUpdateSchema,
   orderSettlementUpdateSchema,
+  passengerConfirmUpdateSchema,
   tripGroupUpdateSchema,
   updateOrderPricesSchema,
   type ContactRevealUpdate,
   type OrderPaymentUpdate,
   type OrderSettlementUpdate,
+  type PassengerConfirmUpdate,
   type TripGroupUpdate,
   type CreateOrderInput,
   type DriverNoteUpdate,
@@ -126,6 +128,16 @@ export class OrdersController {
   @Patch(':id/settlement')
   setSettlement(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body(new ZodPipe(orderSettlementUpdateSchema)) body: OrderSettlementUpdate) {
     return this.orders.setSettlement(user.id, id, body);
+  }
+
+  /** 出單者代確認: the dispatcher confirms the trip for the passenger, or takes that back. */
+  @Patch(':id/passenger-confirmation')
+  confirmForPassenger(
+    @CurrentUser() user: SessionUser,
+    @Param('id') id: string,
+    @Body(new ZodPipe(passengerConfirmUpdateSchema)) body: PassengerConfirmUpdate,
+  ) {
+    return this.orders.confirmForPassenger(user.id, id, body);
   }
 
   @Patch(':id/pool')

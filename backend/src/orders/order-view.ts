@@ -328,6 +328,8 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     cancelledAt: order.cancelledAt?.toISOString() ?? null,
     completedAt: order.completedAt?.toISOString() ?? null,
     passengerConfirmedAt: order.passengerConfirmedAt?.toISOString() ?? null,
+    // 出單者代確認: the dispatcher confirmed it, not the passenger, who may not have seen the driver and car.
+    passengerConfirmedByDispatcher: Boolean(order.passengerConfirmedAt) && order.passengerConfirmedByDispatcher,
     createdAt: order.createdAt.toISOString(),
     viewer,
     ...(participant
@@ -465,6 +467,8 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
             pageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,
           },
     passengerConfirmedAt: confirmed,
+    // 出單者代確認: the person who arranged the trip confirmed it for the passenger.
+    confirmedByDispatcher: Boolean(confirmed) && (allLegs?.filter((leg) => leg.status !== 'CANCELLED') ?? [order]).some((leg) => leg.passengerConfirmedByDispatcher),
     flightNo: lead.flightNo,
     // 行程進度 of the leg under way: the first leg not yet over.
     progress: (shown?.find((leg) => leg.status !== 'COMPLETED') ?? lead).progress,

@@ -10,6 +10,7 @@ import {
   type UpdateTripInput,
   type OrderPaymentUpdate,
   type OrderSettlementUpdate,
+  type PassengerConfirmUpdate,
   type TripGroupUpdate,
   type OrderListQuery,
   type PoolQuery,
@@ -464,7 +465,7 @@ export class OrdersService {
         if (taken.length === 0) throw this.invalidStatus();
         await tx.order.updateMany({
           where: { id: { in: taken.map((leg) => leg.id) } },
-          data: { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null, ...CLEAR_TRIP_STATE },
+          data: { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, passengerConfirmedByDispatcher: false, settledAt: null, ...CLEAR_TRIP_STATE },
         });
         for (const leg of taken) await this.clearPartyProgress(tx, leg.id);
         return taken;
@@ -477,7 +478,7 @@ export class OrdersService {
       userId,
       id,
       ['ASSIGNED'],
-      { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null, ...CLEAR_TRIP_STATE },
+      { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, passengerConfirmedByDispatcher: false, settledAt: null, ...CLEAR_TRIP_STATE },
       'dispatcher',
       (tx) => this.clearPartyProgress(tx, id),
     );
@@ -507,7 +508,7 @@ export class OrdersService {
         : [id];
       const moved = await tx.order.updateMany({
         where: { id: { in: legIds }, claimedById: userId, status: 'ASSIGNED' },
-        data: { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null, ...CLEAR_TRIP_STATE },
+        data: { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, passengerConfirmedByDispatcher: false, settledAt: null, ...CLEAR_TRIP_STATE },
       });
       // 我的司機 counts how often a driver gave an order back: the claim they won is marked.
       if (moved.count > 0) {
@@ -820,6 +821,34 @@ export class OrdersService {
     if (order.status !== 'COMPLETED' || !order.claimedById || order.claimedById === order.dispatcherId) throw this.invalidStatus();
     await this.prisma.order.update({ where: { id }, data: { settledAt: input.settled ? now : null } });
     if (input.settled) await this.tell(id, 'ORDER_SETTLED', 'driver');
+    return this.getForParticipant(userId, id);
+  }
+
+  /**
+   * 出單者代確認: the dispatcher confirms the trip for a passenger who did not press the link,
+   * for every leg still on, as the passenger's own confirmation would. Taking it back undoes only
+   * the dispatcher's: a passenger who confirmed themselves stays confirmed. Not for 拼車, where
+   * each party confirms their own seats.
+   */
+  async confirmForPassenger(userId: string, id: string, input: PassengerConfirmUpdate, now = new Date()) {
+    const order = await this.prisma.order.findFirst({
+      where: { id, dispatcherId: userId },
+      select: { journeyId: true, status: true, carpool: { select: { id: true } } },
+    });
+    if (!order) throw this.notFound();
+    if (order.carpool || (order.status !== 'OPEN' && order.status !== 'ASSIGNED')) throw this.invalidStatus();
+    const trip: Prisma.OrderWhereInput = order.journeyId ? { journeyId: order.journeyId } : { id };
+    if (input.confirmed) {
+      await this.prisma.order.updateMany({
+        where: { ...trip, status: { in: ['OPEN', 'ASSIGNED'] }, passengerConfirmedAt: null },
+        data: { passengerConfirmedAt: now, passengerConfirmedByDispatcher: true },
+      });
+    } else {
+      await this.prisma.order.updateMany({
+        where: { ...trip, passengerConfirmedByDispatcher: true },
+        data: { passengerConfirmedAt: null, passengerConfirmedByDispatcher: false },
+      });
+    }
     return this.getForParticipant(userId, id);
   }
 

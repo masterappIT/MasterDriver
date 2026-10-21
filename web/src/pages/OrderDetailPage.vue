@@ -74,6 +74,8 @@ interface Detail {
   dispatcherContact?: { wechatId: string | null; whatsapp: string | null; phones?: string[] };
   claimedAt: string | null;
   passengerConfirmedAt: string | null;
+  /** 出單者代確認: the dispatcher confirmed for the passenger. */
+  passengerConfirmedByDispatcher?: boolean;
   viewer: 'dispatcher' | 'driver';
   passengerName: string | null;
   passengerContact: string | null;
@@ -154,6 +156,23 @@ const taken = computed(() => order.value?.status === 'ASSIGNED' && !selfDriven.v
 const remindPassenger = computed(
   () => isDispatcher.value && order.value?.status === 'ASSIGNED' && !order.value.passengerConfirmedAt && !order.value.fromBooking && !order.value.carpool,
 );
+
+/** 出單者代確認: the passenger said yes by phone or message but did not press the link. Not for 拼車. */
+const canConfirmForPassenger = computed(
+  () =>
+    isDispatcher.value &&
+    (order.value?.status === 'OPEN' || order.value?.status === 'ASSIGNED') &&
+    !order.value.passengerConfirmedAt &&
+    !order.value.carpool,
+);
+/** Who confirmed, said to whoever is reading. */
+const confirmedText = computed(() => {
+  const o = order.value;
+  if (!o?.passengerConfirmedAt) return '乘客還沒確認';
+  const at = shortTime(o.passengerConfirmedAt);
+  if (!o.passengerConfirmedByDispatcher) return `乘客 ${at} 確認了行程`;
+  return isDispatcher.value ? `你 ${at} 代乘客確認了行程` : `出單者 ${at} 代乘客確認了行程`;
+});
 
 /** 接駁 is cancelled whole; one leg's driver is replaced with 改派 instead. */
 const cancelQuestion = computed(() =>
@@ -330,7 +349,9 @@ const passengerSummary = computed(() => {
   const o = order.value;
   if (!o) return '';
   if (o.carpool) return `拼車 ${o.carpool.partyCount} 組 · ${o.passengers} 人`;
-  return [o.passengerName ?? '乘客', o.passengerContact, o.passengerConfirmedAt ? '已確認' : '還沒確認'].filter(Boolean).join(' · ');
+  return [o.passengerName ?? '乘客', o.passengerContact, o.passengerConfirmedAt ? (o.passengerConfirmedByDispatcher ? '你代確認' : '已確認') : '還沒確認']
+    .filter(Boolean)
+    .join(' · ');
 });
 const moneySummary = computed(() => {
   const o = order.value;
@@ -439,6 +460,7 @@ async function confirmPending() {
   const action = pending.value;
   pending.value = null;
   if (action?.path === 'release') await release();
+  else if (action?.path === 'passenger-confirmation') await setConfirmedForPassenger(true);
   else if (action) await act(action.path, action.done);
 }
 
@@ -520,6 +542,29 @@ async function setSettled(settled: boolean) {
   } finally {
     busy.value = false;
   }
+}
+
+/** 出單者代確認, or taking it back; the whole 往返 or 接駁 at once, as the passenger's own would. */
+async function setConfirmedForPassenger(confirmed: boolean) {
+  busy.value = true;
+  try {
+    order.value = await api<Detail>('PATCH', `/orders/${id.value}/passenger-confirmation`, { confirmed });
+    toast(confirmed ? '已代乘客確認' : '已改回未確認');
+  } catch (e) {
+    toast(errorText(e));
+  } finally {
+    busy.value = false;
+  }
+}
+
+function askConfirmForPassenger() {
+  ask(
+    'passenger-confirmation',
+    '已代乘客確認',
+    order.value?.journey ? `確定已經和乘客確認過整張${tripWord.value}？` : '確定已經和乘客確認過行程？',
+    '代乘客確認',
+    '接單司機會看到「出單者代確認」；乘客打開確認連結，會看到你已代為確認。',
+  );
 }
 
 async function setPool(inPool: boolean) {
@@ -767,6 +812,8 @@ watch(id, () => {
           <button class="button" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
             <AppIcon name="copy" :size="18" />{{ t('複製給乘客') }}
           </button>
+          <!-- 出單者代確認: many passengers say yes by phone and never press the link. -->
+          <button class="button secondary" type="button" :disabled="busy" @click="askConfirmForPassenger">{{ t('乘客已答應，我代乘客確認') }}</button>
         </section>
         </template>
       </div>
@@ -853,7 +900,21 @@ watch(id, () => {
         <p v-else-if="order.contactEnded" class="detail__waiting">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
         <p v-else class="detail__waiting">{{ t(`乘客電話 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡出單者。`) }}</p>
         <p class="detail__confirmed" :class="{ 'detail__confirmed--yes': order.passengerConfirmedAt }">
-          {{ order.passengerConfirmedAt ? t(`乘客 ${shortTime(order.passengerConfirmedAt)} 確認了行程`) : t('乘客還沒確認') }}
+          {{ t(confirmedText) }}
+          <button v-if="canConfirmForPassenger" class="chip" type="button" :disabled="busy" @click="askConfirmForPassenger">{{ t('代乘客確認') }}</button>
+          <button
+            v-else-if="isDispatcher && order.passengerConfirmedByDispatcher && live"
+            class="chip"
+            type="button"
+            :disabled="busy"
+            @click="setConfirmedForPassenger(false)"
+          >
+            {{ t('改回未確認') }}
+          </button>
+        </p>
+        <!-- The passenger may not have seen the car or plate: worth a call before setting out. -->
+        <p v-if="!isDispatcher && order.passengerConfirmedByDispatcher && live" class="hint">
+          {{ t('乘客沒有自己按確認，可能還沒看過你的車和車牌，出發前可以先聯絡乘客或出單者。') }}
         </p>
         <div v-if="order.passengerContact" class="detail__pair detail__gap">
           <a class="button secondary" :href="`tel:${order.passengerContact.replace(/\s/g, '')}`"><AppIcon name="call" :size="18" />{{ t('致電乘客') }}</a>
@@ -1637,6 +1698,9 @@ watch(id, () => {
   margin: var(--space-xs) 0 0;
   color: var(--color-text-secondary);
   font-size: var(--font-label);
+}
+.detail__confirmed .chip {
+  margin-left: var(--space-sm);
 }
 .detail__confirmed--yes {
   color: var(--status-confirmed);

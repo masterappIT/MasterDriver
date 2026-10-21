@@ -936,3 +936,63 @@ test('the way back may leave from and go to other places than the way there reve
   assert.deepEqual(reversed.journey?.legs.map((leg) => `${leg.origin}→${leg.destination}`), ['香港→深圳', '深圳→香港']);
   assert.ok(reversed.share.dispatch.wechat.includes('香港 ⇄ 深圳'));
 });
+
+// 出單者代確認: the dispatcher confirms for a passenger who said yes but never pressed the link.
+test('出單者代確認: only the dispatcher may confirm for the passenger, everyone can tell, and it can be taken back', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx, '李師傅');
+  const other = await createDriver(ctx);
+  const created = await ctx.orders.create(dispatcher, sampleOrder);
+  const confirmCode = created.links.passengerConfirm.split('/c/')[1];
+  await ctx.orders.claim(created.code, driver);
+
+  await rejectsWith(ctx.orders.confirmForPassenger(driver, created.id, { confirmed: true }), 'ORDER_NOT_FOUND');
+  await rejectsWith(ctx.orders.confirmForPassenger(other, created.id, { confirmed: true }), 'ORDER_NOT_FOUND');
+  const mine = await ctx.orders.confirmForPassenger(dispatcher, created.id, { confirmed: true });
+  assert.ok(mine.passengerConfirmedAt);
+  assert.equal(mine.passengerConfirmedByDispatcher, true);
+  assert.equal((await ctx.orders.getForParticipant(driver, created.id)).passengerConfirmedByDispatcher, true, 'the driver can tell');
+  const passenger = await ctx.orders.getForPassenger(confirmCode);
+  assert.ok(passenger.passengerConfirmedAt);
+  assert.equal(passenger.confirmedByDispatcher, true, 'the passenger is told who confirmed');
+  assert.equal(await ctx.prisma.notification.count({ where: { userId: dispatcher, kind: 'ORDER_CONFIRMED' } }), 0, 'nobody is told what they did themselves');
+
+  const undone = await ctx.orders.confirmForPassenger(dispatcher, created.id, { confirmed: false });
+  assert.equal(undone.passengerConfirmedAt, null);
+  assert.equal(undone.passengerConfirmedByDispatcher, false);
+
+  // The passenger's own confirmation is theirs: taking back changes nothing, and it reads as theirs.
+  await ctx.orders.confirmByPassenger(confirmCode);
+  const own = await ctx.orders.confirmForPassenger(dispatcher, created.id, { confirmed: false });
+  assert.ok(own.passengerConfirmedAt);
+  assert.equal(own.passengerConfirmedByDispatcher, false);
+  assert.equal((await ctx.orders.getForPassenger(confirmCode)).confirmedByDispatcher, false);
+
+  // 改派 starts over with the next driver, as the passenger's own confirmation does.
+  await ctx.orders.reopen(dispatcher, created.id);
+  await ctx.orders.confirmForPassenger(dispatcher, created.id, { confirmed: true });
+  await ctx.orders.claim(created.code, other);
+  await ctx.orders.reopen(dispatcher, created.id);
+  const reopened = await ctx.prisma.order.findUniqueOrThrow({ where: { id: created.id } });
+  assert.deepEqual([reopened.passengerConfirmedAt, reopened.passengerConfirmedByDispatcher], [null, false]);
+
+  await ctx.orders.cancel(dispatcher, created.id);
+  await rejectsWith(ctx.orders.confirmForPassenger(dispatcher, created.id, { confirmed: true }), 'INVALID_ORDER_STATUS');
+});
+
+test('出單者代確認 on 往返 and 接駁 covers the whole order from either leg, and so does taking it back', async () => {
+  const dispatcher = await createDriver(ctx);
+  await freeForAll();
+  for (const input of [roundTripOrder, transferOrder]) {
+    const order = await ctx.orders.create(dispatcher, input);
+    const second = await ctx.prisma.order.findFirstOrThrow({ where: { journeyId: order.id, legIndex: 2 } });
+    await ctx.orders.confirmForPassenger(dispatcher, second.id, { confirmed: true });
+    const legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id } });
+    assert.ok(legs.every((leg) => leg.passengerConfirmedAt && leg.passengerConfirmedByDispatcher), 'every leg');
+    const passenger = await ctx.orders.getForPassenger(order.links.passengerConfirm.split('/c/')[1]);
+    assert.equal(passenger.confirmedByDispatcher, true);
+
+    await ctx.orders.confirmForPassenger(dispatcher, order.id, { confirmed: false });
+    assert.equal(await ctx.prisma.order.count({ where: { journeyId: order.id, passengerConfirmedAt: { not: null } } }), 0);
+  }
+});
