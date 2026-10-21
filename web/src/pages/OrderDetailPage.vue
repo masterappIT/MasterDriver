@@ -815,14 +815,14 @@ watch(id, () => {
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" :kind="order.journey.kind" />
       </section>
 
-      <!-- The passenger: for the dispatcher after the group text or the driver; for the driver right under the trip,
-           so it is never mixed up with 出單者, even before the phone is shown. -->
+      <!-- The passenger: for the dispatcher after the group text or the driver; for the driver after the trip (and the
+           whole 往返 or 接駁), right above 出單者 so the two are never mixed up, even before the phone is shown. -->
       <component
         :is="foldDetails ? 'details' : 'section'"
         v-if="!endedForDriver"
         class="card"
         :class="{ detail__fold: foldDetails }"
-        :style="{ order: isDispatcher ? 10 : 4 }"
+        :style="{ order: isDispatcher ? 10 : 6 }"
       >
         <summary v-if="foldDetails">
           <span class="detail__fold-text">
