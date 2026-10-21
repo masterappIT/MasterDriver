@@ -27,6 +27,25 @@ export function renderSeoTemplate(template: string, values: Partial<Record<Templ
     .trim();
 }
 
+/**
+ * Robots that only fetch a page to draw its link preview in a chat or a post, never to put it in
+ * a search index: the same list nginx sends to the preview pages (deploy/frontend/web.conf).
+ * Facebook's facebookexternalhit obeys robots.txt, so with the site closed it drew no picture
+ * (2026-10-22); these are let in, and search engines stay out.
+ */
+export const LINK_PREVIEW_ROBOTS = [
+  'facebookexternalhit',
+  'Facebot',
+  'Twitterbot',
+  'LinkedInBot',
+  'TelegramBot',
+  'Slackbot',
+  'Discordbot',
+  'WhatsApp',
+  'SkypeUriPreview',
+  'line-poker',
+] as const;
+
 export interface RobotsInput {
   allowIndexing: boolean;
   sitemapEnabled: boolean;
@@ -34,7 +53,8 @@ export interface RobotsInput {
 }
 
 export function robotsTxt(input: RobotsInput): string {
-  const lines = ['User-agent: *'];
+  // Link previews, first and apart: a robot follows the one group that names it.
+  const lines = [...LINK_PREVIEW_ROBOTS.map((robot) => `User-agent: ${robot}`), 'Allow: /', '', 'User-agent: *'];
   if (!input.allowIndexing) {
     lines.push('Disallow: /');
   } else {

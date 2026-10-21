@@ -228,7 +228,7 @@ npm run billing -- --top-up --phone=+852:91234567 --amount=100 --note="轉數快
 | `GET /api/public/logo` | 後台上傳的 Logo 圖片 |
 | `GET /api/public/terms`、`/api/public/privacy` | 服務條款、私隱政策 |
 | `GET /api/public/seo/HOME`、`/PROFILE` | 頁面標題、描述、分享圖、robots、網站驗證碼、百度統計 ID |
-| `GET /api/public/robots.txt` | 未開放收錄時封鎖全站；開放後仍封鎖搶單頁、乘客頁、拼車連結與乘客報位連結、司機端、後台與 API |
+| `GET /api/public/robots.txt` | 未開放收錄時封鎖全站；開放後仍封鎖搶單頁、乘客頁、拼車連結與乘客報位連結、司機端、後台與 API；連結預覽爬蟲（`LINK_PREVIEW_ROBOTS`，例如 facebookexternalhit）一律放行（2026-10-22） |
 | `GET /api/public/ads?position=CLAIM_PAGE\|HOME\|MY_ORDERS` | 正在顯示的廣告（每位置最多 3 則） |
 | `POST /api/public/ads/impressions` | 記錄曝光（每次最多 10 則） |
 | `GET /api/public/ads/:id/click` | 記錄點擊並轉到後台設定的連結 |

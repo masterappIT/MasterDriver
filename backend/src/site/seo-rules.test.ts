@@ -18,8 +18,12 @@ test('unknown placeholders are removed rather than shown', () => {
   assert.equal(renderSeoTemplate('{電話}｜跨境師傅幫', {}), '跨境師傅幫');
 });
 
-test('with indexing off the whole site is closed to crawlers', () => {
-  assert.equal(robotsTxt({ allowIndexing: false, sitemapEnabled: true, canonicalOrigin: 'https://md.example' }), 'User-agent: *\nDisallow: /\n');
+test('with indexing off the whole site is closed to crawlers, but link previews still draw', () => {
+  const text = robotsTxt({ allowIndexing: false, sitemapEnabled: true, canonicalOrigin: 'https://md.example' });
+  assert.ok(text.endsWith('\n\nUser-agent: *\nDisallow: /\n'));
+  assert.ok(text.startsWith('User-agent: facebookexternalhit\nUser-agent: Facebot\n'));
+  assert.ok(text.includes('User-agent: line-poker\nAllow: /\n'));
+  for (const engine of ['Googlebot', 'Baiduspider', 'bingbot']) assert.ok(!text.includes(engine), engine);
   assert.equal(robotsMeta(false), 'noindex, nofollow');
 });
 
