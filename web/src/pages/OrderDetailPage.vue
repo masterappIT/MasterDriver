@@ -1160,7 +1160,7 @@ watch(id, () => {
             :disabled="busy"
             @click="
               selfDriven
-                ? ask('reopen', '已重新開放搶單', '把這單放到群裡讓別的司機搶？', '交給別的司機')
+                ? ask('reopen', '已重新開放搶單', together ? '把這張往返單（去程和回程）放到群裡讓別的司機搶？' : '把這單放到群裡讓別的司機搶？', '交給別的司機')
                 : ask(
                     'reopen',
                     '已重新開放搶單',

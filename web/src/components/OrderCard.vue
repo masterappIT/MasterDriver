@@ -53,7 +53,8 @@ function legState(leg: Journey['legs'][number]) {
   if (leg.status === 'CANCELLED') return '已取消';
   if (leg.status === 'COMPLETED') return '已完成';
   if (leg.selfDrive) return props.role === 'dispatched' || mineInPool.value ? '你自己開' : '出單者自己開';
-  if (leg.status === 'OPEN') return props.role === 'pool' && !mineInPool.value ? '可搶' : '等司機搶';
+  // 往返 同一位司機來回: both legs go with one claim, so neither reads as claimable on its own.
+  if (leg.status === 'OPEN') return props.role === 'pool' && !mineInPool.value ? (whole.value?.sameDriver ? '來回一起搶' : '可搶') : '等司機搶';
   return leg.driver?.name ? `${leg.driver.name} 接了` : '已有司機';
 }
 </script>
