@@ -166,9 +166,17 @@ onBeforeUnmount(() => clearInterval(clock));
       </RouterLink>
       <p v-if="loaded && myTrips.length === 0" class="home__empty">{{ t('今天和明天沒有行程。在群裡看到單，點連結就能搶。') }}</p>
     </section>
-    <!-- Sharing the 名片頁 is an occasional thing: one quiet line, not a button above the trips. -->
-    <RouterLink to="/app/profile-page" class="home__share">{{ t('分享名片，讓客人直接約你') }}</RouterLink>
-    <RouterLink to="/app/carpools" class="home__share">{{ t('開拼車，讓乘客報位') }}</RouterLink>
+    <!-- The driver's own customers: the 名片頁 and 拼車, side by side under the trips, each with one line. -->
+    <div class="home__own">
+      <RouterLink to="/app/profile-page" class="home__own-item home__own-item--card">
+        <strong>{{ t('分享名片') }}</strong>
+        <span>{{ t('客人直接約你') }}</span>
+      </RouterLink>
+      <RouterLink to="/app/carpools" class="home__own-item home__own-item--carpool">
+        <strong>{{ t('開拼車') }}</strong>
+        <span>{{ t('乘客自己報位') }}</span>
+      </RouterLink>
+    </div>
 
     <RouterLink v-if="sentTotal" to="/app/orders?tab=dispatched" class="card home__summary">
       <span class="home__label">{{ t('我出的單') }}</span>
@@ -269,15 +277,36 @@ onBeforeUnmount(() => clearInterval(clock));
   color: var(--color-gold-ink);
   font-size: var(--font-label);
 }
-.home__share {
-  display: block;
-  margin: calc(var(--space-sm) * -1) var(--space-xs) var(--space-lg);
-  font-size: var(--font-label);
-  font-weight: 600;
+.home__own {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
 }
-/* 拼車 sits just under the 名片頁 line, as quiet as it. */
-.home__share + .home__share {
-  margin-top: calc(var(--space-md) * -1);
+.home__own-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--space-md) var(--space-sm);
+  border-radius: var(--radius-card);
+  text-align: center;
+}
+.home__own-item strong {
+  font-size: 17px;
+}
+.home__own-item span {
+  font-size: var(--font-caption);
+  font-weight: 600;
+  opacity: 0.8;
+}
+.home__own-item--card {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+.home__own-item--carpool {
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
 }
 .home__fee {
   margin: 0 0 var(--space-lg);
