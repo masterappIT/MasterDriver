@@ -171,7 +171,20 @@ onMounted(async () => {
     </div>
 
     <div v-if="notice" class="card general-settings__card general-settings__notice">
-      <h2>更新說明彈窗</h2>
+      <div class="general-settings__notice-head">
+        <h2>更新說明彈窗</h2>
+        <span class="general-settings__notice-state" :class="{ 'general-settings__notice-state--on': notice.enabled }">{{ notice.enabled ? '顯示中' : '已關閉' }}</span>
+        <label class="switch" :title="notice.images.hant ? (notice.enabled ? '關閉更新說明彈窗' : '開啟更新說明彈窗') : '先上傳繁體圖片'">
+          <input
+            type="checkbox"
+            :checked="notice.enabled"
+            :disabled="!notice.images.hant"
+            aria-label="顯示更新說明彈窗"
+            @change="setNoticeEnabled(($event.target as HTMLInputElement).checked)"
+          />
+          <span class="slider"></span>
+        </label>
+      </div>
       <p class="muted">司機登入後在司機端彈出一張圖片，可以關掉；每個帳號只看一次，換手機也不會再出現。換新圖片後，所有司機會再看到一次。</p>
       <div class="general-settings__notice-images">
         <div v-for="item in ([['zh-Hant', '繁體圖片（必須）', notice.images.hant], ['zh-Hans', '簡體圖片（內地號碼的司機看到；沒有就看繁體）', notice.images.hans]] as const)" :key="item[0]" class="general-settings__notice-image">
@@ -184,7 +197,6 @@ onMounted(async () => {
           </label>
         </div>
       </div>
-      <label class="row"><input type="checkbox" :checked="notice.enabled" :disabled="!notice.images.hant" @change="setNoticeEnabled(($event.target as HTMLInputElement).checked)" /> 顯示更新說明彈窗</label>
       <p class="hint">
         {{ notice.version ? `已有 ${notice.seen} 位司機看過這次的更新說明（共 ${notice.users} 位司機）。` : '還沒有上傳過圖片。' }}
         PNG、JPG 或 WebP，400 KB 以內，建議直向 3:4。上傳和開關都立即生效，不用按「儲存全部」。
@@ -270,6 +282,25 @@ onMounted(async () => {
 
 .general-settings__notice {
   margin-bottom: 18px;
+}
+
+.general-settings__notice-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.general-settings__notice-head h2 {
+  margin: 0 auto 0 0;
+}
+
+.general-settings__notice-state {
+  color: var(--color-text-secondary, #556579);
+  font-weight: 600;
+}
+
+.general-settings__notice-state--on {
+  color: var(--color-primary);
 }
 
 .general-settings__notice-images {
