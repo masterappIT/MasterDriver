@@ -61,9 +61,12 @@ const endOfTomorrow = computed(() => {
   return Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + 2) - 8 * 60 * 60 * 1000;
 });
 
-/** Trips this driver drives: ones they claimed, and legs they kept for themselves (這單我自己做). */
+/**
+ * Trips this driver drives: ones they claimed, and legs they kept for themselves (這單我自己做).
+ * A leg they kept is in both lists, as its dispatcher and its driver, so each order is listed once.
+ */
 const myTrips = computed(() =>
-  [...claimed.value, ...dispatched.value.filter((order) => order.selfDrive)]
+  [...new Map([...claimed.value, ...dispatched.value.filter((order) => order.selfDrive)].map((order) => [order.id, order])).values()]
     .filter((order) => order.status === 'ASSIGNED' && new Date(order.pickupAt).getTime() <= endOfTomorrow.value)
     .sort((a, b) => a.pickupAt.localeCompare(b.pickupAt)),
 );
