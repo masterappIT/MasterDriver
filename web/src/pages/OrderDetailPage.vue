@@ -1103,7 +1103,8 @@ watch(id, () => {
         <OrderMoneyMarks :order="order" :is-dispatcher="false" :can-settle="canSettle" :busy="busy" />
       </section>
 
-      <section v-if="order.driver && !ownTrip && !endedForDriver" class="card" style="order: 7">
+      <!-- The driver's own car comes after 出單者: they rarely need to read it. -->
+      <section v-if="order.driver && !ownTrip && !endedForDriver" class="card" :style="{ order: isDispatcher ? 7 : 9 }">
         <span :class="isDispatcher ? 'section-label' : 'detail__role detail__role--car'">{{ selfDriven ? t('這單你自己做') : isDispatcher ? t('接單司機') : t('你的車') }}</span>
         <div class="detail__person">
           <strong>{{ order.driver.name ? t(order.driver.name) : t('沒有留名') }}</strong>
@@ -1128,8 +1129,8 @@ watch(id, () => {
         <p class="hint">{{ t(order.status === 'COMPLETED' ? '這位司機的帳號已被平台刪除，看不到他的資料和聯絡方式，這單也不用再標記結清。' : '這位司機的帳號已被平台刪除，看不到他的資料和聯絡方式。') }}</p>
       </section>
 
-      <!-- The driver who took the order: how to reach whoever put it out. -->
-      <section v-if="!isDispatcher && order.dispatcherPhone" class="card" style="order: 9">
+      <!-- The driver who took the order: how to reach whoever put it out, right after the passenger. -->
+      <section v-if="!isDispatcher && order.dispatcherPhone" class="card" style="order: 7">
         <span class="detail__role detail__role--dispatcher">{{ t('出單者') }}</span>
         <div class="detail__person">
           <strong>{{ order.dispatcherName ? t(order.dispatcherName) : t('沒有留名') }}</strong>
