@@ -114,6 +114,8 @@ const trip = ref<PassengerView | null>(null);
 const error = ref('');
 const busy = ref(false);
 const ended = ref<HTMLElement | null>(null);
+/** Under the driver's tag: who this is to the passenger. */
+const DRIVER_NOTE = '開車來接你的人，上車前認這輛車。';
 /** Who arranged the trip, by name: the one the fare goes to. */
 const arranger = computed(() => trip.value?.dispatcherName ?? '為你安排的人');
 
@@ -211,7 +213,8 @@ onBeforeUnmount(() => {
           <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用（來回）') }}</span><strong>{{ money(trip.price) }}</strong></div>
         </section>
         <section v-for="{ leg, label } in roundTripDrivers" :key="leg.legIndex" class="card">
-          <p class="confirm-page__label">{{ t(label) }}</p>
+          <span class="role-tag role-tag--teal">{{ t(label) }}</span>
+          <p class="confirm-page__role-note">{{ t(DRIVER_NOTE) }}</p>
           <p v-if="leg.status === 'ASSIGNED' && progressLine(leg.progress, clock)" class="confirm-page__progress">{{ t(progressLine(leg.progress, clock)) }}</p>
           <div v-if="leg.driver" class="confirm-page__driver">
             <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>
@@ -240,7 +243,8 @@ onBeforeUnmount(() => {
         </section>
         <template v-for="leg in trip.legs" :key="leg.legIndex">
           <section class="card">
-            <p class="confirm-page__label">{{ leg.legIndex === 1 ? t('第 1 段司機（先接你的車）') : t('第 2 段司機（換車後的車）') }}</p>
+            <span class="role-tag role-tag--teal">{{ t(`第 ${leg.legIndex} 段司機`) }}</span>
+            <p class="confirm-page__role-note">{{ leg.legIndex === 1 ? t('先來接你的車，上車前認這輛車。') : t('換車後接你的車，換車時認這輛車。') }}</p>
             <p v-if="leg.status === 'ASSIGNED' && progressLine(leg.progress, clock)" class="confirm-page__progress">{{ t(progressLine(leg.progress, clock)) }}</p>
             <div v-if="leg.driver" class="confirm-page__driver">
               <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>
@@ -269,7 +273,8 @@ onBeforeUnmount(() => {
         </section>
 
         <section v-if="trip.driver" class="card">
-          <p class="confirm-page__label">{{ t('接送司機') }}</p>
+          <span class="role-tag role-tag--teal">{{ t('接送司機') }}</span>
+          <p class="confirm-page__role-note">{{ t(DRIVER_NOTE) }}</p>
           <p v-if="trip.status === 'ASSIGNED' && progressLine(trip.progress, clock)" class="confirm-page__progress">{{ t(progressLine(trip.progress, clock)) }}</p>
           <div class="confirm-page__driver">
             <strong>{{ trip.driver.name ? t(trip.driver.name) : t('司機') }}</strong>
@@ -289,7 +294,8 @@ onBeforeUnmount(() => {
 
       <!-- Who arranged the trip: the one to ask about changes, the price or anything else. -->
       <section v-if="trip.dispatcher" class="card">
-        <p class="confirm-page__label">{{ t('行程有問題或要更改，聯絡為你安排的人') }}</p>
+        <span class="role-tag role-tag--blue">{{ t('為你安排的人') }}</span>
+        <p class="confirm-page__role-note">{{ t('幫你安排這趟車。行程有問題、要更改或付車費，都找這位。') }}</p>
         <strong class="confirm-page__arranger">{{ trip.dispatcher.name ? t(trip.dispatcher.name) : t('安排行程的人') }}</strong>
         <ContactLines :phones="trip.dispatcher.phones" :wechat-id="trip.dispatcher.wechatId" :whatsapp="trip.dispatcher.whatsapp" />
         <!-- The customer stays the dispatcher's whoever drives: their page is where to book next time. -->
@@ -354,6 +360,12 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 .confirm-page__label {
+  margin: 0 0 var(--space-sm);
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+/* Under a role tag: who this person is to the passenger, so the driver and the arranger are never mixed up. */
+.confirm-page__role-note {
   margin: 0 0 var(--space-sm);
   color: var(--color-text-secondary);
   font-size: var(--font-caption);

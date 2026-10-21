@@ -571,6 +571,28 @@ input[type='checkbox'].switch:checked::after {
   white-space: nowrap;
 }
 
+/* Whose card this is, at a glance: 乘客, 出單者, 接送司機 and so on, each role in its own colour. */
+.role-tag {
+  display: inline-block;
+  margin: 0 0 var(--space-sm);
+  padding: 2px var(--space-md);
+  border-radius: var(--radius-pill);
+  font-size: 15px;
+  font-weight: 700;
+}
+.role-tag--teal {
+  background: var(--color-teal-tint);
+  color: var(--color-teal-ink);
+}
+.role-tag--blue {
+  background: var(--color-tint);
+  color: var(--color-primary-dark);
+}
+.role-tag--grey {
+  background: var(--color-divider);
+  color: var(--color-label);
+}
+
 /* 接駁: "第 2／2 段" next to an order's time. */
 .leg-tag {
   display: inline-block;
