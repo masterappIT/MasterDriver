@@ -70,3 +70,20 @@ test('reports what it could not read', () => {
   assert.deepEqual(parseQuickOrder('有冇人接單', now).missing, ['pickupAt', 'origin', 'destination']);
   assert.deepEqual(parseQuickOrder('明天機場送深圳灣', now).missing, ['pickupAt']);
 });
+
+test('「明天10:00深圳湾往返机场」 — 往返 between two places reads as the way there, and marks the order 往返', () => {
+  const order = parseQuickOrder('明天10:00深圳湾往返机场', now);
+  assert.equal(order.pickupAt, '2026-10-14T10:00:00+08:00');
+  assert.equal(order.origin, '深圳湾');
+  assert.equal(order.destination, '机场');
+  assert.equal(order.roundTrip, true);
+  assert.equal(order.notes, '往返');
+});
+
+test('「明天9點香港到深圳來回」 — 來回 after the route marks the order 往返; a one-way line does not', () => {
+  const order = parseQuickOrder('明天9點香港到深圳來回', now);
+  assert.equal(order.origin, '香港');
+  assert.equal(order.destination, '深圳');
+  assert.equal(order.roundTrip, true);
+  assert.equal(parseQuickOrder('明天15:40澳门送香港，直车', now).roundTrip, undefined);
+});

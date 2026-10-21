@@ -99,10 +99,12 @@ async function driveMyself() {
       passengerContact,
       notes: b.notes ?? undefined,
       ...(b.quote ? { passengerPrice: b.quote, showPassengerPrice: true } : {}),
+      // 往返: both legs the driver's own, one driver there and back.
+      ...(b.roundTrip && b.returnPickupAt ? { roundTrip: { pickupAt: b.returnPickupAt, sameDriver: true, selfDriveLeg: null } } : {}),
       selfDrive: true,
       bookingId: b.id,
     });
-    toast('已成單，這單你自己做');
+    toast(b.roundTrip ? '已成單，來回你自己做' : '已成單，這單你自己做');
     await router.replace(`/app/orders/${created.id}`);
   } catch (e) {
     error.value = errorText(e);
@@ -164,8 +166,13 @@ onBeforeUnmount(() => {
       <section class="card booking-detail__trip">
         <span class="booking-detail__status" :class="`booking-detail__status--${bookingTone(booking.status)}`">{{ t(BOOKING_STATUS[booking.status].driver) }}</span>
         <strong class="booking-detail__time">{{ pickup(booking.pickupAt) }}</strong>
-        <div class="booking-detail__route">{{ t(`${booking.origin} 至 ${booking.destination}`) }}</div>
-        <p class="booking-detail__load">{{ t(loadLine(booking.passengers, booking.luggage)) }} <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span></p>
+        <div class="booking-detail__route">{{ t(`${booking.origin} ${booking.roundTrip ? '往返' : '至'} ${booking.destination}`) }}</div>
+        <p v-if="booking.roundTrip && booking.returnPickupAt" class="booking-detail__load">{{ t(`回程 ${pickup(booking.returnPickupAt)}`) }}</p>
+        <p class="booking-detail__load">
+          {{ t(loadLine(booking.passengers, booking.luggage)) }}
+          <span v-if="booking.transfer" class="leg-tag">{{ t('接駁（中途換車）') }}</span>
+          <span v-else-if="booking.roundTrip" class="leg-tag">{{ t('往返') }}</span>
+        </p>
         <p v-if="booking.notes" class="booking-detail__note">{{ t(booking.notes) }}</p>
         <p class="hint">
           {{ t(`${shortTime(booking.createdAt)} 從名片頁送出`) }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>
@@ -231,10 +238,11 @@ onBeforeUnmount(() => {
           </p>
         </template>
         <template v-else>
-          <button class="button block large booking-detail__order" type="button" :disabled="busy" @click="driveMyself">{{ t('這單我自己做') }}</button>
+          <button class="button block large booking-detail__order" type="button" :disabled="busy" @click="driveMyself">{{ booking.roundTrip ? t('這單我自己做（來回）') : t('這單我自己做') }}</button>
           <button class="button secondary block booking-detail__order" type="button" :disabled="busy" @click="dispatchToOthers">{{ t('派給其他司機') }}</button>
           <p class="hint booking-detail__tip">
-            {{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}
+            <template v-if="booking.roundTrip">{{ t('乘客要往返。自己做：去程和回程都成為你的行程；派給其他司機：帶入出單表格，選同一位司機來回或可分開接，填每程的出單價。') }}</template>
+            <template v-else>{{ booking.status === 'ACCEPTED' ? t('自己做：直接成為你的行程，不用再填資料。派給其他司機：帶入出單表格，填出單價後貼到群裡。') : t('和乘客談好後就可以成單。自己做：直接成為你的行程；派給其他司機：帶入出單表格。') }}</template>
           </p>
         </template>
         <button class="booking-detail__decline" type="button" :disabled="busy" @click="decline">{{ t('婉拒這個詢價') }}</button>

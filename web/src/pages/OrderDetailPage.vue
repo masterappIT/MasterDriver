@@ -19,7 +19,7 @@ import PageBack from '../components/PageBack.vue';
 import AppIcon from '../components/AppIcon.vue';
 import GroupText from '../components/GroupText.vue';
 import { t } from '../i18n';
-import { PROGRESS_STEPS, legLabel, plateRequirement, progressLine, type Journey, type PlateRegion, type TripProgress } from '../journey';
+import { PROGRESS_STEPS, legLabel, legName, plateRequirement, progressLine, type Journey, type PlateRegion, type TripProgress } from '../journey';
 import { toast } from '../toast';
 import type { PlateType } from '@masterdriver/shared/vehicle-plate';
 
@@ -122,8 +122,17 @@ const selfDriven = computed(() => Boolean(order.value?.selfDrive) && order.value
  * 這單我自己做: the dispatcher drives it, so the page keeps what driving needs (trip, passenger,
  * price and payment, 標記完成); the settings fold into 其他設定 and the dispatching parts go.
  */
-// 接駁 with 這段我自己做 still has another driver on the other leg, so it keeps the full view.
-const ownTrip = computed(() => isDispatcher.value && Boolean(order.value?.selfDrive) && !order.value?.journey);
+// 接駁 with 這段我自己做 still has another driver on the other leg, so it keeps the full view; a
+// 往返 whose legs the dispatcher drives both is theirs alone.
+const ownTrip = computed(
+  () => isDispatcher.value && Boolean(order.value?.selfDrive) && (!order.value?.journey || order.value.journey.legs.every((leg) => leg.selfDrive)),
+);
+/** 往返: there and back, legs named 去程／回程, no 接駁位置. */
+const roundTrip = computed(() => order.value?.journey?.kind === 'ROUND_TRIP');
+/** 往返 同一位司機來回: the driver holds both legs, and 改派 or 取消接單 moves both. */
+const together = computed(() => roundTrip.value && Boolean(order.value?.journey?.sameDriver));
+/** What the whole order is called: 往返單 or 接駁單. */
+const tripWord = computed(() => (roundTrip.value ? '往返單' : '接駁單'));
 /**
  * A cancelled order seen by the driver who had it: only that it is off, which trip it was, and
  * whom to ask. The passenger, the prices, their own car and the other leg are no longer theirs.
@@ -148,7 +157,13 @@ const remindPassenger = computed(
 
 /** 接駁 is cancelled whole; one leg's driver is replaced with 改派 instead. */
 const cancelQuestion = computed(() =>
-  order.value?.journey ? '確定取消整張接駁單？兩段都會取消。只想換其中一段的司機，請用「改派」。' : '確定取消這張單？',
+  roundTrip.value
+    ? together.value
+      ? '確定取消整張往返單？去程和回程都會取消。只想換司機，請用「改派」。'
+      : '確定取消整張往返單？去程和回程都會取消。只想換其中一程的司機，請用「改派」。'
+    : order.value?.journey
+      ? '確定取消整張接駁單？兩段都會取消。只想換其中一段的司機，請用「改派」。'
+      : '確定取消這張單？',
 );
 
 /** "13:50": the time of day only, for the 行程進度 line. */
@@ -359,7 +374,7 @@ async function saveTrip() {
   const changed = (field: keyof typeof tripForm) => String(tripForm[field]).trim() !== String(tripBefore[field]).trim();
   if (changed('pickupAt')) body.pickupAt = fromLocalInput(tripForm.pickupAt);
   for (const field of ['origin', 'destination', 'vehicleType'] as const) if (changed(field)) body[field] = String(tripForm[field]).trim();
-  if (order.value?.journey && changed('transferPlace')) body.transferPlace = tripForm.transferPlace.trim();
+  if (order.value?.journey && !roundTrip.value && changed('transferPlace')) body.transferPlace = tripForm.transferPlace.trim();
   if (changed('passengers')) body.passengers = Number(tripForm.passengers);
   if (changed('luggage')) body.luggage = Number(tripForm.luggage);
   if (changed('flightNo')) body.flightNo = String(tripForm.flightNo).trim() || null;
@@ -771,10 +786,11 @@ watch(id, () => {
         <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" /></div>
         <div class="detail__meta">
           <span>{{ t(loadLine(order.passengers, order.luggage, order.vehicleType)) }}</span>
-          <span v-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
+          <span v-if="order.journey" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(order.journey)}`) }}</span>
+          <span v-if="together" class="leg-tag">{{ t('同一位司機來回') }}</span>
           <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
         </div>
-        <p v-if="order.journey" class="detail__line">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
+        <p v-if="order.journey && !roundTrip" class="detail__line">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
         <p v-if="order.flightNo" class="detail__line">{{ t(`航班：${order.flightNo}`) }}</p>
         <p v-if="order.notes" class="detail__note">{{ t(order.notes) }}</p>
         <p v-if="progressText && !endedForDriver" class="detail__progress">{{ t(progressText) }}</p>
@@ -782,10 +798,20 @@ watch(id, () => {
         <RouterLink v-if="isDispatcher && order.carpool?.id" class="chip detail__edit-trip" :to="`/app/carpools/${order.carpool.id}`">{{ t('打開拼車') }}</RouterLink>
       </component>
 
-      <!-- 接駁: both legs of the order; the dispatcher opens a leg to manage its driver. -->
+      <!-- 接駁 and 往返: both legs of the order; the dispatcher opens a leg to manage its driver. -->
       <section v-if="order.journey && !endedForDriver" class="card" style="order: 5">
-        <span class="section-label">{{ isDispatcher ? t('整張接駁單（兩段），點一段管理它的司機') : t('整張接駁單（兩段）') }}</span>
-        <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" />
+        <span class="section-label">
+          {{
+            roundTrip
+              ? isDispatcher
+                ? t('整張往返單（去程和回程），點一程查看')
+                : t('整張往返單（去程和回程）')
+              : isDispatcher
+                ? t('整張接駁單（兩段），點一段管理它的司機')
+                : t('整張接駁單（兩段）')
+          }}
+        </span>
+        <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" :kind="order.journey.kind" />
       </section>
 
       <!-- The passenger: after the group text while waiting for a driver, after the driver once taken. -->
@@ -871,7 +897,7 @@ watch(id, () => {
           <label v-if="!order.carpool" class="detail__switch detail__divided">
             <span>
               {{ t('乘客確認頁顯示收款方式') }}
-              <small>{{ order.journey ? t('整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示價錢') }}</small>
+              <small>{{ order.journey ? t(`整張${tripWord}一起顯示，乘客付一次`) : t('顯示時會一併顯示價錢') }}</small>
             </span>
             <input
               class="switch"
@@ -882,7 +908,7 @@ watch(id, () => {
             />
           </label>
           <p v-if="order.serviceFee" class="hint detail__divided">
-            {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整張接駁單只收一次，取消會退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
+            {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整張${tripWord}只收一次，取消會退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
           </p>
           <div class="detail__divided">
             <span class="section-label">{{ t('行程群（你和乘客）') }}</span>
@@ -998,9 +1024,9 @@ watch(id, () => {
               {{ t(`乘客價 ${money(order.passengerPrice) || '未填'}`) }}<template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
             </p>
             <p v-else-if="order.carpool" class="detail__line">{{ t('拼車沒有整張單的乘客價：每組按每位價錢乘人數，在「拼車乘客」查看') }}</p>
-            <p v-else class="detail__line">{{ t('乘客價整張單一個，在第 1 段查看和修改') }}</p>
+            <p v-else class="detail__line">{{ t(roundTrip ? '乘客價整張單一個，在去程查看和修改' : '乘客價整張單一個，在第 1 段查看和修改') }}</p>
             <p v-if="order.serviceFee" class="hint detail__fee">
-              {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整張接駁單只收一次，取消會退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
+              {{ order.journey ? t(`平台服務費 HK$${order.serviceFee}，整張${tripWord}只收一次，取消會退回`) : t(`平台服務費 HK$${order.serviceFee}，取消會退回`) }}
             </p>
             <template v-if="live">
               <label v-if="tripPriceHere" class="detail__switch detail__divided">
@@ -1135,13 +1161,19 @@ watch(id, () => {
             @click="
               selfDriven
                 ? ask('reopen', '已重新開放搶單', '把這單放到群裡讓別的司機搶？', '交給別的司機')
-                : ask('reopen', '已重新開放搶單', '收回這張單，重新讓司機搶？', '改派', '原本接單的司機打開連結會看到單已改派，請另外通知他。')
+                : ask(
+                    'reopen',
+                    '已重新開放搶單',
+                    together ? '收回這張往返單（去程和回程），重新讓司機搶？' : '收回這張單，重新讓司機搶？',
+                    '改派',
+                    '原本接單的司機打開連結會看到單已改派，請另外通知他。',
+                  )
             "
           >
             {{ selfDriven ? t('交給別的司機') : t('改派') }}
           </button>
-          <button class="detail__cancel" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? '取消整張接駁單' : '取消這張單', cancelNote)">
-            {{ order.journey ? t('取消整張接駁單') : t('取消這張單') }}
+          <button class="detail__cancel" type="button" :disabled="busy" @click="ask('cancel', '已取消', cancelQuestion, order.journey ? `取消整張${tripWord}` : '取消這張單', cancelNote)">
+            {{ order.journey ? t(`取消整張${tripWord}`) : t('取消這張單') }}
           </button>
         </template>
         <!-- The driver who took it can give it back until the trip is done; with 接駁, only their own leg. -->
@@ -1154,7 +1186,13 @@ watch(id, () => {
             ask(
               'release',
               '已取消接單',
-              order.journey ? `確定不做第 ${order.journey.legIndex} 段？只退出你這一段，另一段不受影響。` : '確定不做這張單？',
+              together
+                ? '確定不做這張往返單？去程和回程都會退出。'
+                : roundTrip && order.journey
+                  ? `確定不做${legName(order.journey.kind, order.journey.legIndex)}？只退出你這一程，另一程不受影響。`
+                  : order.journey
+                    ? `確定不做第 ${order.journey.legIndex} 段？只退出你這一段，另一段不受影響。`
+                    : '確定不做這張單？',
               '取消接單',
               '這單會回到等人搶，群裡同一個連結可以再搶；出單者會收到通知，最好也直接告訴出單者。',
             )
@@ -1164,8 +1202,9 @@ watch(id, () => {
         </button>
       </section>
 
-      <!-- 出回程單: the same trip back, the route turned around; from the trip's first leg for 接駁. -->
-      <RouterLink v-if="isDispatcher" class="button secondary block detail__return" style="order: 21" :to="`/app/new?return=${order.journey?.legs[0]?.id ?? order.id}`">
+      <!-- 出回程單: the same trip back, the route turned around; from the trip's first leg for 接駁.
+           A 往返 already comes back. -->
+      <RouterLink v-if="isDispatcher && !roundTrip" class="button secondary block detail__return" style="order: 21" :to="`/app/new?return=${order.journey?.legs[0]?.id ?? order.id}`">
         {{ t('出回程單') }}
       </RouterLink>
 
@@ -1175,14 +1214,14 @@ watch(id, () => {
             {{ t('已有司機接了：改了之後會通知他確認。') }}
           </p>
           <label class="line-field">
-            <span>{{ order.journey ? t(`第 ${order.journey.legIndex} 段出發時間（香港時間）`) : t('出發時間（香港時間）') }}</span>
+            <span>{{ order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}出發時間（香港時間）`) : t('出發時間（香港時間）') }}</span>
             <input v-model="tripForm.pickupAt" class="line-input" type="datetime-local" required />
           </label>
           <label class="line-field">
             <span>{{ t('出發地') }}</span>
             <input v-model="tripForm.origin" class="line-input" maxlength="120" required />
           </label>
-          <label v-if="order.journey" class="line-field">
+          <label v-if="order.journey && !roundTrip" class="line-field">
             <span>{{ t('接駁位置') }}</span>
             <input v-model="tripForm.transferPlace" class="line-input" maxlength="120" required />
           </label>

@@ -29,7 +29,8 @@ interface OrderDetail {
   dispatcher: { id: string; name: string | null; phone: string };
   selfDrive: boolean;
   inPool: boolean;
-  journey: { legIndex: number; legCount: number } | null;
+  /** kind: TRANSFER (接駁) or ROUND_TRIP (往返); sameDriver: one driver takes both legs of a 往返. */
+  journey: { kind: 'TRANSFER' | 'ROUND_TRIP'; sameDriver: boolean; legIndex: number; legCount: number } | null;
   contactRevealMinutes: number | null;
   fromBooking: boolean;
   payment: { showPaymentMethods: boolean; paidAt: string | null; settledAt: string | null };
@@ -151,7 +152,8 @@ onMounted(async () => {
         <div v-if="order.notes" class="facts__wide"><dt>備註</dt><dd>{{ order.notes }}</dd></div>
       </dl>
       <div class="order-detail__tags">
-        <span v-if="order.journey" class="tag">接駁第 {{ order.journey.legIndex }}／{{ order.journey.legCount }} 段</span>
+        <span v-if="order.journey?.kind === 'ROUND_TRIP'" class="tag">往返{{ order.journey.legIndex === 1 ? '去程' : '回程' }}{{ order.journey.sameDriver ? '・同一位司機來回' : '・可分開接' }}</span>
+        <span v-else-if="order.journey" class="tag">接駁第 {{ order.journey.legIndex }}／{{ order.journey.legCount }} 段</span>
         <span v-if="order.selfDrive" class="tag">出單者自己做</span>
         <span v-if="order.inPool" class="tag">在接單池</span>
         <span v-if="order.fromBooking" class="tag">來自名片頁預約</span>

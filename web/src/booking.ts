@@ -11,6 +11,9 @@ export interface Booking {
   luggage: number;
   /** The passenger asked for 接駁 (中途換車) rather than 直達; the driver sets where the cars change. */
   transfer: boolean;
+  /** The passenger asked for 往返 (there and back); returnPickupAt is the way back. */
+  roundTrip: boolean;
+  returnPickupAt: string | null;
   passengerName: string | null;
   passengerContact: string;
   passengerWechat: string | null;

@@ -38,6 +38,10 @@ export const bookingCreateSchema = z.object({
   luggage: z.number().int().min(0).max(60).default(0),
   /** 接駁 (中途換車) rather than 直達; the passenger never names the 接駁位置, the driver does. */
   transfer: z.boolean().default(false),
+  /** 往返 (there and back) rather than 直達; not together with 接駁. */
+  roundTrip: z.boolean().default(false),
+  /** 往返: when to be picked up for the way back, ISO 8601 with offset; after pickupAt. */
+  returnPickupAt: z.string().datetime({ offset: true }).optional(),
   /** How to address the passenger; asked for since 2026-10-14, so older requests may have none. */
   passengerName: line(40),
   /** A phone with its country code, as on an order (2026-10-14; older requests may hold any text). */
@@ -62,7 +66,17 @@ export const bookingCreateSchema = z.object({
     .regex(/^[A-Za-z0-9_-]{0,30}$/)
     .optional()
     .transform((value) => value || undefined),
-});
+})
+  .refine((value) => !(value.transfer && value.roundTrip), { message: 'ONE_JOURNEY_KIND', path: ['roundTrip'] })
+  .refine((value) => !value.roundTrip || value.returnPickupAt !== undefined, {
+    message: 'RETURN_TIME_REQUIRED',
+    path: ['returnPickupAt'],
+  })
+  .refine(
+    (value) => !value.roundTrip || !value.returnPickupAt || Date.parse(value.returnPickupAt) > Date.parse(value.pickupAt),
+    { message: 'RETURN_BEFORE_PICKUP', path: ['returnPickupAt'] },
+  )
+  .transform((value) => (value.roundTrip ? value : { ...value, returnPickupAt: undefined }));
 export type BookingCreate = z.infer<typeof bookingCreateSchema>;
 
 /** The driver's answer: a price, with an optional note about what it covers. */

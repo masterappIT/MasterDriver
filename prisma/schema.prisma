@@ -147,6 +147,13 @@ enum OrderStatus {
   CANCELLED
 }
 
+/// What a trip of two legs is: 接駁 (A to B, changing cars at a 接駁位置) or 往返 (A to B and back
+/// to A). Every leg of the trip holds it.
+enum JourneyKind {
+  TRANSFER
+  ROUND_TRIP
+}
+
 /// Who may claim an order. TEAM is reserved for the paid team tier.
 enum ClaimScope {
   PUBLIC
@@ -219,6 +226,11 @@ model Order {
   journeyId            String?
   /// Position of this leg in its trip, from 1; null outside a trip.
   legIndex             Int?
+  /// What the trip is (接駁 or 往返); null for an order that is not part of a trip.
+  journeyKind          JourneyKind?
+  /// 往返: one driver takes both legs with one claim (同一位司機來回); false: each leg is claimed
+  /// on its own (可分開接), and one driver may take both. Always false outside a 往返.
+  sameDriver           Boolean       @default(false)
   /// Plates the car for this order needs (e.g. a Macau car for the leg after a
   /// 接駁). Shown in the group text and on the claim page; never enforced.
   requiredPlates       PlateRegion[] @default([])
@@ -1047,6 +1059,9 @@ model BookingRequest {
   luggage          Int           @default(0)
   /// 接駁 (中途換車) rather than 直達, as the passenger asked; the driver sets the 接駁位置 when making the order.
   transfer         Boolean       @default(false)
+  /// 往返 (there and back) rather than 直達, as the passenger asked; returnPickupAt is the way back.
+  roundTrip        Boolean       @default(false)
+  returnPickupAt   DateTime?
   passengerName    String?
   /// A phone with its country code since 2026-10-14; older requests may hold any text.
   passengerContact String

@@ -204,6 +204,9 @@ export class ProfilePagesService {
         passengers: input.passengers,
         luggage: input.luggage,
         transfer: input.transfer,
+        // 往返: the way back is after the way there (checked by the schema), so in the future too.
+        roundTrip: input.roundTrip,
+        returnPickupAt: input.returnPickupAt ? new Date(input.returnPickupAt) : null,
         passengerName: input.passengerName,
         passengerContact: input.passengerContact,
         passengerWechat: input.passengerWechat ?? null,
@@ -363,6 +366,8 @@ export class ProfilePagesService {
       passengers: row.passengers,
       luggage: row.luggage,
       transfer: row.transfer,
+      roundTrip: row.roundTrip,
+      returnPickupAt: row.returnPickupAt?.toISOString() ?? null,
       passengerName: row.passengerName,
       passengerContact: row.passengerContact,
       passengerWechat: row.passengerWechat,

@@ -21,7 +21,7 @@ import { copyText } from '../device';
 import { loadLine, money, pickup, plateKind, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
-import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
+import { journeyRoute, journeyTag, legLabel, legName, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
 import LinkProblem from '../components/LinkProblem.vue';
 
@@ -79,8 +79,17 @@ const busy = ref(false);
 const sheet = ref<'signIn' | null>(null);
 let poller: ReturnType<typeof setInterval> | undefined;
 
-/** 接駁: the order this link belongs to, in two legs. */
+/** 接駁 or 往返: the order this link belongs to, in two legs. */
 const trip = computed(() => order.value?.journey ?? null);
+const roundTrip = computed(() => trip.value?.kind === 'ROUND_TRIP');
+/** 往返 同一位司機來回: one claim takes both legs, from either leg's link. */
+const together = computed(() => roundTrip.value && Boolean(trip.value?.sameDriver));
+/** 同一位司機來回 is offered while no leg has a driver yet. */
+const togetherOpen = computed(() => Boolean(together.value && trip.value?.legs.every((leg) => leg.status === 'OPEN')));
+/** 往返 可分開接: a driver who holds one leg may take the other one too. */
+const otherOpenLegs = computed(() =>
+  roundTrip.value && !together.value && order.value?.viewer === 'driver' ? (trip.value?.legs.filter((leg) => leg.status === 'OPEN' && !leg.mine) ?? []) : [],
+);
 /** Opened from the group by someone who holds neither leg: the page offers both legs to choose from. */
 const offering = computed(() => Boolean(trip.value && order.value?.viewer === 'other'));
 /** The leg this driver already holds, when the link they opened is the other leg's. */
@@ -201,14 +210,20 @@ onBeforeUnmount(() => {
       <InlineStatus v-if="lost" icon="cancel">{{ t('慢了一步，這張單已被其他司機接走。') }}</InlineStatus>
       <InlineStatus v-else-if="order.viewer === 'other' && (trip?.status ?? order.status) === 'CANCELLED'" icon="cancel">{{ t('這張單已被取消。') }}</InlineStatus>
       <InlineStatus v-else-if="order.viewer === 'other' && (trip?.status ?? order.status) !== 'OPEN'" icon="info">
-        {{ trip ? t('兩段都已有司機。') : t('這張單已被接走。') }}
+        {{ roundTrip ? t('去程和回程都已有司機。') : trip ? t('兩段都已有司機。') : t('這張單已被接走。') }}
       </InlineStatus>
 
       <!-- The winning driver: what the order is first, then the passenger and who put it out.
            Every group's link already shows the order as taken. -->
       <section v-if="order.viewer === 'driver'" class="card claim-page__won">
-        <strong>{{ t('你接到這張單了') }}</strong>
-        <span>{{ t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`) }}</span>
+        <template v-if="together && trip">
+          <strong>{{ t('你接到這張往返單了，去程和回程都是你開') }}</strong>
+          <span>{{ t(`${pickup(trip.legs[0].pickupAt)} · ${journeyRoute(trip)}`) }}</span>
+        </template>
+        <template v-else>
+          <strong>{{ t('你接到這張單了') }}</strong>
+          <span>{{ t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`) }}</span>
+        </template>
         <!-- 行程進度 is reported on the order's own page; say so while the driver is still here. -->
         <RouterLink v-if="order.id && order.status === 'ASSIGNED'" class="claim-page__progress-hint" :to="`/app/orders/${order.id}`">
           {{ t('出發、到了上車點、乘客上車時，打開這張單各按一下') }}
@@ -224,8 +239,8 @@ onBeforeUnmount(() => {
         <div class="claim-page__tags">
           <StatusBadge :status="offering ? trip!.status : order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
           <span v-if="!offering && order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
-          <span v-if="offering" class="leg-tag">{{ t('接駁（中途換車）') }}</span>
-          <span v-else-if="trip" class="leg-tag">{{ t(`接駁 ${legLabel(trip)}`) }}</span>
+          <span v-if="offering" class="leg-tag">{{ t(journeyTag(trip!)) }}</span>
+          <span v-else-if="trip" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(trip)}`) }}</span>
         </div>
 
         <div class="claim-page__when">
@@ -245,7 +260,7 @@ onBeforeUnmount(() => {
           :destination="offering ? trip!.destination : order.destination"
           :waypoints="order.waypoints"
         />
-        <p v-if="trip" class="claim-page__transfer">{{ t(`在 ${trip.transferPlaces.join('、')} 換車`) }}</p>
+        <p v-if="trip && !roundTrip" class="claim-page__transfer">{{ t(`在 ${trip.transferPlaces.join('、')} 換車`) }}</p>
 
         <div class="claim-page__load-row">
           <span class="claim-page__load">{{ t(loadText) }}</span>
@@ -310,30 +325,65 @@ onBeforeUnmount(() => {
         <CarpoolParties :carpool="order.carpool" :destination="order.destination" />
       </section>
 
-      <!-- 接駁 from the group: each leg with its own time, plates, price and button. -->
+      <!-- 接駁 and 往返 from the group: each leg with its own time, plates and price; a button per leg,
+           or one for both legs of 同一位司機來回. -->
       <section v-if="offering && trip" class="card claim-page__legs">
-        <SectionHeading :title="t('選一段搶')" :description="t('兩段各由一位司機接，同一位司機只能接其中一段。')" />
+        <SectionHeading
+          :title="t(together ? '去程和回程一起搶' : roundTrip ? '選一程搶' : '選一段搶')"
+          :description="
+            t(
+              together
+                ? '同一位司機來回，一搶就是去程和回程。'
+                : roundTrip
+                  ? '去程和回程各自搶，同一位司機也可以兩程都搶。'
+                  : '兩段各由一位司機接，同一位司機只能接其中一段。',
+            )
+          "
+        />
         <div v-for="leg in trip.legs" :key="leg.legIndex" class="claim-page__leg" :class="{ 'claim-page__leg--open': leg.status === 'OPEN' }">
           <div class="claim-page__leg-top">
-            <span class="leg-tag">{{ t(`第 ${leg.legIndex} 段`) }}</span>
+            <span class="leg-tag">{{ t(legName(trip.kind, leg.legIndex)) }}</span>
             <span v-if="leg.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(leg.requiredPlates)) }}</span>
             <strong v-if="leg.driverPrice && !leg.selfDrive" class="claim-page__leg-price">{{ money(leg.driverPrice) }}</strong>
           </div>
           <span class="claim-page__leg-time">{{ leg.immediate && leg.status === 'OPEN' ? t('現在出發') : pickup(leg.pickupAt) }}</span>
           <span>{{ t(`${leg.origin} 至 ${leg.destination}`) }}</span>
-          <button v-if="leg.status === 'OPEN'" class="button block claim-page__leg-claim" type="button" :disabled="busy" @click="claim(leg.code)">
-            {{ busy ? t('搶單中…') : t(`搶第 ${leg.legIndex} 段`) }}
+          <button v-if="leg.status === 'OPEN' && !together" class="button block claim-page__leg-claim" type="button" :disabled="busy" @click="claim(leg.code)">
+            {{ busy ? t('搶單中…') : t(`搶${legName(trip.kind, leg.legIndex)}`) }}
           </button>
-          <p v-else class="hint">{{ leg.selfDrive ? t('出單者自己開') : leg.status === 'CANCELLED' ? t('已取消') : t('已有司機') }}</p>
+          <p v-else-if="leg.status !== 'OPEN'" class="hint">{{ leg.selfDrive ? t('出單者自己開') : leg.status === 'CANCELLED' ? t('已取消') : t('已有司機') }}</p>
         </div>
+        <button v-if="togetherOpen" class="button block claim-page__leg-claim" type="button" :disabled="busy" @click="claim()">
+          {{ busy ? t('搶單中…') : t('搶來回') }}
+        </button>
       </section>
 
       <section v-if="trip && !offering" class="card">
         <SectionHeading
           :title="t('整個行程')"
-          :description="order.viewer === 'driver' ? t('另一段的司機搶到後會顯示在這裡；電話與乘客電話同時顯示，方便接駁時聯絡。') : undefined"
+          :description="
+            order.viewer !== 'driver'
+              ? undefined
+              : together || (roundTrip && trip.legs.every((leg) => leg.mine))
+                ? t('去程和回程都由你開，每一程出發、到達都在各自的單上回報。')
+                : otherOpenLegs.length
+                  ? t('另一程還沒有人接，你也可以一起搶下來。')
+                  : roundTrip
+                    ? t('另一程的司機搶到後會顯示在這裡。')
+                    : t('另一段的司機搶到後會顯示在這裡；電話與乘客電話同時顯示，方便接駁時聯絡。')
+          "
         />
-        <JourneyLegs :legs="trip.legs" :current="trip.legIndex" />
+        <JourneyLegs :legs="trip.legs" :current="trip.legIndex" :kind="trip.kind" />
+        <button
+          v-for="leg in otherOpenLegs"
+          :key="leg.legIndex"
+          class="button block claim-page__leg-claim"
+          type="button"
+          :disabled="busy"
+          @click="claim(leg.code)"
+        >
+          {{ busy ? t('搶單中…') : t(`也搶${legName(trip.kind, leg.legIndex)}`) }}
+        </button>
       </section>
 
       <RouterLink v-if="order.viewer === 'dispatcher' && order.id" class="button block" :to="`/app/orders/${order.id}`">{{ t('管理這張單') }}</RouterLink>

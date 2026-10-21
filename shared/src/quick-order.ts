@@ -19,6 +19,8 @@ export interface QuickOrder {
   luggage?: number;
   price?: { amount: number; currency: 'HKD' | 'CNY' | 'MOP' };
   notes?: string;
+  /** 往返: "往返", "來回" and the like; the order goes there and back. */
+  roundTrip?: boolean;
   /** Which of time, origin and destination could not be read. */
   missing: ('pickupAt' | 'origin' | 'destination')[];
 }
@@ -57,7 +59,10 @@ const VEHICLE_WORDS = /(埃爾法|埃尔法|阿爾法|阿尔法|alphard|威爾�
 /** Service words dispatchers add after the destination; kept as notes, not as part of the place. */
 const SERVICE_WORDS = /(直車|直车|接駁|接驳|包車|包车|拼車|拼车|單程|单程|往返|來回|来回|專車|专车|順路|顺路|急單|急单|急)/g;
 
+const ROUND_TRIP_WORDS = /(往返|來回|来回)/;
+
 const CONNECTOR = /\s*(?:送去|送到|送往|送至|送|到|去|往|至|→|->|－|—|➡️?)\s*/;
+const CONNECTOR_ANYWHERE = new RegExp(CONNECTOR.source);
 
 /** Days from today for words like 明天 / 後天. */
 const DAY_WORDS: [RegExp, number][] = [
@@ -162,6 +167,13 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
   // The words readTime takes as "now" make it a 即時單 too.
   if (NOW_WORDS.test(state.text)) result.immediate = true;
   result.pickupAt = readTime(state, now);
+
+  // 往返 between two places ("深圳灣往返機場") reads as the way there; the word stays in the notes too.
+  if (ROUND_TRIP_WORDS.test(state.text)) result.roundTrip = true;
+  const between = state.text.match(new RegExp(`(\\S)\\s*(${ROUND_TRIP_WORDS.source})\\s*(?=\\S)`));
+  if (between?.index !== undefined && !CONNECTOR_ANYWHERE.test(state.text.replace(ROUND_TRIP_WORDS, ''))) {
+    state.text = `${state.text.slice(0, between.index + 1)} → ${state.text.slice(between.index + between[0].length)} ${between[2]}`;
+  }
 
   // Whatever service words remain are notes ("直車", "接駁").
   const services = state.text.match(SERVICE_WORDS) ?? [];

@@ -77,11 +77,15 @@ const ERROR_TEXT: Record<string, string> = {
   QR_IMAGE_INVALID: '請上傳 400 KB 以內的 PNG、JPG 或 WebP 圖片',
   GROUP_INVITE_LIMIT: '最多只能加入 5 個群',
   GROUP_INVITE_NOT_FOUND: '找不到這個群',
-  LEG_BEFORE_PREVIOUS: '第 2 段的時間不能早於第 1 段',
+  LEG_BEFORE_PREVIOUS: '第 2 段（或回程）的時間不能早於第 1 段（或去程）',
   ONE_LEG_PER_DRIVER: '一張接駁單，同一位司機只能接其中一段',
   FAVORITES_FIRST: '這張單先給出單者的常用司機搶，稍後才開放給所有人',
   NOTHING_CHANGED: '行程沒有改變',
   NOT_A_TRANSFER: '只有接駁單才有接駁位置',
+  ONE_JOURNEY_KIND: '一張單只能選往返或接駁其中一種',
+  SELF_DRIVE_BOTH_LEGS: '同一位司機來回時，自己做就是兩程都自己開',
+  RETURN_TIME_REQUIRED: '往返請填回程時間',
+  RETURN_BEFORE_PICKUP: '回程的時間要晚於去程',
   DRIVER_NOT_FOUND: '只能標記接過你的單的司機',
   TRIP_PRICE_ON_FIRST_LEG: '接駁單整張單只有一個乘客價，請在第 1 段修改',
   PROFILE_PAGE_NOT_FOUND: '找不到這個名片頁，或司機尚未公開',
@@ -139,6 +143,9 @@ const ERROR_TEXT: Record<string, string> = {
 
 const INVALID_PHONE = 'INVALID_PHONE';
 
+/** 往返 and 接駁 rules the schema checks; each reads as its own line in ERROR_TEXT. */
+const JOURNEY_ISSUES = ['ONE_JOURNEY_KIND', 'SELF_DRIVE_BOTH_LEGS', 'RETURN_TIME_REQUIRED', 'RETURN_BEFORE_PICKUP'];
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -159,7 +166,7 @@ export class ApiError extends Error {
         ? 'WhatsApp 群連結應該是 https://chat.whatsapp.com/ 開頭'
         : messages.includes('QR_IMAGE_REQUIRED')
           ? '請上傳二維碼圖片'
-          : ERROR_TEXT[code];
+          : ERROR_TEXT[messages.find((message) => JOURNEY_ISSUES.includes(message)) ?? code];
     super(text ?? `操作失敗（${code}）`);
   }
 }

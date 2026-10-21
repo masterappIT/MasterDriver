@@ -154,3 +154,39 @@ test('a 接駁 leg whose driver was deleted is marked for the dispatcher only', 
   const driverLegs = toOrderView(legOrder, 'driver', 'https://x.test', new Date(), 'driver').journey?.legs;
   assert.equal(driverLegs?.some((leg) => 'driverDeleted' in leg), false);
 });
+
+test('a 往返 is A to B and back: no 接駁位置, and the passenger sees both legs with their times', () => {
+  const kind = { journeyKind: 'ROUND_TRIP', sameDriver: true, journeyId: 'leg-1' };
+  const first = { ...order, ...kind, id: 'leg-1', legIndex: 1, status: 'ASSIGNED' };
+  const second = {
+    ...order,
+    ...kind,
+    id: 'leg-2',
+    code: 'KLMNOPQRST',
+    legIndex: 2,
+    origin: '香港國際機場',
+    destination: '深圳灣口岸',
+    pickupAt: new Date('2026-10-15T12:00:00Z'),
+    passengerPriceMinor: null,
+  };
+  const journeyHead = { journeyLegs: [first, second], tripGroup: null };
+  const head = { ...first, journeyHead } as unknown as OrderWithPeople;
+  const journey = toOrderView(head, 'dispatcher', 'https://x.test', new Date(), 'dispatcher').journey;
+  assert.equal(journey?.kind, 'ROUND_TRIP');
+  assert.equal(journey?.sameDriver, true);
+  assert.equal(journey?.origin, '深圳灣口岸');
+  assert.equal(journey?.destination, '香港國際機場', 'where the trip turns back, not where it ends');
+  assert.deepEqual(journey?.transferPlaces, []);
+
+  const passenger = toPassengerView(head, new Date('2026-10-14T02:00:00Z'));
+  assert.equal(passenger.roundTrip, true);
+  assert.equal(passenger.transfer, false);
+  assert.equal(passenger.destination, '香港國際機場');
+  assert.deepEqual(
+    passenger.legs?.map((leg) => [leg.legIndex, 'pickupAt' in leg ? leg.pickupAt : null, 'origin' in leg ? leg.origin : null]),
+    [
+      [1, '2026-10-15T06:30:00.000Z', '深圳灣口岸'],
+      [2, '2026-10-15T12:00:00.000Z', '香港國際機場'],
+    ],
+  );
+});

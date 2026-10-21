@@ -63,22 +63,47 @@ export function progressLine(progress: TripProgress | null | undefined, time: (i
     .join('・');
 }
 
-/** 接駁: the order around a leg, as the API returns it: one order from origin to destination in two legs. */
+/**
+ * The order around a leg, as the API returns it: one order in two legs. 接駁 runs from origin to
+ * destination changing cars on the way; 往返 goes from origin to destination and comes back.
+ */
 export interface Journey {
+  /** TRANSFER (接駁) or ROUND_TRIP (往返). */
+  kind: 'TRANSFER' | 'ROUND_TRIP';
+  /** 往返: one driver takes both legs with one claim (同一位司機來回). */
+  sameDriver: boolean;
   legIndex: number;
   legCount: number;
   /** The whole order's status: open while either leg still waits for a driver. */
   status: string;
   origin: string;
+  /** 往返: where the trip turns back. */
   destination: string;
-  /** 接駁位置: where this order's car meets the car of the leg before or after it. */
+  /** 接駁位置: where this order's car meets the car of the leg before or after it; none for 往返. */
   transferPlaces: string[];
   legs: JourneyLeg[];
 }
 
-/** "第 2／2 段", or "第 1 段" while the trip's other legs are still to be added. */
-export const legLabel = (journey: { legIndex: number; legCount: number }) =>
-  journey.legCount > 1 ? `第 ${journey.legIndex}／${journey.legCount} 段` : `第 ${journey.legIndex} 段`;
+/** "第 2／2 段", or "第 1 段" while the trip's other legs are still to be added; 往返 says 去程 or 回程. */
+export const legLabel = (journey: { legIndex: number; legCount: number; kind?: Journey['kind'] }) =>
+  journey.kind === 'ROUND_TRIP'
+    ? roundTripLegName(journey.legIndex)
+    : journey.legCount > 1
+      ? `第 ${journey.legIndex}／${journey.legCount} 段` : `第 ${journey.legIndex} 段`;
+
+/** 往返: the way there is 去程, the way back 回程. */
+export const roundTripLegName = (legIndex: number) => (legIndex === 1 ? '去程' : '回程');
+
+/** A leg's short name: 去程／回程 for 往返, 第 N 段 for 接駁. */
+export const legName = (kind: Journey['kind'] | undefined, legIndex: number) =>
+  kind === 'ROUND_TRIP' ? roundTripLegName(legIndex) : `第 ${legIndex} 段`;
+
+/** What the trip is, as its tag reads: 往返, or 接駁（中途換車）. */
+export const journeyTag = (journey: Pick<Journey, 'kind'>) => (journey.kind === 'ROUND_TRIP' ? '往返' : '接駁（中途換車）');
+
+/** The whole trip's route: "香港 往返 深圳" or "香港 至 澳門". */
+export const journeyRoute = (journey: Pick<Journey, 'kind' | 'origin' | 'destination'>) =>
+  journey.kind === 'ROUND_TRIP' ? `${journey.origin} 往返 ${journey.destination}` : `${journey.origin} 至 ${journey.destination}`;
 
 /** Same as PLATE_REGIONS in shared/src/schemas.ts. */
 export type PlateRegion = 'HK' | 'MACAU' | 'MAINLAND';

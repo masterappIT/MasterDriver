@@ -8,7 +8,7 @@ import { t } from '../i18n';
  * takes no money and checks nothing.
  */
 defineProps<{
-  order: { status: string; paidAt?: string | null; settledAt?: string | null; showPaymentMethods?: boolean; journey: unknown; carpool?: unknown };
+  order: { status: string; paidAt?: string | null; settledAt?: string | null; showPaymentMethods?: boolean; journey: { kind?: string } | null; carpool?: unknown };
   isDispatcher: boolean;
   canSettle: boolean;
   busy: boolean;
@@ -31,7 +31,7 @@ defineEmits<{ payment: [body: { showPaymentMethods?: boolean; paid?: boolean }, 
   <label v-if="isDispatcher && !order.carpool && order.status !== 'CANCELLED'" class="detail__switch detail__divided">
     <span>
       {{ t('乘客確認頁顯示收款方式') }}
-      <small>{{ order.journey ? t('整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
+      <small>{{ order.journey ? t(order.journey.kind === 'ROUND_TRIP' ? '往返整張單一起顯示，乘客付一次' : '整張接駁單一起顯示，乘客付一次') : t('顯示時會一併顯示乘客價') }}</small>
     </span>
     <input
       class="switch"

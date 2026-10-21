@@ -109,8 +109,14 @@ const priceSchema = z.object({
   currency: z.enum(CURRENCIES),
 });
 
-/** 接駁: a trip has two legs, each its own order, meeting at one 接駁位置. */
+/**
+ * A trip has two legs, each its own order: 接駁 (meeting at one 接駁位置) or 往返 (there and
+ * back, the second leg the first one turned around).
+ */
 export const MAX_JOURNEY_LEGS = 2;
+
+export const JOURNEY_KINDS = ['TRANSFER', 'ROUND_TRIP'] as const;
+export type JourneyKind = (typeof JOURNEY_KINDS)[number];
 
 /** Where a car is registered; an order may ask for one or more of these plates. */
 export const PLATE_REGIONS = ['HK', 'MACAU', 'MAINLAND'] as const;
@@ -180,17 +186,49 @@ export const createOrderSchema = z.object({
       selfDriveLeg: z.union([z.literal(1), z.literal(2)]).nullable().default(null),
     })
     .optional(),
+  /**
+   * 往返 instead of 直達: one order in two legs, there (`origin` to `destination`, the fields above)
+   * and back (`destination` to `origin`, the time and driver price here). Both legs ask for the
+   * same plates. The passenger price is for the whole trip. Not together with `transfer`.
+   */
+  roundTrip: z
+    .object({
+      /** The way back's pickup time; not before the way there (checked by the API). */
+      pickupAt: z.string().datetime({ offset: true }),
+      driverPrice: priceSchema.optional(),
+      /**
+       * 同一位司機來回: one claim takes both legs. False: 可分開接, each leg is claimed on its own,
+       * and one driver may take both.
+       */
+      sameDriver: z.boolean().default(true),
+      /** 可分開接 only: the dispatcher drives one of the legs. With sameDriver, `selfDrive` drives both. */
+      selfDriveLeg: z.union([z.literal(1), z.literal(2)]).nullable().default(null),
+    })
+    .optional(),
   /** Plates the car needs, e.g. ['MACAU']; only stated to drivers, never enforced. With 接駁, the first leg's. */
   requiredPlates: requiredPlatesSchema,
   /** 名片頁: the booking request this order is made from; it must be the dispatcher's own and still open. */
   bookingId: z.string().trim().min(1).max(40).optional(),
-  /** 這單我自己做: the dispatcher drives this order, so it is not offered for claiming. 直達 only; 接駁 uses transfer.selfDriveLeg. */
+  /**
+   * 這單我自己做: the dispatcher drives this order, so it is not offered for claiming. 直達, or both
+   * legs of a 往返 taken by one driver; 接駁 and 可分開接 use selfDriveLeg.
+   */
   selfDrive: z.boolean().default(false),
   /** 接單池: also list the order for every signed-in driver. Defaults to the dispatcher's preference. */
   inPool: z.boolean().optional(),
   /** 收款方式: show the dispatcher's own ways to be paid on the passenger's confirmation page. */
   showPaymentMethods: z.boolean().default(false),
-}).refine((value) => !(value.transfer && value.selfDrive), { message: 'SELF_DRIVE_ONE_LEG', path: ['selfDrive'] });
+})
+  .refine((value) => !(value.transfer && value.roundTrip), { message: 'ONE_JOURNEY_KIND', path: ['roundTrip'] })
+  .refine((value) => !(value.transfer && value.selfDrive), { message: 'SELF_DRIVE_ONE_LEG', path: ['selfDrive'] })
+  .refine((value) => !(value.roundTrip && !value.roundTrip.sameDriver && value.selfDrive), {
+    message: 'SELF_DRIVE_ONE_LEG',
+    path: ['selfDrive'],
+  })
+  .refine((value) => !(value.roundTrip?.sameDriver && value.roundTrip.selfDriveLeg !== null), {
+    message: 'SELF_DRIVE_BOTH_LEGS',
+    path: ['roundTrip', 'selfDriveLeg'],
+  });
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
 /**

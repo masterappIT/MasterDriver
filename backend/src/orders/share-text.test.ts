@@ -7,6 +7,7 @@ import {
   formatPrice,
   passengerShareText,
   plateRequirement,
+  roundTripShareText,
   transferPlacesOf,
   type ShareOrder,
 } from './share-text';
@@ -137,4 +138,47 @@ test('a carpool order lists its pickups and parties for drivers, never a passeng
     ['【有單・拼車】10/15（四）14:30', '深圳灣口岸 → 香港國際機場', '上車點：深圳灣口岸、南山海岸城', '拼車：2組｜3人｜2件行李｜7座', 'HK$850', '備註：需要兒童座椅', '搶單：https://x.test/o/abc'].join('\n'),
   );
   assert.ok(text.whatsapp.startsWith('*【有單・拼車】10/15（四）14:30*\n'));
+});
+
+test('a 往返 is one text with both legs, their prices and who takes them, and one link', () => {
+  const there = { ...order, waypoints: [], legIndex: 1, legCount: 2, journeyKind: 'ROUND_TRIP' as const, sameDriver: true, selfDriven: false };
+  const back = {
+    ...there,
+    legIndex: 2,
+    origin: '香港國際機場',
+    destination: '深圳灣口岸',
+    pickupAt: new Date('2026-10-15T12:00:00Z'),
+    driverPriceMinor: 60000,
+  };
+  const text = roundTripShareText([there, back], 'https://x.test/o/abc').wechat;
+  assert.equal(
+    text,
+    [
+      '【有單・往返】10/15（四）14:30',
+      '深圳灣口岸 ⇄ 香港國際機場',
+      '去程：10/15（四）14:30 深圳灣口岸 → 香港國際機場｜HK$850',
+      '回程：10/15（四）20:00 香港國際機場 → 深圳灣口岸｜HK$600',
+      '同一位司機來回',
+      '4人｜3件行李｜7座',
+      '備註：需要兒童座椅',
+      '搶單（來回）：https://x.test/o/abc',
+    ].join('\n'),
+  );
+  const apart = roundTripShareText([{ ...there, sameDriver: false }, { ...back, sameDriver: false, selfDriven: true }], 'https://x.test/o/abc').wechat;
+  assert.ok(apart.includes('可分開接，選一程搶'));
+  assert.ok(apart.includes('回程：10/15（四）20:00 香港國際機場 → 深圳灣口岸｜出單者自己開'));
+  assert.ok(apart.endsWith('搶單（選一程）：https://x.test/o/abc'));
+  assert.ok(!apart.includes('接駁'));
+
+  const driver = { name: '李師傅', hkPlate: 'AB1234', macauPlate: null, mainlandPlate: null };
+  assert.ok(claimedShareText(there, driver).startsWith('【已派出】10/15（四）14:30 深圳灣口岸 → 香港國際機場（來回）'));
+  assert.ok(claimedShareText({ ...back, sameDriver: false }, driver).includes('（回程）'));
+
+  const passenger = passengerShareText(there, 'https://x.test/c/xyz', [
+    { ...there, showPassengerPrice: true },
+    { ...back, passengerPriceMinor: null },
+  ]);
+  assert.ok(passenger.includes('往返行程（去程 10/15（四）14:30 深圳灣口岸 → 香港國際機場，回程 10/15（四）20:00 香港國際機場 → 深圳灣口岸）'));
+  assert.ok(passenger.includes('費用 HK$1,000'));
+  assert.ok(!passenger.includes('HK$850') && !passenger.includes('HK$600'));
 });

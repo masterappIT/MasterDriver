@@ -212,6 +212,41 @@ test('a 接駁 booking: both sides see it, and the driver makes a 接駁 order f
   assert.equal((await ctx.orders.getForPassenger(after.confirmUrl.split('/c/')[1])).price?.amount, 1500, 'one price for the whole trip');
 });
 
+test('a 往返 booking: both sides see the way back, and 來回我自己做 makes both legs the driver\'s', async () => {
+  const { userId, code } = await publishedPage();
+  const pickupAt = inAWeek();
+  const returnPickupAt = new Date(Date.parse(pickupAt) + 8 * 3_600_000).toISOString().replace('Z', '+00:00');
+  const sent = await ctx.profilePages.createBooking(code, { ...request(), pickupAt, roundTrip: true, returnPickupAt }, '6.6.6.6');
+  const seen = await ctx.profilePages.passengerBooking(sent.code);
+  assert.equal(seen.roundTrip, true);
+  assert.equal(seen.returnPickupAt, new Date(returnPickupAt).toISOString());
+  const listed = (await ctx.profilePages.bookings(userId)).find((booking) => booking.code === sent.code)!;
+  assert.equal(listed.roundTrip, true);
+  assert.equal(listed.returnPickupAt, seen.returnPickupAt);
+  await ctx.profilePages.quote(userId, listed.id, { amount: 1600, currency: 'HKD' });
+  await ctx.profilePages.passengerAccept(sent.code);
+
+  const order = await ctx.orders.create(userId, {
+    ...sampleOrder,
+    pickupAt: listed.pickupAt,
+    origin: listed.origin,
+    destination: listed.destination,
+    passengerContact: listed.passengerContact,
+    passengerPrice: { amount: 1600, currency: 'HKD' },
+    showPassengerPrice: true,
+    roundTrip: { pickupAt: listed.returnPickupAt!, sameDriver: true, selfDriveLeg: null },
+    selfDrive: true,
+    bookingId: listed.id,
+  });
+  assert.equal(order.journey?.kind, 'ROUND_TRIP');
+  assert.deepEqual(order.journey?.legs.map((leg) => [leg.origin, leg.selfDrive]), [['香港國際機場', true], ['深圳灣口岸', true]]);
+  const after = await ctx.profilePages.passengerBooking(sent.code);
+  assert.equal(after.status, 'ORDERED');
+  const page = await ctx.orders.getForPassenger(after.confirmUrl!.split('/c/')[1]);
+  assert.equal(page.roundTrip, true);
+  assert.equal(page.price?.amount, 1600, 'one price for there and back');
+});
+
 test("a booking is its own page owner's: nobody else reads, answers or makes an order from it", async () => {
   const { userId, code } = await publishedPage();
   const stranger = await createDriver(ctx);

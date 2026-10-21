@@ -725,3 +725,160 @@ test('the passenger sees the dispatcher’s 名片頁 to book them next time, on
   await ctx.profilePages.staffBlock(dispatcher, '照片含廣告');
   assert.equal((await ctx.orders.getForPassenger(confirmCode)).dispatcher?.pageCode, null, 'taken down: unpublished');
 });
+
+// 往返: one order in two legs, there and back; one driver for both (同一位司機來回) or leg by leg (可分開接).
+
+const roundTripOrder = {
+  ...sampleOrder,
+  origin: '香港',
+  destination: '深圳',
+  vehicleType: '7座',
+  driverPrice: { amount: 400, currency: 'HKD' as const },
+  passengerPrice: { amount: 1200, currency: 'HKD' as const },
+  showPassengerPrice: true,
+  roundTrip: { pickupAt: '2026-10-15T20:00:00+08:00', driverPrice: { amount: 500, currency: 'HKD' as const }, sameDriver: true, selfDriveLeg: null },
+};
+const apart = { ...roundTripOrder, roundTrip: { ...roundTripOrder.roundTrip, sameDriver: false } };
+
+test('a 往返 is one order in two legs, there and back: quota and fee once, one text, one link', async () => {
+  await ctx.commission.update({ enabled: true, fee: 5 }, 'test');
+  const dispatcher = await createDriver(ctx);
+  await ctx.credits.credit(dispatcher, 2000, { type: 'TOPUP', source: 'MANUAL', createdBy: 'test' });
+
+  const order = await ctx.orders.create(dispatcher, roundTripOrder);
+
+  assert.equal(await balanceOf(dispatcher), 1500, 'charged once');
+  const usage = await ctx.prisma.usage.findMany({ where: { userId: dispatcher } });
+  assert.equal(usage.reduce((sum, row) => sum + row.used, 0), 1, 'one order of quota');
+  assert.equal(order.journey?.kind, 'ROUND_TRIP');
+  assert.equal(order.journey?.sameDriver, true);
+  assert.equal(order.journey?.destination, '深圳');
+  assert.deepEqual(order.journey?.legs.map((leg) => `${leg.origin}→${leg.destination}`), ['香港→深圳', '深圳→香港']);
+  const stored = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(stored.map((leg) => [leg.journeyKind, leg.sameDriver]), [['ROUND_TRIP', true], ['ROUND_TRIP', true]]);
+  assert.deepEqual(stored.map((leg) => leg.passengerPriceMinor), [120000, null], 'one passenger price, on the way there');
+  assert.deepEqual(stored.map((leg) => leg.driverPriceMinor), [40000, 50000]);
+  assert.deepEqual(order.margin, { amount: 300, currency: 'HKD' }, 'the one passenger price against both legs');
+
+  const text = order.share.dispatch.wechat;
+  assert.ok(text.startsWith('【有單・往返】10/15（四）14:30'));
+  assert.ok(text.includes('香港 ⇄ 深圳'));
+  assert.ok(text.includes('回程：10/15（四）20:00 深圳 → 香港｜HK$500'));
+  assert.ok(text.endsWith(`搶單（來回）：${order.links.dispatch}`));
+  assert.ok(!text.includes('接駁'));
+  assert.ok(order.share.passenger.includes('往返行程'));
+
+  await rejectsWith(
+    ctx.orders.create(dispatcher, { ...roundTripOrder, roundTrip: { ...roundTripOrder.roundTrip, pickupAt: '2026-10-15T13:00:00+08:00' } }),
+    'LEG_BEFORE_PREVIOUS',
+  );
+});
+
+test('同一位司機來回: one claim takes both legs, from either link; of two drivers at once only one gets them', async () => {
+  const dispatcher = await createDriver(ctx);
+  const [b, c] = await Promise.all(['B', 'C'].map((name) => createDriver(ctx, name)));
+  await freeForAll();
+  const order = await ctx.orders.create(dispatcher, roundTripOrder);
+  const [, back] = order.journey!.legs;
+
+  assert.equal((await ctx.orders.claim(back.code, b)).result, 'WON', 'the way back\'s link takes the trip too');
+  const legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(legs.map((leg) => [leg.status, leg.claimedById]), [['ASSIGNED', b], ['ASSIGNED', b]]);
+  assert.equal(await ctx.prisma.orderClaim.count({ where: { driverId: b, result: 'WON' } }), 2, 'kept on each leg');
+  assert.equal((await ctx.orders.claim(order.code, c)).result, 'LOST');
+  assert.equal(await ctx.prisma.notification.count({ where: { userId: dispatcher, kind: 'ORDER_CLAIMED' } }), 1, 'told once');
+  const mine = await ctx.orders.drivers(dispatcher);
+  assert.equal(mine.find((driver) => driver.id === b)?.taken, 1, '我的司機 counts the trip once');
+
+  const again = await ctx.orders.create(dispatcher, roundTripOrder);
+  const codes = again.journey!.legs.map((leg) => leg.code);
+  const taps = await Promise.all([ctx.orders.claim(codes[0], b), ctx.orders.claim(codes[1], c)]);
+  assert.deepEqual(taps.map((tap) => tap.result).sort(), ['LOST', 'WON']);
+  const winner = taps[0].result === 'WON' ? b : c;
+  assert.equal(await ctx.prisma.order.count({ where: { journeyId: again.id, claimedById: winner, status: 'ASSIGNED' } }), 2);
+});
+
+test('同一位司機來回: 取消接單 and 改派 move both legs; cancelling cancels both', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  await freeForAll();
+  const order = await ctx.orders.create(dispatcher, roundTripOrder);
+  await ctx.orders.claim(order.code, driver);
+  const legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+
+  await ctx.orders.release(driver, legs[1].id);
+  let after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(after.map((leg) => [leg.status, leg.claimedById]), [['OPEN', null], ['OPEN', null]]);
+  assert.equal(await ctx.prisma.orderClaim.count({ where: { driverId: driver, releasedAt: { not: null } } }), 2);
+
+  await ctx.orders.claim(order.code, driver);
+  await ctx.orders.reopen(dispatcher, legs[0].id);
+  after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(after.map((leg) => leg.status), ['OPEN', 'OPEN']);
+  assert.equal(await ctx.prisma.notification.count({ where: { userId: driver, kind: 'ORDER_REOPENED' } }), 1, 'told once for the trip');
+
+  await ctx.orders.cancel(dispatcher, legs[1].id);
+  after = await ctx.prisma.order.findMany({ where: { journeyId: order.id } });
+  assert.ok(after.every((leg) => leg.status === 'CANCELLED'));
+});
+
+test('可分開接: each leg is claimed on its own, and one driver may take both', async () => {
+  const dispatcher = await createDriver(ctx);
+  const [b, c] = await Promise.all(['B', 'C'].map((name) => createDriver(ctx, name)));
+  await freeForAll();
+  const order = await ctx.orders.create(dispatcher, apart);
+  const [there, back] = order.journey!.legs;
+  assert.ok(order.share.dispatch.wechat.includes('可分開接，選一程搶'));
+
+  assert.equal((await ctx.orders.claim(there.code, b)).result, 'WON');
+  let legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(legs.map((leg) => leg.status), ['ASSIGNED', 'OPEN'], 'only the leg claimed');
+  assert.equal((await ctx.orders.claim(back.code, b)).result, 'WON', 'the same driver takes the way back too');
+
+  await ctx.orders.release(b, legs[1].id);
+  legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(legs.map((leg) => [leg.status, leg.claimedById]), [['ASSIGNED', b], ['OPEN', null]], '取消接單 gives back that leg only');
+  assert.equal((await ctx.orders.claim(back.code, c)).result, 'WON');
+
+  // 自己做其中一程: that leg is the dispatcher's, the other goes to the group.
+  const own = await ctx.orders.create(dispatcher, { ...apart, roundTrip: { ...apart.roundTrip, selfDriveLeg: 2 } });
+  assert.deepEqual(own.journey?.legs.map((leg) => [leg.status, leg.selfDrive]), [['OPEN', false], ['ASSIGNED', true]]);
+  assert.ok(own.share.dispatch.wechat.includes('回程：10/15（四）20:00 深圳 → 香港｜出單者自己開'));
+});
+
+test('來回我自己做: both legs are the dispatcher\'s; nothing to claim', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx);
+  await freeForAll();
+  const order = await ctx.orders.create(dispatcher, { ...roundTripOrder, selfDrive: true });
+  assert.deepEqual(order.journey?.legs.map((leg) => [leg.status, leg.selfDrive]), [['ASSIGNED', true], ['ASSIGNED', true]]);
+  assert.equal((await ctx.orders.claim(order.code, driver)).result, 'LOST');
+});
+
+test('the passenger sees both legs with their times and one price; 修改行程 keeps the way back the way there turned around', async () => {
+  const dispatcher = await createDriver(ctx, '派單師傅');
+  const driver = await createDriver(ctx, '來回師傅');
+  await freeForAll();
+  const order = await ctx.orders.create(dispatcher, roundTripOrder);
+  const confirmCode = order.links.passengerConfirm.split('/c/')[1];
+  await ctx.orders.claim(order.code, driver);
+
+  const trip = await ctx.orders.getForPassenger(confirmCode);
+  assert.equal(trip.roundTrip, true);
+  assert.equal(trip.sameDriver, true);
+  assert.equal(trip.transfer, false);
+  assert.deepEqual(trip.price, { amount: 1200, currency: 'HKD' });
+  assert.deepEqual(
+    trip.legs?.map((leg) => ['pickupAt' in leg ? leg.pickupAt : null, leg.driver?.name ?? null]),
+    [
+      ['2026-10-15T06:30:00.000Z', '來回師傅'],
+      ['2026-10-15T12:00:00.000Z', '來回師傅'],
+    ],
+  );
+
+  const legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  await ctx.orders.updateTrip(dispatcher, legs[0].id, { origin: '香港機場', destination: '深圳灣' });
+  const after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(after.map((leg) => `${leg.origin}→${leg.destination}`), ['香港機場→深圳灣', '深圳灣→香港機場']);
+  await rejectsWith(ctx.orders.updateTrip(dispatcher, legs[0].id, { transferPlace: '皇崗' }), 'NOT_A_TRANSFER');
+});

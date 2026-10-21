@@ -32,8 +32,12 @@ const id = String(route.params.id);
 const order = ref<Sent | null>(null);
 const error = ref('');
 
-/** 這單我自己做 on a 直達 order: nothing to paste. A 接駁 order always has a leg for the group. */
-const selfDriven = computed(() => Boolean(order.value?.selfDrive && !order.value.journey));
+/**
+ * 這單我自己做 on a 直達 order, or both legs of a 往返: nothing to paste. A 接駁 order always has a
+ * leg for the group.
+ */
+const selfDriven = computed(() => Boolean(order.value?.selfDrive && (order.value.journey?.legs.every((leg) => leg.selfDrive) ?? true)));
+const roundTrip = computed(() => order.value?.journey?.kind === 'ROUND_TRIP');
 /** 接駁: someone holds each leg, the dispatcher or a driver. */
 const bothTaken = computed(() => Boolean(order.value?.journey?.legs.every((leg) => leg.status !== 'OPEN')));
 
@@ -100,7 +104,7 @@ onMounted(async () => {
 
       <ol class="share__steps" :aria-label="t('進度')">
         <li class="done">{{ t('已出單') }}</li>
-        <li :class="{ done: order.journey ? bothTaken : order.claimedAt }">{{ selfDriven ? t('你自己做') : order.journey ? t('兩段都有人接') : t('有人接') }}</li>
+        <li :class="{ done: order.journey ? bothTaken : order.claimedAt }">{{ selfDriven ? t('你自己做') : order.journey ? t(roundTrip ? (order.journey.sameDriver ? '有人接來回' : '兩程都有人接') : '兩段都有人接') : t('有人接') }}</li>
         <li :class="{ done: order.passengerConfirmedAt }">{{ t('乘客確認') }}</li>
       </ol>
 
@@ -109,7 +113,7 @@ onMounted(async () => {
         <ol class="share__how">
           <li><span>1</span>{{ t('複製') }}</li>
           <li><span>2</span>{{ t('到群裡長按貼上') }}</li>
-          <li><span>3</span>{{ order.journey ? t('司機點連結選段搶') : t('司機點連結搶單') }}</li>
+          <li><span>3</span>{{ order.journey ? t(roundTrip ? (order.journey.sameDriver ? '司機點連結搶來回' : '司機點連結選一程搶') : '司機點連結選段搶') : t('司機點連結搶單') }}</li>
         </ol>
         <GroupText :text="order.share.dispatch.wechat" :link-note="t('藍色是這張單的搶單連結，會和文字一起複製')" />
         <div class="share__buttons" :class="{ 'share__buttons--whatsapp-first': !inWeChat }">
@@ -129,7 +133,13 @@ onMounted(async () => {
       <section class="card">
         <h2 class="share__label">{{ t('傳給乘客確認') }}</h2>
         <p class="share__passenger-hint">
-          {{ order.journey ? t('乘客按連結確認行程，只會知道是接駁、要換車，不會看到接駁位置；兩段有司機後，乘客會看到兩位司機和車牌。') : t('乘客按連結確認行程；有司機接單後，乘客會看到司機和車牌。') }}
+          {{
+            roundTrip
+              ? t('乘客按連結確認行程，會看到去程和回程的時間；有司機接單後，乘客會看到司機和車牌。')
+              : order.journey
+                ? t('乘客按連結確認行程，只會知道是接駁、要換車，不會看到接駁位置；兩段有司機後，乘客會看到兩位司機和車牌。')
+                : t('乘客按連結確認行程；有司機接單後，乘客會看到司機和車牌。')
+          }}
         </p>
         <GroupText :text="order.share.passenger" />
         <button class="button outline block" type="button" @click="copy(order.share.passenger, '已複製，傳給乘客吧')">
@@ -144,7 +154,8 @@ onMounted(async () => {
       <div class="share__next">
         <RouterLink class="button secondary" :to="`/app/orders/${order.id}`">{{ t('查看這張單') }}</RouterLink>
         <!-- 出回程單: the same trip back, the route turned around; only the time is left to fill. -->
-        <RouterLink class="button secondary" :to="`/app/new?return=${order.id}`">{{ t('出回程單') }}</RouterLink>
+        <!-- A 往返 already comes back. -->
+        <RouterLink v-if="!roundTrip" class="button secondary" :to="`/app/new?return=${order.id}`">{{ t('出回程單') }}</RouterLink>
       </div>
     </template>
 

@@ -79,6 +79,48 @@ test('a 接駁 order holds its second leg; the dispatcher may drive one leg, nev
   if (!both.success) assert.equal(both.error.issues[0].message, 'SELF_DRIVE_ONE_LEG');
 });
 
+test('a 往返 order holds its way back; 同一位司機來回 by default, never together with 接駁', () => {
+  const order = { pickupAt: '2026-10-15T09:00:00+08:00', origin: '香港', destination: '深圳', passengers: 2, passengerContact: '+852 91234567' };
+  const back = { pickupAt: '2026-10-15T18:00:00+08:00', driverPrice: { amount: 500, currency: 'HKD' } };
+  const parsed = createOrderSchema.parse({ ...order, roundTrip: back });
+  assert.equal(parsed.roundTrip?.sameDriver, true);
+  assert.equal(parsed.roundTrip?.selfDriveLeg, null);
+  // 同一位司機來回 with 這單我自己做: both legs the dispatcher's.
+  assert.equal(createOrderSchema.safeParse({ ...order, roundTrip: back, selfDrive: true }).success, true);
+  // 可分開接: one leg the dispatcher's, through selfDriveLeg only.
+  assert.equal(createOrderSchema.parse({ ...order, roundTrip: { ...back, sameDriver: false, selfDriveLeg: 2 } }).roundTrip?.selfDriveLeg, 2);
+  const issue = (input: object) => {
+    const result = createOrderSchema.safeParse(input);
+    return result.success ? null : result.error.issues[0].message;
+  };
+  assert.equal(issue({ ...order, roundTrip: { ...back, sameDriver: false }, selfDrive: true }), 'SELF_DRIVE_ONE_LEG');
+  assert.equal(issue({ ...order, roundTrip: { ...back, selfDriveLeg: 1 } }), 'SELF_DRIVE_BOTH_LEGS');
+  assert.equal(issue({ ...order, roundTrip: back, transfer: { place: '深圳灣口岸', pickupAt: '2026-10-15T10:00:00+08:00' } }), 'ONE_JOURNEY_KIND');
+});
+
+test('a 名片頁 booking may ask for 往返 with a way back after the way there, never with 接駁', () => {
+  const booking = {
+    pickupAt: '2026-10-20T10:00:00+08:00',
+    origin: '香港國際機場',
+    destination: '深圳灣口岸',
+    passengers: 2,
+    passengerName: '王小姐',
+    passengerContact: '+852 91234567',
+  };
+  const issue = (input: object) => {
+    const result = bookingCreateSchema.safeParse(input);
+    return result.success ? null : result.error.issues[0].message;
+  };
+  const parsed = bookingCreateSchema.parse({ ...booking, roundTrip: true, returnPickupAt: '2026-10-20T18:00:00+08:00' });
+  assert.equal(parsed.roundTrip, true);
+  assert.equal(parsed.returnPickupAt, '2026-10-20T18:00:00+08:00');
+  assert.equal(issue({ ...booking, roundTrip: true }), 'RETURN_TIME_REQUIRED');
+  assert.equal(issue({ ...booking, roundTrip: true, returnPickupAt: '2026-10-20T09:00:00+08:00' }), 'RETURN_BEFORE_PICKUP');
+  assert.equal(issue({ ...booking, roundTrip: true, transfer: true, returnPickupAt: '2026-10-20T18:00:00+08:00' }), 'ONE_JOURNEY_KIND');
+  // A way back sent without 往返 is dropped.
+  assert.equal(bookingCreateSchema.parse({ ...booking, returnPickupAt: '2026-10-20T18:00:00+08:00' }).returnPickupAt, undefined);
+});
+
 test('order input requires a time zone on the pickup time', () => {
   const result = createOrderSchema.safeParse({
     pickupAt: '2026-10-15T14:30:00',

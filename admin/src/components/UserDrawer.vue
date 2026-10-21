@@ -174,6 +174,8 @@ interface DeletionBlocker {
   origin: string;
   destination: string;
   legIndex: number | null;
+  /** TRANSFER (接駁) or ROUND_TRIP (往返); null outside a trip. */
+  journeyKind: 'TRANSFER' | 'ROUND_TRIP' | null;
   /** Parties holding seats, for a 拼車. */
   parties: number | null;
 }
@@ -496,7 +498,7 @@ onBeforeUnmount(() => {
             </template>
             <template v-else>
               <RouterLink :to="`/orders/${order.id}`">
-                {{ dateTime(order.pickupAt) }} {{ order.origin }} 至 {{ order.destination }}{{ order.legIndex ? `（接駁第 ${order.legIndex} 段）` : '' }}
+                {{ dateTime(order.pickupAt) }} {{ order.origin }} 至 {{ order.destination }}{{ order.legIndex ? (order.journeyKind === 'ROUND_TRIP' ? `（往返${order.legIndex === 1 ? '去程' : '回程'}）` : `（接駁第 ${order.legIndex} 段）`) : '' }}
               </RouterLink>
               · {{ order.role === 'DISPATCHED' ? '他出的單，別的司機接了' : '他接了別人的單' }}
             </template>

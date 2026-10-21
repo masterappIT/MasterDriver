@@ -32,7 +32,7 @@ import { telemetry } from '../observability/telemetry';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import { PrismaService } from '../prisma.service';
 import { carpoolStopsOf, contactRevealAt, orderInclude, legsOf, passengerPriceOf, toOrderView, toPassengerView, viewerOf, linksOf, type OrderWithPeople } from './order-view';
-import { carpoolShareText, claimedShareText, dispatchShareText, passengerShareText, transferShareText } from './share-text';
+import { carpoolShareText, claimedShareText, dispatchShareText, passengerShareText, roundTripShareText, transferShareText } from './share-text';
 
 const ORDER_CODE_LENGTH = 10;
 const CONFIRM_CODE_LENGTH = 12;
@@ -78,13 +78,37 @@ export class OrdersService {
         const order = await this.prisma.$transaction(async (tx) => {
           // 即時單: leaves now; the time it is put out is its pickup time.
           const pickupAt = input.immediate ? now : new Date(input.pickupAt);
-          // 接駁: one order in two legs, each taken by its own driver.
-          const second = input.transfer ? { ...input.transfer, pickupAt: new Date(input.transfer.pickupAt) } : null;
+          // 接駁 or 往返: one order in two legs. 接駁 changes cars at the 接駁位置; 往返 comes back
+          // the way it went.
+          const second = input.transfer
+            ? {
+                kind: 'TRANSFER' as const,
+                sameDriver: false,
+                origin: input.transfer.place,
+                destination: input.destination,
+                pickupAt: new Date(input.transfer.pickupAt),
+                driverPrice: input.transfer.driverPrice,
+                requiredPlates: input.transfer.requiredPlates,
+                selfDriveLeg: input.transfer.selfDriveLeg,
+              }
+            : input.roundTrip
+              ? {
+                  kind: 'ROUND_TRIP' as const,
+                  sameDriver: input.roundTrip.sameDriver,
+                  origin: input.destination,
+                  destination: input.origin,
+                  pickupAt: new Date(input.roundTrip.pickupAt),
+                  driverPrice: input.roundTrip.driverPrice,
+                  requiredPlates: input.requiredPlates,
+                  // 同一位司機來回 with 這單我自己做: the dispatcher drives both legs.
+                  selfDriveLeg: input.roundTrip.sameDriver ? null : input.roundTrip.selfDriveLeg,
+                }
+              : null;
           if (second && second.pickupAt < pickupAt) {
             throw apiError(HttpStatus.BAD_REQUEST, 'LEG_BEFORE_PREVIOUS', 'The second leg cannot start before the first');
           }
           if (input.selfDrive || second?.selfDriveLeg) await this.requireProfile(tx, userId);
-          // A 接駁 order uses the quota and pays the service fee once, like any order.
+          // A 接駁 or 往返 order uses the quota and pays the service fee once, like any order.
           await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
           const fee = await this.commission.feeFor(tx, userId, now);
           const defaults =
@@ -104,7 +128,7 @@ export class OrdersService {
             !input.immediate &&
             pickupAt.getTime() - now.getTime() > FAVORITES_FIRST_MIN_LEAD_MINUTES * 60_000 &&
             (await tx.driverNote.count({ where: { ownerId: userId, favorite: true } })) > 0;
-          // What both legs of a 接駁 order share: the passenger and the load.
+          // What both legs of a 接駁 or 往返 order share: the passenger and the load.
           const common = {
             dispatcherId: userId,
             passengers: input.passengers,
@@ -130,8 +154,8 @@ export class OrdersService {
               pickupAt,
               immediate: input.immediate,
               origin: input.origin,
-              // The first leg of a 接駁 order ends at the 接駁位置.
-              destination: second ? second.place : input.destination,
+              // The first leg of a 接駁 order ends at the 接駁位置; of a 往返, where the trip turns back.
+              destination: second ? second.origin : input.destination,
               waypoints: input.waypoints,
               driverPriceMinor: toMinor(input.driverPrice),
               driverCurrency: input.driverPrice?.currency ?? 'HKD',
@@ -149,22 +173,24 @@ export class OrdersService {
           if (input.bookingId) await this.takeBooking(tx, userId, input.bookingId, placed.id);
           if (carpool) return this.takeCarpool(tx, userId, carpool.id, placed.id, now);
           if (!second) return placed;
-          await tx.order.update({ where: { id: placed.id }, data: { journeyId: placed.id, legIndex: 1 } });
+          const journey = { journeyKind: second.kind, sameDriver: second.sameDriver };
+          await tx.order.update({ where: { id: placed.id }, data: { journeyId: placed.id, legIndex: 1, ...journey } });
           await tx.order.create({
             data: {
               ...common,
               code: randomCode(ORDER_CODE_LENGTH),
               confirmCode: randomCode(CONFIRM_CODE_LENGTH),
               pickupAt: second.pickupAt,
-              origin: second.place,
-              destination: input.destination,
+              origin: second.origin,
+              destination: second.destination,
               driverPriceMinor: toMinor(second.driverPrice),
               driverCurrency: second.driverPrice?.currency ?? 'HKD',
               passengerCurrency: placed.passengerCurrency,
               requiredPlates: second.requiredPlates,
               journeyId: placed.id,
               legIndex: 2,
-              ...(second.selfDriveLeg === 2 ? selfDriven : {}),
+              ...journey,
+              ...(second.selfDriveLeg === 2 || (second.sameDriver && input.selfDrive) ? selfDriven : {}),
             },
           });
           return tx.order.findUniqueOrThrow({ where: { id: placed.id }, include: orderInclude });
@@ -317,7 +343,17 @@ export class OrdersService {
   async claim(code: string, userId: string, now = new Date()) {
     const order = await this.prisma.order.findUnique({
       where: { code },
-      select: { id: true, dispatcherId: true, claimedById: true, status: true, scope: true, journeyId: true, favoritesUntil: true },
+      select: {
+        id: true,
+        dispatcherId: true,
+        claimedById: true,
+        status: true,
+        scope: true,
+        journeyId: true,
+        journeyKind: true,
+        sameDriver: true,
+        favoritesUntil: true,
+      },
     });
     if (!order) throw this.notFound();
     if (order.dispatcherId === userId) {
@@ -332,21 +368,35 @@ export class OrdersService {
 
     await this.requireProfile(this.prisma, userId);
 
-    const result: ClaimResult = await this.prisma.$transaction(async (tx) => {
-      // 接駁: each leg is a different driver's. Under the order's lock, so two taps on the two
-      // legs at once cannot both go through.
-      if (order.journeyId) {
-        await this.lockJourney(tx, order.journeyId);
+    // 往返 同一位司機來回: one claim takes every leg still to drive, from either leg's link.
+    const together = order.journeyKind === 'ROUND_TRIP' && order.sameDriver ? order.journeyId : null;
+    const { result, legIds } = await this.prisma.$transaction(async (tx) => {
+      // Under the order's lock, so two taps on the two legs at once cannot both go through.
+      if (order.journeyId) await this.lockJourney(tx, order.journeyId);
+      // 接駁: each leg is a different driver's. 往返 可分開接 lets one driver take both.
+      if (order.journeyId && order.journeyKind !== 'ROUND_TRIP') {
         const other = await tx.order.count({ where: { journeyId: order.journeyId, id: { not: order.id }, claimedById: userId } });
         if (other > 0) throw apiError(HttpStatus.CONFLICT, 'ONE_LEG_PER_DRIVER', 'One driver takes one leg of a 接駁 order');
+      }
+      if (together) {
+        // All or nothing: a leg someone else drives means the trip is taken.
+        const legs = await tx.order.findMany({ where: { journeyId: together, status: { in: ['OPEN', 'ASSIGNED'] } }, select: { id: true, status: true } });
+        const open = legs.filter((leg) => leg.status === 'OPEN').map((leg) => leg.id);
+        if (open.length === 0 || open.length < legs.length) return { result: 'LOST' as ClaimResult, legIds: [order.id] };
+        await tx.order.updateMany({
+          where: { id: { in: open }, status: 'OPEN', claimedById: null },
+          data: { status: 'ASSIGNED', claimedById: userId, claimedAt: now },
+        });
+        return { result: 'WON' as ClaimResult, legIds: open };
       }
       const updated = await tx.order.updateMany({
         where: { id: order.id, status: 'OPEN', claimedById: null },
         data: { status: 'ASSIGNED', claimedById: userId, claimedAt: now },
       });
-      return updated.count === 1 ? 'WON' : 'LOST';
+      return { result: (updated.count === 1 ? 'WON' : 'LOST') as ClaimResult, legIds: [order.id] };
     });
-    await this.prisma.orderClaim.create({ data: { orderId: order.id, driverId: userId, result } });
+    // Every attempt is kept; a won 往返 is kept on each leg, so each leg can be given back.
+    await this.prisma.orderClaim.createMany({ data: legIds.map((orderId) => ({ orderId, driverId: userId, result })) });
     telemetry.domain('order.claim', result === 'WON' ? 'success' : 'lost');
     if (result === 'WON') await this.tell(order.id, 'ORDER_CLAIMED', 'dispatcher');
     return this.claimResult(result, code, userId);
@@ -390,9 +440,32 @@ export class OrdersService {
     return view;
   }
 
-  /** "改派": take the order back from the driver and open it for claiming again. */
+  /**
+   * "改派": take the order back from the driver and open it for claiming again. 往返 同一位司機來回
+   * takes back every leg still to drive, as one claim took them.
+   */
   async reopen(userId: string, id: string) {
-    const before = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { claimedById: true } });
+    const before = await this.prisma.order.findFirst({
+      where: { id, dispatcherId: userId },
+      select: { claimedById: true, journeyId: true, journeyKind: true, sameDriver: true },
+    });
+    if (before?.journeyId && before.journeyKind === 'ROUND_TRIP' && before.sameDriver) {
+      const journeyId = before.journeyId;
+      const legs = await this.prisma.$transaction(async (tx) => {
+        await this.lockJourney(tx, journeyId);
+        const taken = await tx.order.findMany({ where: { journeyId, status: 'ASSIGNED' }, select: { id: true, claimedById: true } });
+        if (taken.length === 0) throw this.invalidStatus();
+        await tx.order.updateMany({
+          where: { id: { in: taken.map((leg) => leg.id) } },
+          data: { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null, ...CLEAR_TRIP_STATE },
+        });
+        for (const leg of taken) await this.clearPartyProgress(tx, leg.id);
+        return taken;
+      });
+      // One notice for the trip, to the driver who had it.
+      await this.tell(legs[0].id, 'ORDER_REOPENED', 'driver', legs[0].claimedById);
+      return this.getForParticipant(userId, id);
+    }
     const view = await this.transition(
       userId,
       id,
@@ -412,27 +485,34 @@ export class OrdersService {
   async release(userId: string, id: string) {
     const order = await this.prisma.order.findFirst({
       where: { id, claimedById: userId },
-      select: { code: true, dispatcherId: true, journeyId: true },
+      select: { code: true, dispatcherId: true, journeyId: true, journeyKind: true, sameDriver: true },
     });
     if (!order) throw this.notFound();
     // 這單我自己做 is the dispatcher's own: they hand it over with 交給別的司機 instead.
     if (order.dispatcherId === userId) throw this.invalidStatus();
+    // 往返 同一位司機來回: the driver gives back every leg still to drive, as they took them.
+    const together = order.journeyId && order.journeyKind === 'ROUND_TRIP' && order.sameDriver ? order.journeyId : null;
     const released = await this.prisma.$transaction(async (tx) => {
-      // 接駁: under the order's lock, as a claim on either leg is.
+      // 接駁 and 往返: under the order's lock, as a claim on either leg is.
       if (order.journeyId) await this.lockJourney(tx, order.journeyId);
+      const legIds = together
+        ? (await tx.order.findMany({ where: { journeyId: together, claimedById: userId, status: 'ASSIGNED' }, select: { id: true } })).map((leg) => leg.id)
+        : [id];
       const moved = await tx.order.updateMany({
-        where: { id, claimedById: userId, status: 'ASSIGNED' },
+        where: { id: { in: legIds }, claimedById: userId, status: 'ASSIGNED' },
         data: { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, settledAt: null, ...CLEAR_TRIP_STATE },
       });
       // 我的司機 counts how often a driver gave an order back: the claim they won is marked.
-      if (moved.count === 1) {
-        await this.clearPartyProgress(tx, id);
-        const won = await tx.orderClaim.findFirst({
-          where: { orderId: id, driverId: userId, result: 'WON', releasedAt: null },
-          orderBy: { createdAt: 'desc' },
-          select: { id: true },
-        });
-        if (won) await tx.orderClaim.update({ where: { id: won.id }, data: { releasedAt: new Date() } });
+      if (moved.count > 0) {
+        for (const legId of legIds) {
+          await this.clearPartyProgress(tx, legId);
+          const won = await tx.orderClaim.findFirst({
+            where: { orderId: legId, driverId: userId, result: 'WON', releasedAt: null },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true },
+          });
+          if (won) await tx.orderClaim.update({ where: { id: won.id }, data: { releasedAt: new Date() } });
+        }
       }
       return moved;
     });
@@ -473,14 +553,15 @@ export class OrdersService {
    * whole trip's. A driver who already took a changed leg is told and confirms with 知道了.
    */
   async updateTrip(userId: string, id: string, input: UpdateTripInput, now = new Date()) {
-    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true, journeyId: true } });
+    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true, journeyId: true, journeyKind: true } });
     if (!order) throw this.notFound();
     if (order.status !== 'OPEN' && order.status !== 'ASSIGNED') throw this.invalidStatus();
+    const roundTrip = order.journeyKind === 'ROUND_TRIP';
     // 拼車: the parties' seats made the trip; to change it, the carpool is opened again.
     if ((await this.prisma.carpool.count({ where: { orderId: id } })) > 0) {
       throw apiError(HttpStatus.CONFLICT, 'CARPOOL_TRIP_FIXED', 'A carpool order keeps the trip its passengers asked for');
     }
-    if (input.transferPlace !== undefined && !order.journeyId) {
+    if (input.transferPlace !== undefined && (!order.journeyId || roundTrip)) {
       throw apiError(HttpStatus.BAD_REQUEST, 'NOT_A_TRANSFER', 'Only a 接駁 order has a 接駁位置');
     }
     const told = await this.prisma.$transaction(async (tx) => {
@@ -507,7 +588,12 @@ export class OrdersService {
         if ('pickupAt' in data) data.immediate = false;
       }
       if (input.origin !== undefined) put(first, 'origin', input.origin, '上車地點');
-      if (input.destination !== undefined) put(last, 'destination', input.destination, '目的地');
+      if (input.destination !== undefined) put(roundTrip ? first : last, 'destination', input.destination, '目的地');
+      // 往返: the way back runs from the destination to where the trip started.
+      if (roundTrip && legs.length > 1) {
+        if (input.destination !== undefined) put(legs[1], 'origin', input.destination, '上車地點');
+        if (input.origin !== undefined) put(legs[1], 'destination', input.origin, '目的地');
+      }
       if (input.transferPlace !== undefined && legs.length > 1) {
         put(first, 'destination', input.transferPlace, '接駁位置');
         put(legs[1], 'origin', input.transferPlace, '接駁位置');
@@ -519,7 +605,7 @@ export class OrdersService {
         if (input.notes !== undefined) put(leg, 'notes', input.notes || null, '備註');
         if (input.flightNo !== undefined) put(leg, 'flightNo', input.flightNo || null, '航班');
       }
-      // The second leg still starts at the 接駁位置 after the first one gets there.
+      // The second leg still starts after the first: at the 接駁位置, or on the way back.
       if (legs.length > 1) {
         const timeOf = (leg: (typeof legs)[number]) => (changes.get(leg.id)!.data.pickupAt as Date | undefined) ?? leg.pickupAt;
         if (timeOf(legs[1]) < timeOf(first)) {
@@ -572,7 +658,12 @@ export class OrdersService {
     const [claims, notes] = await Promise.all([
       this.prisma.orderClaim.findMany({
         where: { result: 'WON', driverId: { not: userId }, order: { dispatcherId: userId } },
-        select: { driverId: true, releasedAt: true, createdAt: true, order: { select: { status: true, claimedById: true } } },
+        select: {
+          driverId: true,
+          releasedAt: true,
+          createdAt: true,
+          order: { select: { id: true, journeyId: true, journeyKind: true, sameDriver: true, status: true, claimedById: true } },
+        },
       }),
       this.prisma.driverNote.findMany({ where: { ownerId: userId } }),
     ]);
@@ -588,7 +679,12 @@ export class OrdersService {
     });
     return users
       .map((user) => {
-        const theirs = claims.filter((claim) => claim.driverId === user.id);
+        // 往返 同一位司機來回 is one job on two legs: counted once, by its first leg's claim.
+        const theirs = claims.filter(
+          (claim) =>
+            claim.driverId === user.id &&
+            !(claim.order.journeyKind === 'ROUND_TRIP' && claim.order.sameDriver && claim.order.journeyId !== claim.order.id),
+        );
         const note = notes.find((one) => one.driverId === user.id);
         const lastAt = theirs.reduce<Date | null>((latest, claim) => (!latest || claim.createdAt > latest ? claim.createdAt : latest), null);
         return {
@@ -1028,7 +1124,12 @@ export class OrdersService {
       share: {
         dispatch: order.carpool
           ? carpoolShareText(order, { partyCount: order.carpool.seatsList.length, stops: carpoolStopsOf(order.carpool.seatsList) }, links.dispatch)
-          : legs && legs.length > 1
+          : legs && legs.length > 1 && order.journeyKind === 'ROUND_TRIP'
+            ? roundTripShareText(
+                legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId })),
+                head.dispatch,
+              )
+            : legs && legs.length > 1
             ? transferShareText(
                 legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId })),
                 head.dispatch,

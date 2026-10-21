@@ -29,6 +29,8 @@ interface OrderRow {
   passengerConfirmed: boolean;
   selfDrive: boolean;
   legIndex: number | null;
+  /** TRANSFER (接駁) or ROUND_TRIP (往返); null outside a trip. */
+  journeyKind: 'TRANSFER' | 'ROUND_TRIP' | null;
   paidAt: string | null;
   settledAt: string | null;
   createdAt: string;
@@ -127,7 +129,7 @@ function moneyMarks(order: OrderRow): string[] {
           </td>
           <td class="orders__route">
             {{ order.origin }} 至 {{ order.destination }}
-            <div v-if="order.legIndex" class="hint">接駁第 {{ order.legIndex }} 段</div>
+            <div v-if="order.legIndex" class="hint">{{ order.journeyKind === 'ROUND_TRIP' ? `往返${order.legIndex === 1 ? '去程' : '回程'}` : `接駁第 ${order.legIndex} 段` }}</div>
           </td>
           <td class="nowrap">
             <StatusBadge :status="order.status" :confirmed="order.passengerConfirmed" />

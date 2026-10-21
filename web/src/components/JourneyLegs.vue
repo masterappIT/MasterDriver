@@ -1,21 +1,22 @@
 <script setup lang="ts">
-import type { JourneyLeg } from '../journey';
+import { legName, type Journey, type JourneyLeg } from '../journey';
 import { pickup, plateKind } from '../format';
 import { t } from '../i18n';
 import PlateTag from './PlateTag.vue';
 import StatusBadge from './StatusBadge.vue';
 
 /**
- * 接駁: both legs of the order, with the 接駁位置 between them. The dispatcher
- * opens a leg to manage its driver; each leg's driver sees the other's.
+ * 接駁: both legs of the order, with the 接駁位置 between them. 往返: the way there and the way
+ * back, nothing between them. The dispatcher opens a leg to manage its driver; each leg's driver
+ * sees the other's.
  */
-defineProps<{ legs: JourneyLeg[]; current: number }>();
+withDefaults(defineProps<{ legs: JourneyLeg[]; current: number; kind?: Journey['kind'] }>(), { kind: 'TRANSFER' });
 </script>
 
 <template>
   <ol class="journey-legs">
     <li v-for="leg in legs" :key="leg.legIndex" class="journey-legs__item">
-      <p v-if="leg.legIndex > 1" class="journey-legs__handoff"><span>{{ t(`接駁位置：${leg.origin}`) }}</span></p>
+      <p v-if="leg.legIndex > 1 && kind !== 'ROUND_TRIP'" class="journey-legs__handoff"><span>{{ t(`接駁位置：${leg.origin}`) }}</span></p>
       <component
         :is="leg.id && leg.legIndex !== current ? 'RouterLink' : 'div'"
         :to="leg.id ? `/app/orders/${leg.id}` : undefined"
@@ -23,7 +24,7 @@ defineProps<{ legs: JourneyLeg[]; current: number }>();
         :class="{ 'journey-legs__leg--current': leg.legIndex === current, 'journey-legs__leg--cancelled': leg.status === 'CANCELLED' }"
       >
         <div class="journey-legs__top">
-          <span class="leg-tag">{{ t(`第 ${leg.legIndex} 段`) }}<template v-if="leg.legIndex === current">・{{ t('本段') }}</template></span>
+          <span class="leg-tag">{{ t(legName(kind, leg.legIndex)) }}<template v-if="leg.legIndex === current">・{{ t(kind === 'ROUND_TRIP' ? '本程' : '本段') }}</template></span>
           <StatusBadge :status="leg.status" />
         </div>
         <div class="journey-legs__time">{{ pickup(leg.pickupAt) }}<span v-if="leg.immediate" class="now-tag journey-legs__now">{{ t('即時') }}</span></div>

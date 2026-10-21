@@ -198,13 +198,17 @@ function tripStatus(legs: { status: OrderWithPeople['status'] }[]): OrderWithPeo
 function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boolean, userId?: string) {
   const legs = legsOf(order);
   if (!legs || order.legIndex === null) return null;
+  // 往返: the trip goes to where the first leg ends and comes back; it has no 接駁位置.
+  const roundTrip = order.journeyKind === 'ROUND_TRIP';
   return {
+    kind: order.journeyKind ?? 'TRANSFER',
+    sameDriver: roundTrip && order.sameDriver,
     legIndex: order.legIndex,
     legCount: legs.length,
     status: tripStatus(legs),
     origin: legs[0].origin,
-    destination: legs[legs.length - 1].destination,
-    transferPlaces: transferPlacesOf({ ...order, legIndex: order.legIndex, legCount: legs.length }),
+    destination: roundTrip ? legs[0].destination : legs[legs.length - 1].destination,
+    transferPlaces: roundTrip ? [] : transferPlacesOf({ ...order, legIndex: order.legIndex, legCount: legs.length }),
     legs: legs.map((leg) => {
       const driver = viewer !== 'other' && leg.status !== 'CANCELLED' ? driverOf(leg) : null;
       return {
@@ -425,13 +429,16 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
   const lead = shown ? shown[0] : single;
   const status = allLegs ? tripStatus(allLegs) : order.status;
   // 接駁: the passenger is told the car changes on the way and who drives each leg, never where
-  // the cars meet: that is between the dispatcher and the two drivers.
-  const transfer = Boolean(shown && shown.length > 1);
+  // the cars meet: that is between the dispatcher and the two drivers. 往返: the passenger sees
+  // each leg's time and places, there and back.
+  const several = Boolean(shown && shown.length > 1);
+  const roundTrip = several && order.journeyKind === 'ROUND_TRIP';
+  const transfer = several && !roundTrip;
   return {
     status,
     pickupAt: lead.pickupAt,
     origin: lead.origin,
-    destination: shown ? shown[shown.length - 1].destination : single.destination,
+    destination: shown && !roundTrip ? shown[shown.length - 1].destination : lead.destination,
     waypoints: lead.waypoints,
     passengers: order.passengers,
     luggage: order.luggage,
@@ -464,8 +471,21 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
     tripGroup: status === 'COMPLETED' ? null : tripGroupOf(order, `/api/c/${order.confirmCode}/trip-group/qr`, false, now),
     driver: lead.driver,
     transfer,
+    roundTrip,
+    sameDriver: roundTrip && order.sameDriver,
     legs: transfer
       ? shown!.map(({ legIndex, status: legStatus, passengerConfirmedAt, driver, progress }) => ({ legIndex, status: legStatus, passengerConfirmedAt, driver, progress }))
-      : null,
+      : roundTrip
+        ? shown!.map(({ legIndex, status: legStatus, pickupAt, origin, destination, passengerConfirmedAt, driver, progress }) => ({
+            legIndex,
+            status: legStatus,
+            pickupAt,
+            origin,
+            destination,
+            passengerConfirmedAt,
+            driver,
+            progress,
+          }))
+        : null,
   };
 }

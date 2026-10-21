@@ -450,7 +450,7 @@ export class AdminDataService {
           ],
         },
         orderBy: { pickupAt: 'asc' },
-        select: { id: true, dispatcherId: true, pickupAt: true, origin: true, destination: true, legIndex: true },
+        select: { id: true, dispatcherId: true, pickupAt: true, origin: true, destination: true, legIndex: true, journeyKind: true },
       }),
       db.order.count({ where: { dispatcherId: id } }),
       db.order.count({ where: { claimedById: id, dispatcherId: { not: id } } }),
@@ -490,6 +490,7 @@ export class AdminDataService {
           origin: order.origin,
           destination: order.destination,
           legIndex: order.legIndex,
+          journeyKind: order.journeyKind,
           parties: null,
         })),
         // CARPOOL: a 拼車 of theirs still taking seats, or with passengers holding seats; the driver cancels it first.
@@ -500,6 +501,7 @@ export class AdminDataService {
           origin: carpool.origin,
           destination: carpool.destination,
           legIndex: null,
+          journeyKind: null,
           /** Parties holding seats now. */
           parties: carpool.seatsList.length,
         })),
@@ -687,6 +689,7 @@ export class AdminDataService {
         passengerConfirmed: Boolean(order.passengerConfirmedAt),
         selfDrive: isSelfDriven(order),
         legIndex: order.legIndex,
+        journeyKind: order.journeyKind,
         /** The dispatcher's own marks; null while not marked. */
         paidAt: order.paidAt?.toISOString() ?? null,
         settledAt: order.settledAt?.toISOString() ?? null,
@@ -734,8 +737,16 @@ export class AdminDataService {
       passenger: showPassenger ? { name: order.passengerName, contact: order.passengerContact } : null,
       selfDrive: isSelfDriven(order),
       inPool: order.inPool,
-      /** 接駁: this order's place in its trip. */
-      journey: order.legIndex === null ? null : { legIndex: order.legIndex, legCount: order.journeyHead?.journeyLegs.length ?? order.legIndex },
+      /** 接駁 or 往返: this order's place in its trip, and whether one driver takes both legs of a 往返. */
+      journey:
+        order.legIndex === null
+          ? null
+          : {
+              kind: order.journeyKind ?? 'TRANSFER',
+              sameDriver: order.sameDriver,
+              legIndex: order.legIndex,
+              legCount: order.journeyHead?.journeyLegs.length ?? order.legIndex,
+            },
       /** Minutes before pickup at which the driver sees the passenger's phone; null means as soon as claimed. */
       contactRevealMinutes: order.contactRevealMinutes,
       fromBooking: Boolean(order.booking),

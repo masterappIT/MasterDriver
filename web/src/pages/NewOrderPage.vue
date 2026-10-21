@@ -93,7 +93,14 @@ const form = reactive({
   secondPickupAt: toLocalInput(new Date(inAnHour.getTime() + 60 * 60 * 1000)),
   secondCurrency: 'CNY',
   secondDriverPrice: '',
-  /** 這單我自己做 (直達); with 接駁 the dispatcher may drive one leg, never both. */
+  /**
+   * 往返 (true): one order in two legs, there and back; the time and driver price above are the way
+   * there's, the second leg's fields hold the way back's. Never together with 接駁.
+   */
+  roundTrip: false,
+  /** 往返: 同一位司機來回 (one claim takes both legs), or 可分開接. */
+  sameDriver: true,
+  /** 這單我自己做 (直達, or both legs of 同一位司機來回); with 接駁 or 可分開接 the dispatcher may drive one leg. */
   selfDrive: false,
   selfDriveLeg: null as 1 | 2 | null,
   /** 接單池: also list the order for every signed-in driver, not only the groups the link is pasted in. */
@@ -107,6 +114,29 @@ const form = reactive({
   /** 即時單: leaves now; no time to pick, the API takes the moment it is put out. */
   immediate: false,
 });
+/** 接駁 or 往返: two legs, the second's time and driver price asked too. */
+const twoLegs = computed(() => form.transfer || form.roundTrip);
+/** The dispatcher may drive one leg and offer the other: 接駁, and 往返 可分開接. */
+const perLegSelf = computed(() => form.transfer || (form.roundTrip && !form.sameDriver));
+/** Some leg goes to other drivers: not when the dispatcher drives the whole order themselves. */
+const othersTake = computed(() => perLegSelf.value || !form.selfDrive);
+/** A leg's name in the form: 去程／回程 for 往返, 第 N 段 for 接駁. */
+const legName = (legIndex: 1 | 2) => (form.roundTrip ? (legIndex === 1 ? '去程' : '回程') : `第 ${legIndex} 段`);
+
+/** 直達, 往返 or 接駁; a leg the dispatcher chose to drive is cleared, as the legs change meaning. */
+function setMode(mode: 'direct' | 'roundTrip' | 'transfer') {
+  form.transfer = mode === 'transfer';
+  form.roundTrip = mode === 'roundTrip';
+  form.selfDriveLeg = null;
+}
+
+/** 同一位司機來回 or 可分開接: who drives which leg is chosen again. */
+function setSameDriver(same: boolean) {
+  form.sameDriver = same;
+  form.selfDriveLeg = null;
+  form.selfDrive = false;
+}
+
 /** How many 常用司機 the dispatcher has marked; 先給常用司機 is offered only with some. */
 const favoriteCount = ref(0);
 /**
@@ -116,7 +146,7 @@ const favoriteCount = ref(0);
 const favoritesOffered = computed(
   () =>
     favoriteCount.value > 0 &&
-    (form.transfer || !form.selfDrive) &&
+    othersTake.value &&
     !form.immediate &&
     Boolean(form.pickupAt) &&
     new Date(fromLocalInput(form.pickupAt)).getTime() - Date.now() > 60 * 60_000,
@@ -187,6 +217,11 @@ function fillFromLine() {
     form.notes = parsed.notes;
     filled.push(`備註 ${parsed.notes}`);
   }
+  // 往返 in the line: the form opens on it, the way back's time left to fill.
+  if (parsed.roundTrip) {
+    setMode('roundTrip');
+    filled.push('類型 往返');
+  }
   filledFromLine.value = filled;
   lineFolded.value = filled.length > 0;
 }
@@ -203,12 +238,13 @@ watch(
 /** The spread, only when every price is in the same currency (the API counts it the same way). */
 const margin = computed(() => {
   if (!form.passengerPrice) return null;
-  // 接駁: the passenger's one price against what both legs' drivers are paid; a leg the
+  // 接駁 and 往返: the passenger's one price against what both legs' drivers are paid; a leg the
   // dispatcher drives pays nobody.
-  const paid = form.transfer
+  const self = (legIndex: 1 | 2) => (perLegSelf.value ? form.selfDriveLeg === legIndex : form.selfDrive);
+  const paid = twoLegs.value
     ? [
-        { price: form.driverPrice, currency: form.currency, self: form.selfDriveLeg === 1 },
-        { price: form.secondDriverPrice, currency: form.secondCurrency, self: form.selfDriveLeg === 2 },
+        { price: form.driverPrice, currency: form.currency, self: self(1) },
+        { price: form.secondDriverPrice, currency: form.secondCurrency, self: self(2) },
       ].filter((leg) => !leg.self)
     : [{ price: form.driverPrice, currency: form.currency }];
   if (paid.some((leg) => !leg.price || leg.currency !== form.passengerCurrency)) return null;
@@ -234,7 +270,7 @@ watch(
   },
 );
 
-/** The second leg starts at the 接駁位置, never before the first; moved along when it would. */
+/** The second leg (at the 接駁位置, or the way back) never starts before the first; moved along when it would. */
 watch(
   () => form.pickupAt,
   (first) => {
@@ -294,8 +330,8 @@ async function submit() {
   }
   // 即時單 leaves now: the API takes the moment it is put out; this is only for the check below.
   const firstAt = form.immediate ? toLocalInput(new Date()) : form.pickupAt;
-  if (form.transfer && form.secondPickupAt < firstAt) {
-    void showError(t('第 2 段的時間不能早於第 1 段'));
+  if (twoLegs.value && form.secondPickupAt < firstAt) {
+    void showError(t(form.roundTrip ? '回程的時間不能早於去程' : '第 2 段的時間不能早於第 1 段'));
     return;
   }
   busy.value = true;
@@ -326,8 +362,16 @@ async function submit() {
             selfDriveLeg: form.selfDriveLeg,
           }
         : undefined,
-      selfDrive: !form.transfer && form.selfDrive,
-      inPool: !(!form.transfer && form.selfDrive) && form.inPool,
+      roundTrip: form.roundTrip
+        ? {
+            pickupAt: fromLocalInput(form.secondPickupAt),
+            driverPrice: price(form.secondDriverPrice, form.secondCurrency),
+            sameDriver: form.sameDriver,
+            selfDriveLeg: form.sameDriver ? null : form.selfDriveLeg,
+          }
+        : undefined,
+      selfDrive: !perLegSelf.value && form.selfDrive,
+      inPool: othersTake.value && form.inPool,
       showPaymentMethods: form.showPaymentMethods,
       flightNo: airportTrip.value && form.flightNo.trim() ? form.flightNo.trim() : undefined,
       favoritesFirst: favoritesOffered.value && form.favoritesFirst,
@@ -351,6 +395,8 @@ async function loadBooking() {
       passengers: number;
       luggage: number;
       transfer: boolean;
+      roundTrip: boolean;
+      returnPickupAt: string | null;
       passengerName: string | null;
       passengerContact: string;
       notes: string | null;
@@ -364,6 +410,9 @@ async function loadBooking() {
       luggage: String(booking.luggage),
       // The passenger asked for 接駁: the form opens on it, the 接駁位置 left for the driver.
       transfer: booking.transfer,
+      // Or for 往返, with the time to be picked up for the way back.
+      roundTrip: booking.roundTrip,
+      ...(booking.roundTrip && booking.returnPickupAt ? { secondPickupAt: toLocalInput(new Date(booking.returnPickupAt)) } : {}),
       passengerName: booking.passengerName ?? '',
       notes: booking.notes ?? '',
       ...(booking.quote
@@ -386,8 +435,8 @@ const moreSummary = computed(() =>
     form.passengerPrice ? `乘客價 ${form.passengerPrice}` : '',
     form.notes.trim() ? '有備註' : '',
     `乘客電話${revealLabel(form.contactRevealMinutes)}`,
-    form.transfer && form.selfDriveLeg ? `第 ${form.selfDriveLeg} 段我自己做` : '',
-    !form.transfer && form.selfDrive ? '這單我自己做' : form.inPool ? '放進接單池' : '只給拿到連結的人',
+    perLegSelf.value && form.selfDriveLeg ? `${legName(form.selfDriveLeg)}我自己做` : '',
+    !perLegSelf.value && form.selfDrive ? (form.roundTrip ? '來回我自己做' : '這單我自己做') : form.inPool ? '放進接單池' : '只給拿到連結的人',
     form.favoritesFirst && favoritesOffered.value ? '先給常用司機' : '',
   ]
     .filter(Boolean)
@@ -412,10 +461,17 @@ async function loadReturn() {
       driverPrice: { amount: number; currency: string } | null;
       passengerPrice: { amount: number; currency: string } | null;
       showPassengerPrice: boolean;
-      journey: { origin: string; destination: string; transferPlaces: string[]; legs: { driverPrice: { amount: number; currency: string } | null }[] } | null;
+      journey: {
+        kind: 'TRANSFER' | 'ROUND_TRIP';
+        origin: string;
+        destination: string;
+        transferPlaces: string[];
+        legs: { driverPrice: { amount: number; currency: string } | null }[];
+      } | null;
     }>('GET', `/orders/${returnOf}`);
     const legs = from.journey?.legs ?? [];
-    const back = from.journey && legs.length > 1 ? { first: legs[legs.length - 1].driverPrice, second: legs[0].driverPrice } : null;
+    // A 往返 already comes back; 出回程單 is not offered on one, and from one it is a single trip back.
+    const back = from.journey && from.journey.kind !== 'ROUND_TRIP' && legs.length > 1 ? { first: legs[legs.length - 1].driverPrice, second: legs[0].driverPrice } : null;
     Object.assign(form, {
       pickupAt: '',
       origin: from.journey?.destination ?? from.destination,
@@ -497,6 +553,9 @@ onMounted(async () => {
     <div v-if="fromBooking && form.transfer" class="notice">
       {{ t('已帶入客人詢價的資料，乘客要接駁（中途換車）。填接駁位置和每段的出單價後出單。') }}
     </div>
+    <div v-else-if="fromBooking && form.roundTrip" class="notice">
+      {{ t('已帶入客人詢價的資料，乘客要往返，回程時間也已帶入。選同一位司機來回或可分開接，填去程和回程的出單價後出單。') }}
+    </div>
     <div v-else-if="fromBooking" class="notice">
       {{ form.passengerPrice ? t('已帶入客人詢價的資料和你的報價（作為乘客價）。填出單價後出單，貼到群裡派給其他司機。') : t('已帶入客人詢價的資料。填出單價後出單，貼到群裡派給其他司機。') }}
     </div>
@@ -525,23 +584,36 @@ onMounted(async () => {
 
     <!-- The trip: when, from where to where, and the flight when an airport is at either end. -->
     <section class="card">
-      <div class="segment segment--block new-order__mode" role="group" :aria-label="t('直達或接駁')">
-        <button type="button" :aria-pressed="!form.transfer" @click="form.transfer = false">{{ t('直達') }}</button>
-        <button type="button" :aria-pressed="form.transfer" @click="form.transfer = true">{{ t('接駁（中途換車）') }}</button>
+      <div class="segment segment--block new-order__mode" role="group" :aria-label="t('直達、往返或接駁')">
+        <button type="button" :aria-pressed="!twoLegs" @click="setMode('direct')">{{ t('直達') }}</button>
+        <button type="button" :aria-pressed="form.roundTrip" @click="setMode('roundTrip')">{{ t('往返') }}</button>
+        <button type="button" :aria-pressed="form.transfer" @click="setMode('transfer')">{{ t('接駁') }}</button>
       </div>
       <p v-if="form.transfer" class="hint new-order__explain">
-        {{ t('一張單分兩段，在接駁位置換車，各由一位司機接。群裡貼一條訊息，司機選段搶；乘客只看到一個價格。乘客自行過關不算接駁。') }}
+        {{ t('中途換車：一張單分兩段，在接駁位置換車，各由一位司機接。群裡貼一條訊息，司機選段搶；乘客只看到一個價格。乘客自行過關不算接駁。') }}
       </p>
+      <template v-if="form.roundTrip">
+        <p class="hint new-order__explain">
+          {{ t('一張單兩程：去程到目的地，回程原路回來。群裡貼一條訊息，乘客只看到一個價格。') }}
+        </p>
+        <div class="segment segment--block new-order__mode new-order__drivers" role="group" :aria-label="t('誰開回程')">
+          <button type="button" :aria-pressed="form.sameDriver" @click="setSameDriver(true)">{{ t('同一位司機來回') }}</button>
+          <button type="button" :aria-pressed="!form.sameDriver" @click="setSameDriver(false)">{{ t('可分開接') }}</button>
+        </div>
+        <p class="hint new-order__explain">
+          {{ form.sameDriver ? t('司機一搶就是去程和回程。') : t('司機選一程搶，同一位司機也可以兩程都搶。') }}
+        </p>
+      </template>
 
       <label class="new-order__switch new-order__now">
         <span>
-          {{ form.transfer ? t('第 1 段即時（現在出發）') : t('即時（現在出發）') }}
+          {{ twoLegs ? t(`${legName(1)}即時（現在出發）`) : t('即時（現在出發）') }}
           <small>{{ form.immediate ? t('放進接單池，10 分鐘沒人接會提醒你') : t('馬上要車就打開') }}</small>
         </span>
         <input v-model="form.immediate" class="switch" type="checkbox" />
       </label>
       <label v-if="!form.immediate" class="line-field">
-        <span>{{ form.transfer ? t('第 1 段出發時間（香港時間）') : t('出發時間（香港時間）') }}</span>
+        <span>{{ twoLegs ? t(`${legName(1)}出發時間（香港時間）`) : t('出發時間（香港時間）') }}</span>
         <input v-model="form.pickupAt" class="line-input new-order__time" type="datetime-local" required />
       </label>
 
@@ -580,15 +652,15 @@ onMounted(async () => {
           />
         </li>
       </ol>
-      <label v-if="form.transfer" class="line-field new-order__second-time">
-        <span>{{ t('第 2 段出發時間（在接駁位置換車）') }}</span>
+      <label v-if="twoLegs" class="line-field new-order__second-time">
+        <span>{{ form.roundTrip ? t('回程出發時間（從目的地回出發地）') : t('第 2 段出發時間（在接駁位置換車）') }}</span>
         <input v-model="form.secondPickupAt" class="line-input new-order__time" type="datetime-local" :min="form.immediate ? undefined : form.pickupAt" required />
       </label>
       <p
-        v-if="form.transfer && form.secondPickupAt && (form.immediate ? form.secondPickupAt < toLocalInput(new Date()) : form.pickupAt && form.secondPickupAt < form.pickupAt)"
+        v-if="twoLegs && form.secondPickupAt && (form.immediate ? form.secondPickupAt < toLocalInput(new Date()) : form.pickupAt && form.secondPickupAt < form.pickupAt)"
         class="hint new-order__time-error"
       >
-        {{ t('第 2 段的時間不能早於第 1 段') }}
+        {{ form.roundTrip ? t('回程的時間不能早於去程') : t('第 2 段的時間不能早於第 1 段') }}
       </p>
       <div class="chips new-order__places">
         <button v-if="form.waypoints.length < 5" class="chip" type="button" @click="form.waypoints.push('')">{{ t('加途經點') }}</button>
@@ -617,10 +689,20 @@ onMounted(async () => {
           <input v-model.trim="form.vehicleType" class="line-input" maxlength="30" :placeholder="t('7座')" required />
         </label>
       </div>
-      <span class="section-label new-order__driver-price">{{ form.transfer ? t('出單價，每段給接那一段的司機') : t('出單價，拿到連結的司機看得到') }}</span>
+      <span class="section-label new-order__driver-price">
+        {{
+          form.transfer
+            ? t('出單價，每段給接那一段的司機')
+            : form.roundTrip
+              ? form.sameDriver
+                ? t('出單價，去程和回程分開寫，司機兩程都拿')
+                : t('出單價，每程給接那一程的司機')
+              : t('出單價，拿到連結的司機看得到')
+        }}
+      </span>
       <div class="amount-line">
-        <span v-if="form.transfer" class="new-order__leg-label">{{ t('第 1 段') }}</span>
-        <select v-model="form.currency" :aria-label="form.transfer ? t('第 1 段幣種') : t('幣種')">
+        <span v-if="twoLegs" class="new-order__leg-label">{{ t(legName(1)) }}</span>
+        <select v-model="form.currency" :aria-label="twoLegs ? t(`${legName(1)}幣種`) : t('幣種')">
           <option value="CNY">RMB¥</option>
           <option value="HKD">HK$</option>
           <option value="MOP">MOP$</option>
@@ -631,18 +713,18 @@ onMounted(async () => {
           min="0"
           step="0.01"
           inputmode="decimal"
-          :aria-label="form.transfer ? t('第 1 段出單價') : t('出單價')"
+          :aria-label="twoLegs ? t(`${legName(1)}出單價`) : t('出單價')"
           :placeholder="t('出單價')"
         />
       </div>
-      <div v-if="form.transfer" class="amount-line new-order__second-price">
-        <span class="new-order__leg-label">{{ t('第 2 段') }}</span>
-        <select v-model="form.secondCurrency" :aria-label="t('第 2 段幣種')">
+      <div v-if="twoLegs" class="amount-line new-order__second-price">
+        <span class="new-order__leg-label">{{ t(legName(2)) }}</span>
+        <select v-model="form.secondCurrency" :aria-label="t(`${legName(2)}幣種`)">
           <option value="CNY">RMB¥</option>
           <option value="HKD">HK$</option>
           <option value="MOP">MOP$</option>
         </select>
-        <input v-model="form.secondDriverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('第 2 段出單價')" :placeholder="t('出單價')" />
+        <input v-model="form.secondDriverPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t(`${legName(2)}出單價`)" :placeholder="t('出單價')" />
       </div>
     </section>
 
@@ -690,7 +772,7 @@ onMounted(async () => {
         <textarea v-model="form.notes" class="line-input" maxlength="500" :placeholder="t('例如：需要兒童座椅')" />
       </label>
 
-      <span class="section-label new-order__passenger-price">{{ form.transfer ? t('乘客價（整趟一個價），只有你看得到') : t('乘客價，只有你看得到') }}</span>
+      <span class="section-label new-order__passenger-price">{{ twoLegs ? t('乘客價（整趟一個價），只有你看得到') : t('乘客價，只有你看得到') }}</span>
       <div class="amount-line amount-line--quiet">
         <select v-model="form.passengerCurrency" :aria-label="t('乘客價幣種')" @change="passengerCurrencyChosen = true">
           <option value="CNY">RMB¥</option>
@@ -724,21 +806,21 @@ onMounted(async () => {
         </span>
         <RevealSelect v-model="form.contactRevealMinutes" class="select--inline" />
       </label>
-      <!-- 接駁: the dispatcher may drive one of the two legs; the other always goes to the group. -->
-      <div v-if="form.transfer" class="line-field new-order__self-leg">
+      <!-- 接駁 and 往返 可分開接: the dispatcher may drive one of the two legs; the other always goes to the group. -->
+      <div v-if="perLegSelf" class="line-field new-order__self-leg">
         <span>
-          {{ t('自己做其中一段') }}
-          <small class="hint">{{ session.profile ? t('那一段直接算你接，另一段貼到群裡搶') : t('請先在「我的」填寫司機資料') }}</small>
+          {{ form.roundTrip ? t('自己做其中一程') : t('自己做其中一段') }}
+          <small class="hint">{{ session.profile ? (form.roundTrip ? t('那一程直接算你接，另一程貼到群裡搶') : t('那一段直接算你接，另一段貼到群裡搶')) : t('請先在「我的」填寫司機資料') }}</small>
         </span>
-        <div class="segment" role="group" :aria-label="t('自己做其中一段')">
+        <div class="segment" role="group" :aria-label="form.roundTrip ? t('自己做其中一程') : t('自己做其中一段')">
           <button type="button" :aria-pressed="form.selfDriveLeg === null" @click="form.selfDriveLeg = null">{{ t('都給別人') }}</button>
-          <button type="button" :aria-pressed="form.selfDriveLeg === 1" @click="form.selfDriveLeg = 1">{{ t('第 1 段') }}</button>
-          <button type="button" :aria-pressed="form.selfDriveLeg === 2" @click="form.selfDriveLeg = 2">{{ t('第 2 段') }}</button>
+          <button type="button" :aria-pressed="form.selfDriveLeg === 1" @click="form.selfDriveLeg = 1">{{ t(legName(1)) }}</button>
+          <button type="button" :aria-pressed="form.selfDriveLeg === 2" @click="form.selfDriveLeg = 2">{{ t(legName(2)) }}</button>
         </div>
       </div>
-      <label v-if="!form.transfer" class="new-order__switch">
+      <label v-if="!perLegSelf" class="new-order__switch">
         <span>
-          {{ t('這單我自己做') }}
+          {{ form.roundTrip ? t('這單我自己做（來回）') : t('這單我自己做') }}
           <small>
             {{
               !form.selfDrive
@@ -751,7 +833,7 @@ onMounted(async () => {
         </span>
         <input v-model="form.selfDrive" class="switch" type="checkbox" />
       </label>
-      <label v-if="form.transfer || !form.selfDrive" class="new-order__switch">
+      <label v-if="othersTake" class="new-order__switch">
         <span>
           {{ t('同時放到接單池') }}
           <small>{{ t('登入的司機都看得到並可以搶，乘客資料仍只給搶到的司機') }}</small>

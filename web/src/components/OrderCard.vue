@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { loadLine, money, pickup } from '../format';
 import { t } from '../i18n';
-import { legLabel, plateRequirement, type Journey, type PlateRegion } from '../journey';
+import { journeyRoute, journeyTag, legLabel, legName, plateRequirement, type Journey, type PlateRegion } from '../journey';
 import StatusBadge from './StatusBadge.vue';
 
 export interface OrderSummary {
@@ -29,7 +29,7 @@ export interface OrderSummary {
   paidAt?: string | null;
   /** 已結清: when the dispatcher marked the account with the driver as settled. */
   settledAt?: string | null;
-  /** 接駁: the order this leg belongs to. */
+  /** 接駁 or 往返: the order this leg belongs to. */
   journey?: Journey | null;
   /** 接單池: the viewer put this order out; it opens their own page and cannot be claimed. */
   mine?: boolean;
@@ -44,7 +44,7 @@ const mineInPool = computed(() => props.role === 'pool' && Boolean(props.order.m
 const load = computed(() => loadLine(props.order.passengers, props.order.luggage, props.order.vehicleType));
 
 /**
- * 接駁 shown as one order (the dispatcher's list and the 接單池): the whole route and each leg in a
+ * 接駁 or 往返 shown as one order (the dispatcher's list and the 接單池): the whole route and each leg in a
  * word. A driver's own list shows the leg they took instead.
  */
 const whole = computed(() => (props.role !== 'claimed' ? (props.order.journey ?? null) : null));
@@ -68,20 +68,20 @@ function legState(leg: Journey['legs'][number]) {
       <span v-if="role === 'pool' && order.driverPrice && !whole" class="order-card__price">{{ money(order.driverPrice) }}</span>
       <StatusBadge v-else-if="role !== 'pool'" :status="status" :confirmed="Boolean(order.passengerConfirmedAt)" />
     </div>
-    <div class="order-card__route">{{ whole ? t(`${whole.origin} 至 ${whole.destination}`) : t(`${order.origin} 至 ${order.destination}`) }}</div>
+    <div class="order-card__route">{{ whole ? t(journeyRoute(whole)) : t(`${order.origin} 至 ${order.destination}`) }}</div>
     <div class="order-card__meta">
       <span>{{ t(load) }}</span>
       <span v-if="!whole && order.requiredPlates?.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
       <span v-if="mineInPool" class="leg-tag">{{ t('你出的') }}</span>
-      <span v-if="whole" class="leg-tag">{{ t('接駁（中途換車）') }}</span>
-      <span v-else-if="order.journey" class="leg-tag">{{ t(`接駁 ${legLabel(order.journey)}`) }}</span>
+      <span v-if="whole" class="leg-tag">{{ t(journeyTag(whole)) }}</span>
+      <span v-else-if="order.journey" class="leg-tag">{{ t(order.journey.kind === 'ROUND_TRIP' ? `往返 ${legLabel(order.journey)}` : `接駁 ${legLabel(order.journey)}`) }}</span>
       <span v-if="role === 'dispatched' && status === 'COMPLETED' && !order.paidAt" class="gold-tag">{{ t('未收款') }}</span>
       <span v-if="!whole && order.status === 'COMPLETED' && !order.settledAt && !order.selfDrive && !order.driverDeleted" class="gold-tag">{{ t('未結清') }}</span>
     </div>
-    <!-- 接駁: one line per leg, so the card says which leg still needs a driver. -->
+    <!-- 接駁 and 往返: one line per leg, so the card says which leg still needs a driver. -->
     <ul v-if="whole" class="order-card__legs">
       <li v-for="leg in whole.legs" :key="leg.legIndex">
-        <span>{{ t(`第 ${leg.legIndex} 段`) }}</span>
+        <span>{{ t(legName(whole.kind, leg.legIndex)) }}</span>
         <span>{{ t(legState(leg)) }}</span>
         <span v-if="role === 'pool' && leg.driverPrice && leg.status === 'OPEN'" class="order-card__foot-price">{{ money(leg.driverPrice) }}</span>
       </li>

@@ -51,6 +51,9 @@ const form = reactive({
   luggage: '0',
   /** 接駁 (中途換車) rather than 直達; the driver decides where the cars change. */
   transfer: false,
+  /** 往返 (there and back) rather than 直達; returnPickupAt is the way back. */
+  roundTrip: false,
+  returnPickupAt: '',
   passengerName: '',
   // A phone is required so the driver can always reach the passenger and make the trip an order.
   passengerCountry: '+852' as CountryCode,
@@ -58,6 +61,15 @@ const form = reactive({
   passengerWechat: '',
   notes: '',
 });
+
+/** 直達, 往返 or 接駁; 往返 suggests coming back the same day, a few hours later. */
+function setMode(mode: 'direct' | 'roundTrip' | 'transfer') {
+  form.transfer = mode === 'transfer';
+  form.roundTrip = mode === 'roundTrip';
+  if (form.roundTrip && !form.returnPickupAt && form.pickupAt) {
+    form.returnPickupAt = toLocalInput(new Date(new Date(fromLocalInput(form.pickupAt)).getTime() + 4 * 60 * 60 * 1000));
+  }
+}
 
 /** "7座商務車・黑"; the seat count is left out when the vehicle type already says it. */
 function vehicleLine(shown: Page) {
@@ -67,6 +79,11 @@ function vehicleLine(shown: Page) {
 
 async function submit() {
   formError.value = '';
+  if (form.roundTrip && form.returnPickupAt <= form.pickupAt) {
+    formError.value = t('回程的時間要晚於去程');
+    document.getElementById('booking-return')?.focus();
+    return;
+  }
   if (!isValidPassengerPhone(form.passengerCountry, form.passengerPhone)) {
     formError.value = t(form.passengerCountry === '+86' ? '電話請填 11 位內地手機號碼' : '電話請填 8 位數字');
     document.getElementById('booking-phone')?.focus();
@@ -82,6 +99,8 @@ async function submit() {
       passengers: Number(form.passengers),
       luggage: Number(form.luggage),
       transfer: form.transfer,
+      roundTrip: form.roundTrip,
+      returnPickupAt: form.roundTrip ? fromLocalInput(form.returnPickupAt) : undefined,
       passengerName: form.passengerName,
       passengerContact: formatPassengerPhone(form.passengerCountry, form.passengerPhone),
       passengerWechat: form.passengerWechat,
@@ -153,14 +172,22 @@ onBeforeUnmount(() => watcher?.disconnect());
         <p class="hint profile__form-hint">{{ t('送出後司機會回覆報價。不用註冊，也不用先付款。') }}</p>
         <div v-if="formError" class="notice error">{{ formError }}</div>
         <label class="line-field">
-          <span>{{ t('日期時間（香港時間）') }}</span>
+          <span>{{ form.roundTrip ? t('去程日期時間（香港時間）') : t('日期時間（香港時間）') }}</span>
           <input v-model="form.pickupAt" class="line-input" type="datetime-local" required />
         </label>
-        <div class="segment segment--block profile__mode" role="group" :aria-label="t('直達或接駁')">
-          <button type="button" :aria-pressed="!form.transfer" @click="form.transfer = false">{{ t('直達') }}</button>
-          <button type="button" :aria-pressed="form.transfer" @click="form.transfer = true">{{ t('接駁（中途換車）') }}</button>
+        <div class="segment segment--block profile__mode" role="group" :aria-label="t('直達、往返或接駁')">
+          <button type="button" :aria-pressed="!form.transfer && !form.roundTrip" @click="setMode('direct')">{{ t('直達') }}</button>
+          <button type="button" :aria-pressed="form.roundTrip" @click="setMode('roundTrip')">{{ t('往返') }}</button>
+          <button type="button" :aria-pressed="form.transfer" @click="setMode('transfer')">{{ t('接駁') }}</button>
         </div>
         <p v-if="form.transfer" class="hint profile__mode-hint">{{ t('中途換一次車，由兩位司機接送，你只付一個價錢。在哪裡換車由司機安排。') }}</p>
+        <template v-if="form.roundTrip">
+          <p class="hint profile__mode-hint">{{ t('去程到目的地，回程原路回來，一個價錢。') }}</p>
+          <label class="line-field">
+            <span>{{ t('回程時間（從目的地回來，香港時間）') }}</span>
+            <input id="booking-return" v-model="form.returnPickupAt" class="line-input" type="datetime-local" :min="form.pickupAt" required />
+          </label>
+        </template>
         <ol class="route-inputs profile__route">
           <li class="route-inputs__stop route-inputs__stop--origin">
             <input v-model="form.origin" class="line-input" maxlength="120" :aria-label="t('出發地')" :placeholder="t('從哪裡出發，例如：香港國際機場')" required />

@@ -182,7 +182,13 @@ export class NotificationsService {
   async unclaimedDue(userId: string, now = new Date()) {
     const soonest = UNCLAIMED_REMINDER_HOURS[0] * 3_600_000;
     const orders = await this.prisma.order.findMany({
-      where: { dispatcherId: userId, status: 'OPEN', pickupAt: { gt: now, lte: new Date(now.getTime() + soonest) } },
+      // 往返 同一位司機來回 is taken in one go: reminded by its way there only.
+      where: {
+        dispatcherId: userId,
+        status: 'OPEN',
+        pickupAt: { gt: now, lte: new Date(now.getTime() + soonest) },
+        NOT: { journeyKind: 'ROUND_TRIP', sameDriver: true, legIndex: { gt: 1 } },
+      },
       select: { ...tripSelect, createdAt: true },
     });
     for (const order of orders) {

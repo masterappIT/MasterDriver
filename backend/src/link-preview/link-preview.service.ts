@@ -294,6 +294,7 @@ export class LinkPreviewService {
         driverPriceMinor: true,
         driverCurrency: true,
         journeyId: true,
+        journeyKind: true,
         dispatcher: { select: { profile: { select: { name: true } } } },
       },
     });
@@ -303,16 +304,22 @@ export class LinkPreviewService {
       : [order];
     if (!legs.some((leg) => leg.status === 'OPEN')) return null;
     const first = legs[0];
-    const transfer = legs.length > 1;
+    const several = legs.length > 1;
+    // 往返: there and back, A⇄B; 接駁: A→C over its legs.
+    const roundTrip = several && order.journeyKind === 'ROUND_TRIP';
+    const transfer = several && !roundTrip;
     const badge = first.immediate ? '即時' : '有單';
     const name = order.dispatcher.profile?.name;
-    const title = `【${badge}${transfer ? '・接駁' : ''}】${first.origin}→${legs[legs.length - 1].destination}`;
+    const title = roundTrip
+      ? `【${badge}・往返】${first.origin}⇄${first.destination}`
+      : `【${badge}${transfer ? '・接駁' : ''}】${first.origin}→${legs[legs.length - 1].destination}`;
     const facts = [
       first.immediate ? '現在出發' : formatPickup(first.pickupAt),
       transfer ? `接駁 ${legs.length} 段` : null,
+      roundTrip ? `回程 ${formatPickup(legs[1].pickupAt)}` : null,
       order.vehicleType,
-      // A 接駁's legs each have their own price, so the text has them all and the preview none.
-      !transfer && order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
+      // A 接駁's or 往返's legs each have their own price, so the text has them all and the preview none.
+      !several && order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
     ].filter(Boolean);
     const description = `${facts.join('・')}。${name ? `${name}出的單，` : ''}點開搶單，先搶先得。`;
     // 「10/16 02:57」: the weekday would not fit at the square's size.

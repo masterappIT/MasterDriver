@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, errorText } from '../api';
 import ContactLines from '../components/ContactLines.vue';
@@ -32,9 +32,16 @@ interface TripDriver {
   photos: string[];
 }
 
-/** 接駁: one leg of the trip and its driver. The passenger is not told where the cars meet. */
+/**
+ * 接駁: one leg of the trip and its driver. The passenger is not told where the cars meet.
+ * 往返: the way there or back, with its own time and places.
+ */
 interface TripLeg {
   legIndex: number;
+  /** 往返 only. */
+  pickupAt?: string;
+  origin?: string;
+  destination?: string;
   status: string;
   passengerConfirmedAt: string | null;
   driver: TripDriver | null;
@@ -73,6 +80,10 @@ interface PassengerView {
   driver: TripDriver | null;
   /** 接駁: the car changes on the way; `legs` then holds both legs and their drivers. */
   transfer?: boolean;
+  /** 往返: there and back; `legs` then holds both legs with their times and drivers. */
+  roundTrip?: boolean;
+  /** 往返: one driver takes both legs (同一位司機來回), so one driver is shown. */
+  sameDriver?: boolean;
   legs: TripLeg[] | null;
   /** 收款: how to pay the dispatcher, when they chose to show it. */
   payment: PassengerPayment | null;
@@ -80,6 +91,18 @@ interface PassengerView {
 
 /** "13:50": the time of day only, for the driver's progress. */
 const clock = (iso: string) => shortTime(iso).split(' ')[1] ?? '';
+
+/**
+ * 往返: the drivers to show. 同一位司機來回 is one driver for both legs: the leg still to drive
+ * (for its progress), or the last one.
+ */
+const roundTripDrivers = computed(() => {
+  const view = trip.value;
+  if (!view?.roundTrip || !view.legs) return [];
+  if (!view.sameDriver) return view.legs.map((leg) => ({ leg, label: leg.legIndex === 1 ? '去程司機' : '回程司機' }));
+  const current = view.legs.find((leg) => leg.status === 'ASSIGNED' || leg.status === 'OPEN') ?? view.legs[view.legs.length - 1];
+  return [{ leg: current, label: '接送司機（去程和回程）' }];
+});
 
 /** The passenger's page: no sign-in, no ads, never the driver price. */
 const route = useRoute();
@@ -156,13 +179,44 @@ onBeforeUnmount(() => {
       <div v-if="trip.status === 'CANCELLED'" class="notice error">{{ t('這個行程已取消，如有疑問請聯絡為你安排的司機。') }}</div>
       <div v-if="trip.status === 'COMPLETED'" ref="ended" class="confirm-page__ended">
         <strong>{{ t('行程已完成') }}</strong>
-        <span class="confirm-page__ended-trip">{{ t(`${pickup(trip.pickupAt)}　${trip.origin} 至 ${trip.destination}`) }}</span>
+        <span class="confirm-page__ended-trip">{{ t(`${pickup(trip.pickupAt)}　${trip.origin} ${trip.roundTrip ? '往返' : '至'} ${trip.destination}`) }}</span>
         <span>{{ t('多謝乘搭。遺留物品或其他問題，請聯絡為你安排的人。') }}</span>
       </div>
       <p v-else-if="trip.passengerConfirmedAt" class="notice confirm-page__done">{{ t(`你已於 ${shortTime(trip.passengerConfirmedAt)} 確認行程。`) }}</p>
 
       <!-- A finished trip shows only that it is over and who arranged it. -->
       <template v-if="trip.status === 'COMPLETED'" />
+      <!-- 往返: one price; each leg's time and places, and who drives. -->
+      <template v-else-if="trip.roundTrip && trip.legs">
+        <section class="card">
+          <p class="confirm-page__transfer confirm-page__round-title">{{ t('往返行程') }}</p>
+          <div v-for="leg in trip.legs" :key="leg.legIndex" class="confirm-page__round-leg">
+            <p class="confirm-page__label confirm-page__round-name">{{ t(leg.legIndex === 1 ? '去程' : '回程') }}</p>
+            <div class="confirm-page__time">{{ pickup(leg.pickupAt ?? trip.pickupAt) }}</div>
+            <RoutePoints :origin="leg.origin ?? ''" :destination="leg.destination ?? ''" :waypoints="leg.legIndex === 1 ? trip.waypoints : []" />
+          </div>
+          <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
+          <p v-if="trip.flightNo" class="confirm-page__load">{{ t(`航班：${trip.flightNo}`) }}</p>
+          <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用（來回）') }}</span><strong>{{ money(trip.price) }}</strong></div>
+        </section>
+        <section v-for="{ leg, label } in roundTripDrivers" :key="leg.legIndex" class="card">
+          <p class="confirm-page__label">{{ t(label) }}</p>
+          <p v-if="leg.status === 'ASSIGNED' && progressLine(leg.progress, clock)" class="confirm-page__progress">{{ t(progressLine(leg.progress, clock)) }}</p>
+          <div v-if="leg.driver" class="confirm-page__driver">
+            <strong>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</strong>
+            <span class="muted">{{ [leg.driver.vehicleType, leg.driver.color, plateKind(leg.driver)].filter(Boolean).map((part) => t(part as string)).join(' · ') }}</span>
+            <p v-if="leg.driver.platesHidden" class="confirm-page__no-plate">{{ t('司機沒有公開車牌。上車前請先打給司機，或向為你安排的人確認是哪一輛車。') }}</p>
+            <div v-else class="confirm-page__plates">
+              <PlateTag :hk="leg.driver.hkPlate" :macau="leg.driver.macauPlate" :mainland="leg.driver.mainlandPlate" />
+            </div>
+            <div v-if="leg.driver.photos.length" class="confirm-page__photos">
+              <img v-for="photo in leg.driver.photos" :key="photo" :src="photo" :alt="t('司機的車')" loading="lazy" />
+            </div>
+            <ContactLines :phones="leg.driver.phones" />
+          </div>
+          <p v-else class="muted">{{ t('司機安排中，安排好後這裡會顯示司機和車牌。') }}</p>
+        </section>
+      </template>
       <!-- 接駁: one trip and one price; the passenger only needs to know the car changes on the way. -->
       <template v-else-if="trip.legs && trip.legs.length > 1">
         <section class="card">
@@ -379,6 +433,17 @@ onBeforeUnmount(() => {
 .confirm-page__plates {
   margin: var(--space-sm) 0;
   font-size: 22px;
+}
+.confirm-page__round-title {
+  margin: 0 0 var(--space-sm);
+}
+.confirm-page__round-name {
+  margin-bottom: var(--space-xs);
+}
+.confirm-page__round-leg + .confirm-page__round-leg {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
 }
 .confirm-page__transfer {
   margin: var(--space-sm) 0 0;
