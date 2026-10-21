@@ -244,6 +244,14 @@ onBeforeUnmount(() => {
       </section>
 
       <template v-if="open">
+        <!-- 時間相近: one car may not make both; the driver decides, perhaps putting this one out. -->
+        <section v-if="booking.nearby?.length" class="card booking-detail__nearby" role="note">
+          <strong>{{ t('這組的時間和你其他行程很近（2 小時內）') }}</strong>
+          <p v-for="trip in booking.nearby" :key="trip.id">
+            {{ t(`${shortTime(trip.pickupAt)} ${trip.origin} 至 ${trip.destination}・${trip.kind === 'ORDER' ? '你的行程' : `${trip.passengerName ?? '乘客'}的特價車預約`}`) }}
+          </p>
+          <p class="hint">{{ t('一部車趕不及的話，可以按「派給其他司機」，或婉拒這一組。') }}</p>
+        </section>
         <p v-if="booking.deal" class="booking-detail__agreed">
           {{ booking.status === 'ACCEPTED' ? t('這組已訂到你的特價車，安排行程吧') : t('價錢已定，成單就是接受這一組') }}
         </p>
@@ -378,6 +386,14 @@ onBeforeUnmount(() => {
   margin: 0 var(--space-xs) var(--space-sm);
   color: var(--status-confirmed);
   font-weight: 700;
+}
+.booking-detail__nearby {
+  background: var(--color-gold-tint);
+  color: var(--color-gold-ink);
+}
+.booking-detail__nearby p {
+  margin: var(--space-xs) 0 0;
+  overflow-wrap: anywhere;
 }
 .booking-detail__order {
   margin-bottom: var(--space-sm);

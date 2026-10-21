@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { DEAL_MAX_WINDOW_HOURS, type DealBookingCreate, type DealCreate, type DealUpdate } from '@masterdriver/shared';
+import { DEAL_CLASH_HOURS, DEAL_MAX_WINDOW_HOURS, type DealBookingCreate, type DealCreate, type DealUpdate } from '@masterdriver/shared';
 import { Prisma, type BookingStatus, type DealStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
@@ -20,6 +20,9 @@ const DAY_MS = 24 * HOUR_MS;
 const LIST_LIMIT = 50;
 
 const toMinor = (amount: number) => Math.round(amount * 100);
+/** The driver's own trips and the 特價車 bookings waiting on them, to flag bookings close in time. */
+type Clashes = { trips: Date[]; waiting: { id: string; pickupAt: Date }[] };
+const NO_CLASHES: Clashes = { trips: [], waiting: [] };
 const money = (minor: number | null, currency: string) => (minor === null ? null : { amount: minor / 100, currency });
 
 /** The driver's car, as a deal's passengers see it; no phone until the driver has their booking. */
@@ -106,7 +109,7 @@ export class DealsService {
           include: dealInclude,
         });
         telemetry.domain('deal.create');
-        return this.driverView(deal, now);
+        return this.driverView(deal, now, NO_CLASHES);
       } catch (error) {
         const collided = error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
         if (!collided || attempt >= 2) throw error;
@@ -116,13 +119,14 @@ export class DealsService {
 
   async list(userId: string, now = new Date()) {
     const rows = await this.prisma.deal.findMany({ where: { driverId: userId }, orderBy: { createdAt: 'desc' }, take: LIST_LIMIT, include: dealInclude });
-    return rows.map((row) => this.driverView(row, now));
+    const clashes = await this.clashes(userId, now);
+    return rows.map((row) => this.driverView(row, now, clashes));
   }
 
   async get(userId: string, id: string, now = new Date()) {
     const deal = await this.prisma.deal.findFirst({ where: { id, driverId: userId }, include: dealInclude });
     if (!deal) throw this.notFound();
-    return this.driverView(deal, now);
+    return this.driverView(deal, now, await this.clashes(userId, now));
   }
 
   /** Changes while it takes bookings. Bookings already sent keep their own time and price. */
@@ -237,14 +241,20 @@ export class DealsService {
     const found = await this.prisma.deal.findUnique({ where: { code }, select: { id: true, driverId: true } });
     if (!found) throw this.notFound();
     const page = await this.pages.ensurePage(found.driverId);
+    // Limits of their own, apart from 名片頁 requests (2026-10-22): mostly by the passenger's phone,
+    // as on mainland mobile networks many passengers share one address.
     const limits = await readLimits(this.prisma);
-    const since = new Date(now.getTime() - DAY_MS);
-    const [fromAddress, onPage] = await Promise.all([
-      ip ? this.prisma.bookingRequest.count({ where: { ip, createdAt: { gte: since } } }) : 0,
-      this.prisma.bookingRequest.count({ where: { pageId: page.id, createdAt: { gte: since } } }),
+    const since = { gte: new Date(now.getTime() - DAY_MS) };
+    const [fromPhone, fromAddress, forDriver] = await Promise.all([
+      this.prisma.bookingRequest.count({ where: { dealId: { not: null }, passengerContact: input.passengerContact, createdAt: since } }),
+      ip ? this.prisma.bookingRequest.count({ where: { dealId: { not: null }, ip, createdAt: since } }) : 0,
+      this.prisma.bookingRequest.count({ where: { deal: { driverId: found.driverId }, createdAt: since } }),
     ]);
-    if (fromAddress >= limits.bookingPerIpPerDay) throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'BOOKING_LIMIT', 'Too many booking requests from this address today');
-    if (onPage >= limits.bookingPerPagePerDay) throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'BOOKING_PAGE_FULL', 'This driver has received their bookings for today');
+    if (fromPhone >= limits.dealBookingPerPhonePerDay) {
+      throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'DEAL_PHONE_LIMIT', 'This phone has booked enough deals today');
+    }
+    if (fromAddress >= limits.dealBookingPerIpPerDay) throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'BOOKING_LIMIT', 'Too many booking requests from this address today');
+    if (forDriver >= limits.dealBookingPerDriverPerDay) throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'BOOKING_PAGE_FULL', 'This driver has received their bookings for today');
 
     const { booking, deal } = await this.prisma.$transaction(async (tx) => {
       const deal = await lockDeal(tx, found.id);
@@ -355,7 +365,7 @@ export class DealsService {
     };
   }
 
-  private driverView(deal: DealRow, now: Date) {
+  private driverView(deal: DealRow, now: Date, clashes: Clashes) {
     const url = this.url(deal.code);
     const profile = deal.driver.profile;
     const page = deal.driver.profilePage && !deal.driver.profilePage.blockedAt ? deal.driver.profilePage : null;
@@ -387,6 +397,8 @@ export class DealsService {
         unread: booking.driverUnread,
         orderId: booking.orderId,
         createdAt: booking.createdAt.toISOString(),
+        /** 時間相近: close to another trip or waiting booking of the driver's. */
+        clash: this.clashing(booking, clashes),
       })),
       // For the 分享圖: the car and its photo, drawn on the driver's phone.
       car: {
@@ -397,6 +409,26 @@ export class DealsService {
       },
       share: dealShareText(deal, { name: profile?.name ?? null, vehicleType: profile?.vehicleType ?? null, seats: profile?.seats ?? null }, url),
     };
+  }
+
+  /** What a waiting booking may clash with: the driver's trips still ahead, and the bookings waiting on them. */
+  private async clashes(driverId: string, now: Date): Promise<Clashes> {
+    const ahead = { gte: new Date(now.getTime() - DEAL_CLASH_HOURS * HOUR_MS) };
+    const [orders, waiting] = await Promise.all([
+      this.prisma.order.findMany({ where: { claimedById: driverId, status: 'ASSIGNED', pickupAt: ahead }, select: { pickupAt: true } }),
+      this.prisma.bookingRequest.findMany({
+        where: { deal: { driverId }, status: { in: ['PENDING', 'ACCEPTED'] }, pickupAt: ahead },
+        select: { id: true, pickupAt: true },
+      }),
+    ]);
+    return { trips: orders.map((order) => order.pickupAt), waiting };
+  }
+
+  /** 時間相近: a booking still waiting on the driver within DEAL_CLASH_HOURS of their own trip or another waiting booking. */
+  private clashing(booking: { id: string; status: BookingStatus; pickupAt: Date }, clashes: Clashes) {
+    if (booking.status !== 'PENDING' && booking.status !== 'ACCEPTED') return false;
+    const close = (at: Date) => Math.abs(at.getTime() - booking.pickupAt.getTime()) <= DEAL_CLASH_HOURS * HOUR_MS;
+    return clashes.trips.some(close) || clashes.waiting.some((other) => other.id !== booking.id && close(other.pickupAt));
   }
 
   private notFound() {

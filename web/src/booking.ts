@@ -29,11 +29,23 @@ export interface Booking {
   createdAt: string;
 }
 
+/** A trip of the driver's own (ORDER) or another 特價車 booking waiting on them (BOOKING), close in time. */
+export interface NearbyTrip {
+  kind: 'ORDER' | 'BOOKING';
+  id: string;
+  pickupAt: string;
+  origin: string;
+  destination: string;
+  passengerName: string | null;
+}
+
 export interface DriverBooking extends Booking {
   id: string;
   unread: boolean;
   source: string | null;
   orderId: string | null;
+  /** Only on one request opened on its own, while it is open. */
+  nearby?: NearbyTrip[];
 }
 
 /** The same request reads differently to each side. */

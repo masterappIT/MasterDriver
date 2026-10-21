@@ -10,6 +10,9 @@ interface Limits {
   supportGuestConversationsPerIpPerDay: number;
   bookingPerIpPerDay: number;
   bookingPerPagePerDay: number;
+  dealBookingPerPhonePerDay: number;
+  dealBookingPerIpPerDay: number;
+  dealBookingPerDriverPerDay: number;
   otpResendSeconds: number;
   otpPerPhonePerHour: number;
   otpPerIpPerHour: number;
@@ -24,7 +27,7 @@ const BOOKING_FIELDS: Field[] = [
   {
     key: 'bookingPerIpPerDay',
     label: '同一個 IP 每天最多送出幾筆預約',
-    hint: '乘客在名片頁送出的預約。填 0 表示暫停所有名片頁的預約。',
+    hint: '乘客在名片頁送出的預約，不含特價車。填 0 表示暫停所有名片頁的預約。',
     min: 0,
     max: 100,
   },
@@ -34,6 +37,31 @@ const BOOKING_FIELDS: Field[] = [
     hint: '超過後乘客會看到「今天的預約已滿」。填 0 表示暫停所有名片頁的預約。',
     min: 0,
     max: 1000,
+  },
+];
+
+/** 特價車 (2026-10-22): counted apart from 名片頁, mostly by phone, as many passengers share an address. */
+const DEAL_FIELDS: Field[] = [
+  {
+    key: 'dealBookingPerPhonePerDay',
+    label: '同一個乘客電話每天最多預約幾次特價車',
+    hint: '所有特價車一起算。填 0 表示暫停所有特價車的預約。',
+    min: 0,
+    max: 100,
+  },
+  {
+    key: 'dealBookingPerIpPerDay',
+    label: '同一個 IP 每天最多送出幾筆特價車預約',
+    hint: '只用來擋大量灌單。內地手機網絡很多人共用一個 IP，不要調得太低。',
+    min: 0,
+    max: 1000,
+  },
+  {
+    key: 'dealBookingPerDriverPerDay',
+    label: '每位司機的特價車每天最多收幾筆預約',
+    hint: '一位司機所有特價車一起算。',
+    min: 0,
+    max: 5000,
   },
 ];
 
@@ -99,6 +127,9 @@ const form = reactive({
   supportGuestConversationsPerIpPerDay: 0,
   bookingPerIpPerDay: 0,
   bookingPerPagePerDay: 0,
+  dealBookingPerPhonePerDay: 0,
+  dealBookingPerIpPerDay: 0,
+  dealBookingPerDriverPerDay: 0,
   otpResendSeconds: 60,
   otpPerPhonePerHour: 1,
   otpPerIpPerHour: 1,
@@ -108,7 +139,7 @@ const error = ref('');
 const message = ref('');
 
 function fill(limits: Limits) {
-  for (const field of [...OTP_FIELDS, ...FIELDS, ...BOOKING_FIELDS]) form[field.key] = limits[field.key];
+  for (const field of [...OTP_FIELDS, ...FIELDS, ...BOOKING_FIELDS, ...DEAL_FIELDS]) form[field.key] = limits[field.key];
   meta.value = { updatedAt: limits.updatedAt, updatedBy: limits.updatedBy };
 }
 
@@ -164,6 +195,14 @@ onMounted(async () => {
       <h2 class="limits__heading">名片頁預約</h2>
       <div class="limits__fields">
         <label v-for="field in BOOKING_FIELDS" :key="field.key" class="field">
+          {{ field.label }}
+          <input v-model.number="form[field.key]" class="input" type="number" :min="field.min" :max="field.max" step="1" required />
+          <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>
+        </label>
+      </div>
+      <h2 class="limits__heading">特價車預約</h2>
+      <div class="limits__fields">
+        <label v-for="field in DEAL_FIELDS" :key="field.key" class="field">
           {{ field.label }}
           <input v-model.number="form[field.key]" class="input" type="number" :min="field.min" :max="field.max" step="1" required />
           <span class="hint">{{ field.hint }}（可填 {{ field.min }} 到 {{ field.max }}）</span>

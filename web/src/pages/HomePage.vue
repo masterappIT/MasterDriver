@@ -81,7 +81,7 @@ const sent = computed(() => {
   };
 });
 const sentTotal = computed(() => sent.value.open + sent.value.taken + sent.value.confirmed);
-const waiting = computed(() => unread.bookings + unread.support + unread.carpools);
+const waiting = computed(() => unread.bookings + unread.deals + unread.support + unread.carpools);
 
 /** "今天 10/14（二）" under the greeting. */
 const today = computed(() => pickup(now.value.toISOString()).replace(/\s?\d{2}:\d{2}$/, ''));
@@ -130,6 +130,10 @@ onBeforeUnmount(() => clearInterval(clock));
       <h2 class="home__label">{{ t('待處理') }}</h2>
       <RouterLink v-if="unread.bookings" to="/app/bookings" class="home__row">
         <span>{{ t(`${unread.bookings} 個客人詢價等你報價`) }}</span>
+        <span class="home__go">{{ t('查看') }}</span>
+      </RouterLink>
+      <RouterLink v-if="unread.deals" to="/app/deals" class="home__row">
+        <span>{{ t(`${unread.deals} 組特價車預約等你處理`) }}</span>
         <span class="home__go">{{ t('查看') }}</span>
       </RouterLink>
       <RouterLink v-if="unread.carpools" to="/app/carpools" class="home__row">

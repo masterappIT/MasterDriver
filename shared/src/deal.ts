@@ -8,6 +8,12 @@ import { CURRENCIES, passengerPhoneSchema } from './schemas';
  * no money (docs/DECISIONS.md, 2026-10-21 and 2026-10-22 特價車).
  */
 
+/**
+ * 時間相近: a booking this close to another trip of the driver's own (or another booking waiting on
+ * them) is flagged; one car may not make both (2026-10-22).
+ */
+export const DEAL_CLASH_HOURS = 2;
+
 /** 時段: the longest stretch a deal may let passengers pick their time in, e.g. 「這個星期」. */
 export const DEAL_MAX_WINDOW_HOURS = 7 * 24;
 

@@ -114,9 +114,12 @@ export class OrdersService {
             throw apiError(HttpStatus.BAD_REQUEST, 'LEG_BEFORE_PREVIOUS', 'The second leg cannot start before the first');
           }
           if (input.selfDrive || second?.selfDriveLeg) await this.requireProfile(tx, userId);
+          // 特價車 the driver drives themselves uses no quota and pays no service fee (2026-10-22);
+          // handed to another driver later, it pays then (reopen).
+          const ownDeal = Boolean(input.bookingId && input.selfDrive && !second) && (await this.isDealBooking(tx, userId, input.bookingId!));
           // A 接駁 or 往返 order uses the quota and pays the service fee once, like any order.
-          await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
-          const fee = await this.commission.feeFor(tx, userId, now);
+          if (!ownDeal) await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
+          const fee = ownDeal ? 0 : await this.commission.feeFor(tx, userId, now);
           const defaults =
             input.contactRevealMinutes === undefined || input.inPool === undefined
               ? await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { contactRevealMinutes: true, poolByDefault: true } })
@@ -480,7 +483,20 @@ export class OrdersService {
       ['ASSIGNED'],
       { status: 'OPEN', claimedById: null, claimedAt: null, passengerConfirmedAt: null, passengerConfirmedByDispatcher: false, settledAt: null, ...CLEAR_TRIP_STATE },
       'dispatcher',
-      (tx) => this.clearPartyProgress(tx, id),
+      async (tx) => {
+        await this.clearPartyProgress(tx, id);
+        // 特價車 the dispatcher drove themselves used no quota or fee (2026-10-22); 交給別的司機, it
+        // is put out like any order, and pays as one now.
+        if (before?.claimedById === userId && (await tx.bookingRequest.count({ where: { orderId: id, dealId: { not: null } } })) > 0) {
+          const now = new Date();
+          await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
+          const fee = await this.commission.feeFor(tx, userId, now);
+          if (fee > 0) {
+            await this.credits.charge(tx, userId, id, fee);
+            await tx.order.update({ where: { id }, data: { commissionMinor: fee } });
+          }
+        }
+      },
     );
     await this.tell(id, 'ORDER_REOPENED', 'driver', before?.claimedById);
     return view;
@@ -965,6 +981,11 @@ export class OrdersService {
    * order. A request that is not theirs, or was already answered for good,
    * stops the order from being created at all.
    */
+  /** A 特價車 booking on the dispatcher's own page. */
+  private async isDealBooking(tx: Prisma.TransactionClient, userId: string, bookingId: string) {
+    return (await tx.bookingRequest.count({ where: { id: bookingId, page: { userId }, dealId: { not: null } } })) > 0;
+  }
+
   private async takeBooking(tx: Prisma.TransactionClient, userId: string, bookingId: string, orderId: string) {
     const taken = await tx.bookingRequest.updateMany({
       where: { id: bookingId, page: { userId }, orderId: null, status: { in: ['PENDING', 'QUOTED', 'ACCEPTED'] } },

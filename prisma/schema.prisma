@@ -620,6 +620,13 @@ model LimitSetting {
   bookingPerIpPerDay                   Int      @default(5)
   /// 名片頁: booking requests one page may receive in 24 hours.
   bookingPerPagePerDay                 Int      @default(30)
+  /// 特價車 (2026-10-22): bookings one passenger phone may send in 24 hours, over every deal.
+  /// Counted apart from 名片頁 requests, and by phone: on mainland mobile networks many share an address.
+  dealBookingPerPhonePerDay            Int      @default(5)
+  /// 特價車: bookings one address may send in 24 hours; only against floods, so set wide.
+  dealBookingPerIpPerDay               Int      @default(50)
+  /// 特價車: bookings one driver's deals may receive in 24 hours.
+  dealBookingPerDriverPerDay           Int      @default(200)
   /// 簡訊驗證碼: seconds before the same number may ask for another code.
   otpResendSeconds                     Int      @default(60)
   /// 簡訊驗證碼: codes one number may ask for in an hour.

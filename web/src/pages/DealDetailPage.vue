@@ -116,6 +116,7 @@ onBeforeUnmount(() => {
           <span>
             {{ t(bookingLine(booking)) }}
             <small>{{ t(booking.status === 'ACCEPTED' ? '已訂到，等你成單' : '等你確認') }}</small>
+            <small v-if="booking.clash" class="deal__clash">{{ t('和你另一個行程只差 2 小時內，一部車可能趕不及') }}</small>
           </span>
           <span v-if="booking.unread" class="deal__dot" :aria-label="t('未讀')"></span>
         </RouterLink>
@@ -239,6 +240,11 @@ onBeforeUnmount(() => {
 .deal__booking .hint {
   flex-shrink: 0;
   white-space: nowrap;
+}
+.deal__booking .deal__clash {
+  color: var(--color-error);
+  font-weight: 700;
+  opacity: 1;
 }
 .deal__booking small {
   display: block;

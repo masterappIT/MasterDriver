@@ -56,6 +56,9 @@ export const limitSettingUpdateSchema = z
     supportGuestConversationsPerIpPerDay: z.number().int().min(0).max(100),
     bookingPerIpPerDay: z.number().int().min(0).max(100),
     bookingPerPagePerDay: z.number().int().min(0).max(1000),
+    dealBookingPerPhonePerDay: z.number().int().min(0).max(100),
+    dealBookingPerIpPerDay: z.number().int().min(0).max(1000),
+    dealBookingPerDriverPerDay: z.number().int().min(0).max(5000),
     /** Never zero: nobody could sign in. */
     otpResendSeconds: z.number().int().min(30).max(600),
     otpPerPhonePerHour: z.number().int().min(1).max(20),

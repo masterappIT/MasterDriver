@@ -109,7 +109,7 @@ test('a booking goes from request to quote to agreement to an order, and the pas
   const { userId, code } = await publishedPage();
   const sent = await ctx.profilePages.createBooking(code, { ...request(), source: 'xhs' }, '2.2.2.2');
   assert.match(sent.url, /^https:\/\/md\.test\/b\/[A-Za-z0-9]{16}$/);
-  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1 });
+  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1, deals: 0 });
 
   const [listed] = await ctx.profilePages.bookings(userId);
   assert.deepEqual(
@@ -117,7 +117,7 @@ test('a booking goes from request to quote to agreement to an order, and the pas
     ['PENDING', true, 'xhs', '+852 91234567', 'wang-test'],
   );
   await ctx.profilePages.booking(userId, listed.id);
-  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 0 });
+  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 0, deals: 0 });
 
   await rejectsWith(ctx.profilePages.passengerAccept(sent.code), 'BOOKING_NOT_OPEN');
   await ctx.profilePages.quote(userId, listed.id, { amount: 900, currency: 'HKD', note: '含隧道費' });
@@ -127,7 +127,7 @@ test('a booking goes from request to quote to agreement to an order, and the pas
 
   seen = await ctx.profilePages.passengerAccept(sent.code);
   assert.equal(seen.status, 'ACCEPTED');
-  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1 }, "the passenger's answer is news for the driver");
+  assert.deepEqual(await ctx.profilePages.unread(userId), { count: 1, deals: 0 }, "the passenger's answer is news for the driver");
   // The agreed price stands: no new quote once the passenger has agreed.
   await rejectsWith(ctx.profilePages.quote(userId, listed.id, { amount: 1200, currency: 'HKD' }), 'BOOKING_NOT_OPEN');
   assert.deepEqual((await ctx.profilePages.passengerBooking(sent.code)).quote, { amount: 900, currency: 'HKD' });

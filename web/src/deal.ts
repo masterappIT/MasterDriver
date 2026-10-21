@@ -38,6 +38,8 @@ export interface DealBookingLine {
   unread: boolean;
   orderId: string | null;
   createdAt: string;
+  /** 時間相近: waiting on the driver within 2 hours of their own trip or another waiting booking. */
+  clash: boolean;
 }
 
 export interface DriverDeal extends DealTrip {

@@ -139,12 +139,28 @@ const ERROR_TEXT: Record<string, string> = {
   CARPOOL_PARTY_NO_SHOW: '這組已標記為沒出現',
   CARPOOL_PARTY_ON_BOARD: '這組乘客已上車',
   CARPOOL_PARTY_NOT_ON_BOARD: '這組乘客還沒上車',
+  DEAL_NOT_FOUND: '找不到這個特價車',
+  DEAL_NOT_OPEN: '這個特價車已關閉或過了時間，不能再預約或修改',
+  DEAL_FULL: '這個特價車已接滿，請直接聯絡司機',
+  DEAL_CANCELLED: '這個特價車已被平台下架',
+  DEAL_IN_THE_PAST: '請選擇將來的時間',
+  DEAL_WINDOW_INVALID: '時段要先開始後結束，最長 7 天',
+  DEAL_ORIGINAL_NOT_ABOVE: '原價要比特價高；不想顯示原價就留空',
+  DEAL_TIME_OUTSIDE: '請在司機定的時段內選出發時間',
+  DEAL_TOO_MANY_PASSENGERS: '人數超過這個特價車的上限，請直接聯絡司機',
+  DEAL_TOO_MUCH_LUGGAGE: '行李超過這個特價車的上限，請直接聯絡司機',
+  DEAL_ALREADY_BOOKED: '這個電話已經預約了同一個時間',
+  DEAL_PHONE_LIMIT: '這個電話今天預約的特價車太多了，請直接聯絡司機',
+  DEAL_PRICE_FIXED: '特價車的預約按特價，不能另外報價',
+  DEAL_MAX_BELOW_BOOKED: '最多接幾組不能少於已經預約的組數',
 };
 
 const INVALID_PHONE = 'INVALID_PHONE';
 
 /** 往返 and 接駁 rules the schema checks; each reads as its own line in ERROR_TEXT. */
 const JOURNEY_ISSUES = ['ONE_JOURNEY_KIND', 'SELF_DRIVE_BOTH_LEGS', 'RETURN_TIME_REQUIRED', 'RETURN_BEFORE_PICKUP'];
+/** 特價車 rules the schema checks, read the same way. */
+const DEAL_ISSUES = ['DEAL_WINDOW_INVALID', 'DEAL_ORIGINAL_NOT_ABOVE'];
 
 export class ApiError extends Error {
   constructor(
@@ -166,7 +182,7 @@ export class ApiError extends Error {
         ? 'WhatsApp 群連結應該是 https://chat.whatsapp.com/ 開頭'
         : messages.includes('QR_IMAGE_REQUIRED')
           ? '請上傳二維碼圖片'
-          : ERROR_TEXT[messages.find((message) => JOURNEY_ISSUES.includes(message)) ?? code];
+          : ERROR_TEXT[messages.find((message) => JOURNEY_ISSUES.includes(message) || DEAL_ISSUES.includes(message)) ?? code];
     super(text ?? `操作失敗（${code}）`);
   }
 }

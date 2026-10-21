@@ -122,6 +122,9 @@ npm run dev:admin
 決定與規則見 `docs/DECISIONS.md` 2026-10-21「特價車」與 2026-10-22「特價車像商品一樣接多組客人」。
 
 - 資料表：`Deal`（一個特價車：狀態 `OPEN`／`CLOSED`／`CANCELLED`、選填 `maxBookings`）；乘客的預約就是 `BookingRequest`，多了 `dealId`，`quoteMinor` 是預約當時的特價；預約放在司機的名片頁底下（沒有名片頁就建一個未公開的），所以司機在「等我報價」回覆、用原本的「這單我自己做／派給其他司機」成單，每組各成一張單。`Notification` 多了 `DEAL_BOOKING_NEW`、`DEAL_BOOKING_ACCEPTED`。程式在 `backend/src/deals/`、`shared/src/deal.ts`、`web/src/deal.ts`、`web/src/pages/Deal*.vue` 與分享圖 `web/src/components/DealCardSheet.vue`。
+- 預約上限（2026-10-22）：`LimitSetting` 的 `dealBookingPerPhonePerDay`、`dealBookingPerIpPerDay`、`dealBookingPerDriverPerDay`，只算特價車的預約；名片頁的 `bookingPerIpPerDay`、`bookingPerPagePerDay` 只算 `dealId` 為空的詢價。
+- 出單額度（2026-10-22）：特價車預約以「這單我自己做」成單時，`OrdersService.create` 不扣額度與服務費；`reopen`（交給別的司機）時才扣。
+- 時間相近（2026-10-22，`DEAL_CLASH_HOURS` = 2）：`GET /api/deals/:id` 每組預約多 `clash`；`GET /api/me/bookings/:id` 多 `nearby`（司機自己的行程與其他等待中的特價車預約）。`GET /api/me/bookings` 只列名片頁詢價，`GET /api/me/bookings/unread` 回 `{ count, deals }`：`count` 是未打開的名片頁詢價，`deals` 是全部還沒成單或婉拒的特價車預約。
 - 「已接滿」「已過期」不寫入資料庫：開放中而等待確認、已訂到、已成單的預約數到了 `maxBookings` 就顯示已接滿；最後可出發時間（時段結束或出發時間）已過就顯示已過期。
 - 預約時先鎖住特價車那一列（`SELECT … FOR UPDATE`，`deals/deal-hold.ts`），兩組同時搶最後一個名額只有一組成功。平台下架也在同一個鎖下婉拒還在等的預約。
 

@@ -1,5 +1,5 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
-import { PROFILE_PHOTO_MAX, PROFILE_PHOTO_MAX_BYTES, plateRegions, type BookingCreate, type BookingQuote, type ProfilePageUpdate } from '@masterdriver/shared';
+import { DEAL_CLASH_HOURS, PROFILE_PHOTO_MAX, PROFILE_PHOTO_MAX_BYTES, plateRegions, type BookingCreate, type BookingQuote, type ProfilePageUpdate } from '@masterdriver/shared';
 import { Prisma, type BookingStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
@@ -194,9 +194,10 @@ export class ProfilePagesService {
 
     const limits = await readLimits(this.prisma);
     const since = new Date(now.getTime() - DAY_MS);
+    // 名片頁 requests only: 特價車 bookings have limits of their own (2026-10-22).
     const [fromAddress, onPage] = await Promise.all([
-      ip ? this.prisma.bookingRequest.count({ where: { ip, createdAt: { gte: since } } }) : 0,
-      this.prisma.bookingRequest.count({ where: { pageId: page.id, createdAt: { gte: since } } }),
+      ip ? this.prisma.bookingRequest.count({ where: { dealId: null, ip, createdAt: { gte: since } } }) : 0,
+      this.prisma.bookingRequest.count({ where: { dealId: null, pageId: page.id, createdAt: { gte: since } } }),
     ]);
     if (fromAddress >= limits.bookingPerIpPerDay) {
       throw apiError(HttpStatus.TOO_MANY_REQUESTS, 'BOOKING_LIMIT', 'Too many booking requests from this address today');
@@ -261,13 +262,23 @@ export class ProfilePagesService {
 
   // ------------------------------------------------- the driver's bookings
 
+  /**
+   * What waits on the driver: 名片頁 requests not yet opened (count), and every 特價車 booking still
+   * to be made into an order or declined, opened or not (deals), answered from 特價車 rather than
+   * 等我報價 (2026-10-22).
+   */
   async unread(userId: string) {
-    return { count: await this.prisma.bookingRequest.count({ where: { page: { userId }, driverUnread: true } }) };
+    const [count, deals] = await Promise.all([
+      this.prisma.bookingRequest.count({ where: { page: { userId }, dealId: null, driverUnread: true } }),
+      this.prisma.bookingRequest.count({ where: { page: { userId }, dealId: { not: null }, status: { in: ['PENDING', 'ACCEPTED'] } } }),
+    ]);
+    return { count, deals };
   }
 
+  /** 等我報價: requests from the 名片頁; 特價車 bookings are listed under their deal. */
   async bookings(userId: string) {
     const rows = await this.prisma.bookingRequest.findMany({
-      where: { page: { userId } },
+      where: { page: { userId }, dealId: null },
       orderBy: { createdAt: 'desc' },
       take: LIST_LIMIT,
       include: bookingInclude,
@@ -275,11 +286,38 @@ export class ProfilePagesService {
     return rows.map((row) => this.driverView(row));
   }
 
-  /** Opening a request marks it read. */
+  /** Opening a request marks it read. While it is open, it says what of the driver's is close in time. */
   async booking(userId: string, id: string) {
     const row = await this.ownBooking(userId, id);
     if (row.driverUnread) await this.prisma.bookingRequest.update({ where: { id }, data: { driverUnread: false } });
-    return this.driverView({ ...row, driverUnread: false });
+    return { ...this.driverView({ ...row, driverUnread: false }), nearby: OPEN.includes(row.status) ? await this.nearby(userId, row) : [] };
+  }
+
+  /**
+   * 時間相近 (2026-10-22): the driver's own trips, and the 特價車 bookings still waiting on them,
+   * within DEAL_CLASH_HOURS of this request. One car may not make both; the driver decides.
+   */
+  private async nearby(userId: string, row: { id: string; pickupAt: Date }) {
+    const span = DEAL_CLASH_HOURS * 60 * 60 * 1000;
+    const pickupAt = { gte: new Date(row.pickupAt.getTime() - span), lte: new Date(row.pickupAt.getTime() + span) };
+    const [orders, bookings] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { claimedById: userId, status: 'ASSIGNED', pickupAt },
+        select: { id: true, pickupAt: true, origin: true, destination: true },
+        orderBy: { pickupAt: 'asc' },
+        take: 5,
+      }),
+      this.prisma.bookingRequest.findMany({
+        where: { id: { not: row.id }, page: { userId }, dealId: { not: null }, status: { in: ['PENDING', 'ACCEPTED'] }, pickupAt },
+        select: { id: true, pickupAt: true, origin: true, destination: true, passengerName: true },
+        orderBy: { pickupAt: 'asc' },
+        take: 5,
+      }),
+    ]);
+    return [
+      ...orders.map((order) => ({ kind: 'ORDER' as const, id: order.id, pickupAt: order.pickupAt.toISOString(), origin: order.origin, destination: order.destination, passengerName: null })),
+      ...bookings.map((booking) => ({ kind: 'BOOKING' as const, ...booking, pickupAt: booking.pickupAt.toISOString() })),
+    ].sort((a, b) => a.pickupAt.localeCompare(b.pickupAt));
   }
 
   /**

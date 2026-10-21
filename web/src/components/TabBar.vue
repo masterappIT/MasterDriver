@@ -22,7 +22,7 @@ const RIGHT: Tab[] = [
   { to: '/app/me', label: '我的', icon: 'person', match: (path) => path.startsWith('/app/me') || path.startsWith('/app/bookings') || path.startsWith('/app/profile-page') },
 ];
 /** New bookings and 客服 replies both live under 我的. */
-const meCount = computed(() => unread.bookings + unread.support);
+const meCount = computed(() => unread.bookings + unread.deals + unread.support);
 
 // Fresh numbers whenever the driver moves between pages; no polling in the background.
 watch(() => route.path, () => void refreshUnread(), { immediate: true });
