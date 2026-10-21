@@ -815,8 +815,15 @@ watch(id, () => {
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" :kind="order.journey.kind" />
       </section>
 
-      <!-- The passenger: after the group text while waiting for a driver, after the driver once taken. -->
-      <component :is="foldDetails ? 'details' : 'section'" v-if="!endedForDriver" class="card" :class="{ detail__fold: foldDetails }" style="order: 10">
+      <!-- The passenger: for the dispatcher after the group text or the driver; for the driver right under the trip,
+           so it is never mixed up with 出單者, even before the phone is shown. -->
+      <component
+        :is="foldDetails ? 'details' : 'section'"
+        v-if="!endedForDriver"
+        class="card"
+        :class="{ detail__fold: foldDetails }"
+        :style="{ order: isDispatcher ? 10 : 4 }"
+      >
         <summary v-if="foldDetails">
           <span class="detail__fold-text">
             <strong>{{ t('乘客') }}</strong>
@@ -835,7 +842,10 @@ watch(id, () => {
           @paid="setPartyPaid"
         />
         <template v-else>
-        <span class="section-label">{{ order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
+        <span class="section-label">{{ isDispatcher && order.passengerName ? t(order.passengerName) : t('乘客') }}</span>
+        <div v-if="!isDispatcher" class="detail__person">
+          <strong>{{ order.passengerName ? t(order.passengerName) : t('沒有留名') }}</strong>
+        </div>
         <strong v-if="order.passengerContact" class="detail__phone">{{ order.passengerContact }}</strong>
         <p v-else-if="order.contactEnded" class="detail__waiting">{{ t('行程已結束，乘客電話不再顯示。有需要請聯絡出單者。') }}</p>
         <p v-else class="detail__waiting">{{ t(`乘客電話 ${shortTime(order.contactRevealAt)} 顯示。之前如需安排，請聯絡出單者。`) }}</p>
