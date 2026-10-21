@@ -82,8 +82,10 @@ test('a 接駁 order holds its second leg; the dispatcher may drive one leg, nev
 test('a 往返 order holds its way back; 同一位司機來回 by default, never together with 接駁', () => {
   const order = { pickupAt: '2026-10-15T09:00:00+08:00', origin: '香港', destination: '深圳', passengers: 2, passengerContact: '+852 91234567' };
   const back = { pickupAt: '2026-10-15T18:00:00+08:00', driverPrice: { amount: 500, currency: 'HKD' } };
-  const parsed = createOrderSchema.parse({ ...order, roundTrip: back });
+  const parsed = createOrderSchema.parse({ ...order, flightNo: 'CX101', roundTrip: { ...back, flightNo: ' CX102 ' } });
   assert.equal(parsed.roundTrip?.sameDriver, true);
+  assert.equal(parsed.flightNo, 'CX101');
+  assert.equal(parsed.roundTrip?.flightNo, 'CX102', 'the way back has its own flight');
   assert.equal(parsed.roundTrip?.selfDriveLeg, null);
   // 同一位司機來回 with 這單我自己做: both legs the dispatcher's.
   assert.equal(createOrderSchema.safeParse({ ...order, roundTrip: back, selfDrive: true }).success, true);

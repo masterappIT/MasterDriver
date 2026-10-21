@@ -42,6 +42,7 @@ interface TripLeg {
   pickupAt?: string;
   origin?: string;
   destination?: string;
+  flightNo?: string | null;
   status: string;
   passengerConfirmedAt: string | null;
   driver: TripDriver | null;
@@ -194,9 +195,9 @@ onBeforeUnmount(() => {
             <p class="confirm-page__label confirm-page__round-name">{{ t(leg.legIndex === 1 ? '去程' : '回程') }}</p>
             <div class="confirm-page__time">{{ pickup(leg.pickupAt ?? trip.pickupAt) }}</div>
             <RoutePoints :origin="leg.origin ?? ''" :destination="leg.destination ?? ''" :waypoints="leg.legIndex === 1 ? trip.waypoints : []" />
+            <p v-if="leg.flightNo" class="confirm-page__leg-flight">{{ t(`航班：${leg.flightNo}`) }}</p>
           </div>
           <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
-          <p v-if="trip.flightNo" class="confirm-page__load">{{ t(`航班：${trip.flightNo}`) }}</p>
           <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用（來回）') }}</span><strong>{{ money(trip.price) }}</strong></div>
         </section>
         <section v-for="{ leg, label } in roundTripDrivers" :key="leg.legIndex" class="card">
@@ -399,6 +400,12 @@ onBeforeUnmount(() => {
   font-size: 24px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+/* 往返: a leg's flight, right under its route. */
+.confirm-page__leg-flight {
+  margin: var(--space-sm) 0 0;
+  color: var(--color-label);
+  font-weight: 600;
 }
 .confirm-page__load {
   margin: var(--space-lg) 0 0;

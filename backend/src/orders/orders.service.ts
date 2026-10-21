@@ -88,6 +88,8 @@ export class OrdersService {
                 destination: input.destination,
                 pickupAt: new Date(input.transfer.pickupAt),
                 driverPrice: input.transfer.driverPrice,
+                // 接駁: one trip, one flight at either end.
+                flightNo: input.flightNo,
                 requiredPlates: input.transfer.requiredPlates,
                 selfDriveLeg: input.transfer.selfDriveLeg,
               }
@@ -99,6 +101,8 @@ export class OrdersService {
                   destination: input.origin,
                   pickupAt: new Date(input.roundTrip.pickupAt),
                   driverPrice: input.roundTrip.driverPrice,
+                  // The way back flies on its own flight.
+                  flightNo: input.roundTrip.flightNo,
                   requiredPlates: input.requiredPlates,
                   // 同一位司機來回 with 這單我自己做: the dispatcher drives both legs.
                   selfDriveLeg: input.roundTrip.sameDriver ? null : input.roundTrip.selfDriveLeg,
@@ -183,6 +187,7 @@ export class OrdersService {
               pickupAt: second.pickupAt,
               origin: second.origin,
               destination: second.destination,
+              flightNo: second.flightNo,
               driverPriceMinor: toMinor(second.driverPrice),
               driverCurrency: second.driverPrice?.currency ?? 'HKD',
               passengerCurrency: placed.passengerCurrency,
@@ -603,7 +608,8 @@ export class OrdersService {
         if (input.luggage !== undefined) put(leg, 'luggage', input.luggage, '行李');
         if (input.vehicleType !== undefined) put(leg, 'vehicleType', input.vehicleType, '車型');
         if (input.notes !== undefined) put(leg, 'notes', input.notes || null, '備註');
-        if (input.flightNo !== undefined) put(leg, 'flightNo', input.flightNo || null, '航班');
+        // 往返: each leg has its own flight, so the flight changes on this leg only.
+        if (input.flightNo !== undefined && (!roundTrip || leg.id === id)) put(leg, 'flightNo', input.flightNo || null, '航班');
       }
       // The second leg still starts after the first: at the 接駁位置, or on the way back.
       if (legs.length > 1) {
@@ -1135,7 +1141,7 @@ export class OrdersService {
                 head.dispatch,
               )
             : dispatchShareText(order, links.dispatch),
-        claimed: driver ? claimedShareText(order, driver) : null,
+        claimed: driver ? claimedShareText(order, driver, liveLegs) : null,
         passenger: passengerShareText(order, head.passengerConfirm, liveLegs),
       },
     };

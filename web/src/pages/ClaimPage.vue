@@ -21,7 +21,7 @@ import { copyText } from '../device';
 import { loadLine, money, pickup, plateKind, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
-import { journeyRoute, journeyTag, legLabel, legName, plateRequirement, type Journey, type PlateRegion } from '../journey';
+import { journeyRoute, journeyTag, legLabel, legName, plateRequirement, roundTripTotal, type Journey, type PlateRegion } from '../journey';
 import { toast } from '../toast';
 import LinkProblem from '../components/LinkProblem.vue';
 
@@ -84,6 +84,8 @@ const trip = computed(() => order.value?.journey ?? null);
 const roundTrip = computed(() => trip.value?.kind === 'ROUND_TRIP');
 /** 往返 同一位司機來回: one claim takes both legs, from either leg's link. */
 const together = computed(() => roundTrip.value && Boolean(trip.value?.sameDriver));
+/** 同一位司機來回: what both legs pay together, as the group text says it. */
+const togetherTotal = computed(() => (together.value && trip.value ? roundTripTotal(trip.value.legs) : null));
 /** 同一位司機來回 is offered while no leg has a driver yet. */
 const togetherOpen = computed(() => Boolean(together.value && trip.value?.legs.every((leg) => leg.status === 'OPEN')));
 /** 往返 可分開接: a driver who holds one leg may take the other one too. */
@@ -267,7 +269,8 @@ onBeforeUnmount(() => {
           <span v-if="order.driverPrice && !canClaim && !offering" class="claim-page__price">{{ money(order.driverPrice) }}</span>
         </div>
 
-        <p v-if="order.flightNo" class="claim-page__notes"><strong>{{ t('航班') }}</strong>{{ order.flightNo }}</p>
+        <!-- 往返 from the group: each leg below shows its own flight. -->
+        <p v-if="order.flightNo && !(offering && roundTrip)" class="claim-page__notes"><strong>{{ t('航班') }}</strong>{{ order.flightNo }}</p>
         <p v-if="order.notes" class="claim-page__notes"><strong>{{ t('備註') }}</strong>{{ t(order.notes) }}</p>
         <p v-if="order.favoritesOnlyUntil && order.viewer !== 'dispatcher'" class="claim-page__notes">
           <strong>{{ t('先給常用司機') }}</strong>{{ t(`出單者的常用司機先搶，${shortTime(order.favoritesOnlyUntil).split(' ')[1]} 後所有人都可以搶`) }}
@@ -348,11 +351,15 @@ onBeforeUnmount(() => {
           </div>
           <span class="claim-page__leg-time">{{ leg.immediate && leg.status === 'OPEN' ? t('現在出發') : pickup(leg.pickupAt) }}</span>
           <span>{{ t(`${leg.origin} 至 ${leg.destination}`) }}</span>
+          <span v-if="roundTrip && leg.flightNo">{{ t(`航班 ${leg.flightNo}`) }}</span>
           <button v-if="leg.status === 'OPEN' && !together" class="button block claim-page__leg-claim" type="button" :disabled="busy" @click="claim(leg.code)">
             {{ busy ? t('搶單中…') : t(`搶${legName(trip.kind, leg.legIndex)}`) }}
           </button>
           <p v-else-if="leg.status !== 'OPEN'" class="hint">{{ leg.selfDrive ? t('出單者自己開') : leg.status === 'CANCELLED' ? t('已取消') : t('已有司機') }}</p>
         </div>
+        <p v-if="togetherTotal" class="claim-page__total">
+          <span>{{ t('來回共') }}</span><strong>{{ money(togetherTotal) }}</strong>
+        </p>
         <button v-if="togetherOpen" class="button block claim-page__leg-claim" type="button" :disabled="busy" @click="claim()">
           {{ busy ? t('搶單中…') : t('搶來回') }}
         </button>
@@ -442,6 +449,15 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-sm);
+}
+.claim-page__total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: var(--space-md) 0 0;
+}
+.claim-page__total strong {
+  font-size: 20px;
 }
 .claim-page__leg-price {
   margin-left: auto;

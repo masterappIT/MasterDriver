@@ -109,6 +109,8 @@ const form = reactive({
   showPaymentMethods: false,
   /** 航班號: asked when the trip starts or ends at an airport. */
   flightNo: '',
+  /** 往返: the way back's flight; the way there's is flightNo. */
+  returnFlightNo: '',
   /** 先給常用司機: the dispatcher's 常用司機 have the first 30 minutes. */
   favoritesFirst: false,
   /** 即時單: leaves now; no time to pick, the API takes the moment it is put out. */
@@ -123,12 +125,21 @@ const othersTake = computed(() => perLegSelf.value || !form.selfDrive);
 /** A leg's name in the form: 去程／回程 for 往返, 第 N 段 for 接駁. */
 const legName = (legIndex: 1 | 2) => (form.roundTrip ? (legIndex === 1 ? '去程' : '回程') : `第 ${legIndex} 段`);
 
-/** 直達, 往返 or 接駁; a leg the dispatcher chose to drive is cleared, as the legs change meaning. */
+/**
+ * 直達, 往返 or 接駁; a leg the dispatcher chose to drive is cleared, as the legs change meaning.
+ * 往返 starts with no time for the way back: any guess would go out to the group unnoticed, so the
+ * dispatcher fills it in. 接駁 suggests the second leg an hour after the first.
+ */
 function setMode(mode: 'direct' | 'roundTrip' | 'transfer') {
+  if (mode === 'roundTrip' && !form.roundTrip) form.secondPickupAt = '';
+  if (mode === 'transfer' && !form.secondPickupAt) form.secondPickupAt = hourAfter(form.pickupAt || toLocalInput(inAnHour));
   form.transfer = mode === 'transfer';
   form.roundTrip = mode === 'roundTrip';
   form.selfDriveLeg = null;
 }
+
+/** An hour after a time in the form's local format. */
+const hourAfter = (local: string) => toLocalInput(new Date(new Date(fromLocalInput(local)).getTime() + 60 * 60 * 1000));
 
 /** 同一位司機來回 or 可分開接: who drives which leg is chosen again. */
 function setSameDriver(same: boolean) {
@@ -270,11 +281,14 @@ watch(
   },
 );
 
-/** The second leg (at the 接駁位置, or the way back) never starts before the first; moved along when it would. */
+/**
+ * 接駁: the second leg never starts before the first; moved along when it would. 往返's way back is
+ * the dispatcher's own choice: it is never moved, and an earlier one is flagged instead.
+ */
 watch(
   () => form.pickupAt,
   (first) => {
-    if (first && form.secondPickupAt < first) form.secondPickupAt = toLocalInput(new Date(new Date(fromLocalInput(first)).getTime() + 60 * 60 * 1000));
+    if (form.transfer && first && form.secondPickupAt < first) form.secondPickupAt = hourAfter(first);
   },
 );
 
@@ -330,6 +344,10 @@ async function submit() {
   }
   // 即時單 leaves now: the API takes the moment it is put out; this is only for the check below.
   const firstAt = form.immediate ? toLocalInput(new Date()) : form.pickupAt;
+  if (form.roundTrip && !form.secondPickupAt) {
+    void showError(t('往返請填回程時間'));
+    return;
+  }
   if (twoLegs.value && form.secondPickupAt < firstAt) {
     void showError(t(form.roundTrip ? '回程的時間不能早於去程' : '第 2 段的時間不能早於第 1 段'));
     return;
@@ -366,6 +384,7 @@ async function submit() {
         ? {
             pickupAt: fromLocalInput(form.secondPickupAt),
             driverPrice: price(form.secondDriverPrice, form.secondCurrency),
+            flightNo: airportTrip.value && form.returnFlightNo.trim() ? form.returnFlightNo.trim() : undefined,
             sameDriver: form.sameDriver,
             selfDriveLeg: form.sameDriver ? null : form.selfDriveLeg,
           }
@@ -412,7 +431,7 @@ async function loadBooking() {
       transfer: booking.transfer,
       // Or for 往返, with the time to be picked up for the way back.
       roundTrip: booking.roundTrip,
-      ...(booking.roundTrip && booking.returnPickupAt ? { secondPickupAt: toLocalInput(new Date(booking.returnPickupAt)) } : {}),
+      ...(booking.roundTrip ? { secondPickupAt: booking.returnPickupAt ? toLocalInput(new Date(booking.returnPickupAt)) : '' } : {}),
       passengerName: booking.passengerName ?? '',
       notes: booking.notes ?? '',
       ...(booking.quote
@@ -668,8 +687,13 @@ onMounted(async () => {
         <button v-if="places.length > 4 && !allPlaces" class="chip" type="button" @click="allPlaces = true">{{ t('更多地點') }}</button>
       </div>
       <label v-if="airportTrip" class="line-field new-order__flight">
-        <span>{{ t('航班號（選填）') }}</span>
+        <span>{{ form.roundTrip ? t('去程航班號（選填）') : t('航班號（選填）') }}</span>
         <input v-model.trim="form.flightNo" class="line-input" maxlength="20" autocapitalize="characters" :placeholder="t('例如：CX123')" />
+      </label>
+      <!-- 往返: the way back is another flight (the way there lands, the way back takes off). -->
+      <label v-if="airportTrip && form.roundTrip" class="line-field new-order__flight">
+        <span>{{ t('回程航班號（選填）') }}</span>
+        <input v-model.trim="form.returnFlightNo" class="line-input" maxlength="20" autocapitalize="characters" :placeholder="t('例如：CX124')" />
       </label>
     </section>
 

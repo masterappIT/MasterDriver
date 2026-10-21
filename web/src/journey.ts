@@ -21,6 +21,8 @@ export interface JourneyLeg {
   immediate?: boolean;
   origin: string;
   destination: string;
+  /** 往返: this leg's own flight (the way there lands, the way back takes off). */
+  flightNo?: string | null;
   /** The leg's own claim code: the one link in the group offers both legs. */
   code: string;
   requiredPlates: PlateRegion[];
@@ -104,6 +106,17 @@ export const journeyTag = (journey: Pick<Journey, 'kind'>) => (journey.kind === 
 /** The whole trip's route: "香港 往返 深圳" or "香港 至 澳門". */
 export const journeyRoute = (journey: Pick<Journey, 'kind' | 'origin' | 'destination'>) =>
   journey.kind === 'ROUND_TRIP' ? `${journey.origin} 往返 ${journey.destination}` : `${journey.origin} 至 ${journey.destination}`;
+
+/**
+ * 往返 同一位司機來回: what the one driver is paid for both legs, when every leg has a driver price
+ * in the same currency and none is the dispatcher's own; null otherwise (as the group text says it).
+ */
+export function roundTripTotal(legs: Pick<JourneyLeg, 'driverPrice' | 'selfDrive'>[]): { amount: number; currency: string } | null {
+  if (legs.length < 2 || legs.some((leg) => leg.selfDrive || !leg.driverPrice)) return null;
+  const currency = legs[0].driverPrice!.currency;
+  if (legs.some((leg) => leg.driverPrice!.currency !== currency)) return null;
+  return { amount: Math.round(legs.reduce((sum, leg) => sum + leg.driverPrice!.amount * 100, 0)) / 100, currency };
+}
 
 /** Same as PLATE_REGIONS in shared/src/schemas.ts. */
 export type PlateRegion = 'HK' | 'MACAU' | 'MAINLAND';

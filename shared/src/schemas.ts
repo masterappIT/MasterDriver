@@ -156,7 +156,7 @@ export const createOrderSchema = z.object({
   passengerContact: passengerPhoneSchema,
   /** The one-line text the order was written from, as typed. */
   rawText: optionalText(300),
-  /** 航班號 of an airport pickup or drop-off, e.g. "CX123". */
+  /** 航班號 of an airport pickup or drop-off, e.g. "CX123". With 往返, the way there's. */
   flightNo: optionalText(20),
   /** 先給常用司機: for the first 30 minutes only the dispatcher's 常用司機 may claim it. */
   favoritesFirst: z.boolean().default(false),
@@ -196,6 +196,8 @@ export const createOrderSchema = z.object({
       /** The way back's pickup time; not before the way there (checked by the API). */
       pickupAt: z.string().datetime({ offset: true }),
       driverPrice: priceSchema.optional(),
+      /** The way back's 航班號: a different flight from the way there's. */
+      flightNo: optionalText(20),
       /**
        * 同一位司機來回: one claim takes both legs. False: 可分開接, each leg is claimed on its own,
        * and one driver may take both.

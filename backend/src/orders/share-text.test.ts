@@ -140,8 +140,8 @@ test('a carpool order lists its pickups and parties for drivers, never a passeng
   assert.ok(text.whatsapp.startsWith('*【有單・拼車】10/15（四）14:30*\n'));
 });
 
-test('a 往返 is one text with both legs, their prices and who takes them, and one link', () => {
-  const there = { ...order, waypoints: [], legIndex: 1, legCount: 2, journeyKind: 'ROUND_TRIP' as const, sameDriver: true, selfDriven: false };
+test('a 往返 is one text with both legs, their flights, prices and who takes them, and one link', () => {
+  const there = { ...order, waypoints: [], legIndex: 1, legCount: 2, journeyKind: 'ROUND_TRIP' as const, sameDriver: true, selfDriven: false, flightNo: 'CX101' };
   const back = {
     ...there,
     legIndex: 2,
@@ -149,6 +149,7 @@ test('a 往返 is one text with both legs, their prices and who takes them, and 
     destination: '深圳灣口岸',
     pickupAt: new Date('2026-10-15T12:00:00Z'),
     driverPriceMinor: 60000,
+    flightNo: 'CX102',
   };
   const text = roundTripShareText([there, back], 'https://x.test/o/abc').wechat;
   assert.equal(
@@ -156,9 +157,9 @@ test('a 往返 is one text with both legs, their prices and who takes them, and 
     [
       '【有單・往返】10/15（四）14:30',
       '深圳灣口岸 ⇄ 香港國際機場',
-      '去程：10/15（四）14:30 深圳灣口岸 → 香港國際機場｜HK$850',
-      '回程：10/15（四）20:00 香港國際機場 → 深圳灣口岸｜HK$600',
-      '同一位司機來回',
+      '去程：10/15（四）14:30 深圳灣口岸 → 香港國際機場｜航班 CX101｜HK$850',
+      '回程：10/15（四）20:00 香港國際機場 → 深圳灣口岸｜航班 CX102｜HK$600',
+      '同一位司機來回，來回共 HK$1,450',
       '4人｜3件行李｜7座',
       '備註：需要兒童座椅',
       '搶單（來回）：https://x.test/o/abc',
@@ -166,12 +167,18 @@ test('a 往返 is one text with both legs, their prices and who takes them, and 
   );
   const apart = roundTripShareText([{ ...there, sameDriver: false }, { ...back, sameDriver: false, selfDriven: true }], 'https://x.test/o/abc').wechat;
   assert.ok(apart.includes('可分開接，選一程搶'));
-  assert.ok(apart.includes('回程：10/15（四）20:00 香港國際機場 → 深圳灣口岸｜出單者自己開'));
+  assert.ok(apart.includes('回程：10/15（四）20:00 香港國際機場 → 深圳灣口岸｜航班 CX102｜出單者自己開'));
+  assert.ok(!apart.includes('來回共'), 'no total when the legs are claimed apart');
+  // A leg the dispatcher drives, or prices in two currencies: no total.
+  assert.ok(!roundTripShareText([there, { ...back, selfDriven: true }], 'https://x.test/o/abc').wechat.includes('來回共'));
+  assert.ok(!roundTripShareText([there, { ...back, driverCurrency: 'CNY' as const }], 'https://x.test/o/abc').wechat.includes('來回共'));
   assert.ok(apart.endsWith('搶單（選一程）：https://x.test/o/abc'));
   assert.ok(!apart.includes('接駁'));
 
   const driver = { name: '李師傅', hkPlate: 'AB1234', macauPlate: null, mainlandPlate: null };
-  assert.ok(claimedShareText(there, driver).startsWith('【已派出】10/15（四）14:30 深圳灣口岸 → 香港國際機場（來回）'));
+  // 同一位司機來回: one job, said with when the way back leaves, from either leg.
+  assert.ok(claimedShareText(there, driver, [there, back]).startsWith('【已派出】10/15（四）14:30 深圳灣口岸 → 香港國際機場（來回，回程 10/15（四）20:00）'));
+  assert.ok(claimedShareText(back, driver, [there, back]).startsWith('【已派出】10/15（四）14:30 深圳灣口岸 → 香港國際機場（來回，回程 10/15（四）20:00）'));
   assert.ok(claimedShareText({ ...back, sameDriver: false }, driver).includes('（回程）'));
 
   const passenger = passengerShareText(there, 'https://x.test/c/xyz', [

@@ -152,28 +152,43 @@ export function transferShareText(legs: ShareLeg[], dispatchUrl: string) {
 }
 
 /**
- * 往返: the whole order in one text with one link, the way there's. Each leg says its time, places
- * and driver price; whether one driver takes both legs is said, so drivers know what they claim.
+ * 往返 同一位司機來回: what the one driver is paid for both legs, when every leg has a driver price
+ * in the same currency and none is the dispatcher's own; null otherwise.
+ */
+export function roundTripTotal(legs: (Pick<ShareOrder, 'driverPriceMinor' | 'driverCurrency'> & { selfDriven?: boolean })[]) {
+  if (legs.length < 2 || legs.some((leg) => leg.selfDriven || leg.driverPriceMinor === null)) return null;
+  if (legs.some((leg) => leg.driverCurrency !== legs[0].driverCurrency)) return null;
+  return formatPrice(
+    legs.reduce((sum, leg) => sum + (leg.driverPriceMinor ?? 0), 0),
+    legs[0].driverCurrency,
+  );
+}
+
+/**
+ * 往返: the whole order in one text with one link, the way there's. Each leg says its time, places,
+ * flight and driver price; whether one driver takes both legs is said, with what both legs pay
+ * together, so drivers know what they claim.
  */
 export function roundTripShareText(legs: ShareLeg[], dispatchUrl: string) {
   const first = legs[0];
   const sameDriver = Boolean(first.sameDriver);
   const heading = first.immediate ? '【即時・往返】現在出發' : `【有單・往返】${formatPickup(first.pickupAt)}`;
   const load = [`${first.passengers}人`, `${first.luggage}件行李`, first.vehicleType].filter(Boolean).join('｜');
+  // Each leg has its own flight: the way there lands, the way back takes off.
   const legLines = legs.map((leg, index) => {
     const parts = leg.selfDriven
-      ? ['出單者自己開']
-      : [leg.driverPriceMinor !== null ? formatPrice(leg.driverPriceMinor, leg.driverCurrency) : null];
+      ? [leg.flightNo ? `航班 ${leg.flightNo}` : null, '出單者自己開']
+      : [leg.flightNo ? `航班 ${leg.flightNo}` : null, leg.driverPriceMinor !== null ? formatPrice(leg.driverPriceMinor, leg.driverCurrency) : null];
     const detail = parts.filter((part): part is string => part !== null).join('｜');
     return `${roundTripLegName(leg.legIndex ?? index + 1)}：${when(leg)} ${route(leg)}${detail ? `｜${detail}` : ''}`;
   });
+  const total = sameDriver ? roundTripTotal(legs) : null;
   const body = [
     `${first.origin} ⇄ ${first.destination}`,
     ...legLines,
-    sameDriver ? '同一位司機來回' : '可分開接，選一程搶',
+    sameDriver ? (total ? `同一位司機來回，來回共 ${total}` : '同一位司機來回') : '可分開接，選一程搶',
     plateRequirement(first.requiredPlates),
     first.waypoints.length > 0 ? `途經：${first.waypoints.join('、')}` : null,
-    first.flightNo ? `航班：${first.flightNo}` : null,
     load,
     first.notes ? `備註：${first.notes}` : null,
     `${sameDriver ? '搶單（來回）' : '搶單（選一程）'}：${dispatchUrl}`,
@@ -188,11 +203,18 @@ function legNote(order: ShareOrder) {
   return order.sameDriver ? '（來回）' : `（${roundTripLegName(order.legIndex)}）`;
 }
 
-/** Text the dispatcher pastes back into the group once a driver has the order (or one leg of it). */
-export function claimedShareText(order: ShareOrder, driver: ShareDriver): string {
+/**
+ * Text the dispatcher pastes back into the group once a driver has the order (or one leg of it).
+ * 往返 同一位司機來回 is one job: it reads from the way there and says when the way back leaves.
+ */
+export function claimedShareText(order: ShareOrder, driver: ShareDriver, legs?: ShareOrder[]): string {
   const plates = [driver.hkPlate, driver.macauPlate, driver.mainlandPlate].filter(Boolean).join(' / ');
+  const together = isRoundTrip(order) && order.sameDriver && legs && legs.length > 1 ? legs : null;
+  const heading = together
+    ? `【已派出】${formatPickup(together[0].pickupAt)} ${route(together[0])}（來回，回程 ${formatPickup(together[together.length - 1].pickupAt)}）`
+    : `【已派出】${formatPickup(order.pickupAt)} ${route(order)}${legNote(order)}`;
   return [
-    `【已派出】${formatPickup(order.pickupAt)} ${route(order)}${legNote(order)}`,
+    heading,
     driver.name ? `司機：${driver.name}` : null,
     plates ? `車牌：${plates}` : null,
   ]

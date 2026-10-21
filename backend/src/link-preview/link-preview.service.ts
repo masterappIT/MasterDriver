@@ -6,7 +6,7 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { PrismaService } from '../prisma.service';
 import { renderSeoTemplate } from '../site/seo-rules';
 import { formatPickup } from '../common/hong-kong-time';
-import { formatPrice } from '../orders/share-text';
+import { formatPrice, roundTripTotal } from '../orders/share-text';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import {
   PHOTO_HEIGHT,
@@ -295,12 +295,19 @@ export class LinkPreviewService {
         driverCurrency: true,
         journeyId: true,
         journeyKind: true,
+        sameDriver: true,
+        dispatcherId: true,
+        claimedById: true,
         dispatcher: { select: { profile: { select: { name: true } } } },
       },
     });
     if (!order) return null;
     const legs = order.journeyId
-      ? await this.prisma.order.findMany({ where: { journeyId: order.journeyId }, orderBy: { legIndex: 'asc' }, select: { status: true, pickupAt: true, immediate: true, origin: true, destination: true } })
+      ? await this.prisma.order.findMany({
+          where: { journeyId: order.journeyId },
+          orderBy: { legIndex: 'asc' },
+          select: { status: true, pickupAt: true, immediate: true, origin: true, destination: true, driverPriceMinor: true, driverCurrency: true, claimedById: true },
+        })
       : [order];
     if (!legs.some((leg) => leg.status === 'OPEN')) return null;
     const first = legs[0];
@@ -308,6 +315,9 @@ export class LinkPreviewService {
     // 往返: there and back, A⇄B; 接駁: A→C over its legs.
     const roundTrip = several && order.journeyKind === 'ROUND_TRIP';
     const transfer = several && !roundTrip;
+    // 同一位司機來回: one driver is paid for both legs, so the preview says what together.
+    const total =
+      roundTrip && order.sameDriver ? roundTripTotal(legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId }))) : null;
     const badge = first.immediate ? '即時' : '有單';
     const name = order.dispatcher.profile?.name;
     const title = roundTrip
@@ -318,7 +328,9 @@ export class LinkPreviewService {
       transfer ? `接駁 ${legs.length} 段` : null,
       roundTrip ? `回程 ${formatPickup(legs[1].pickupAt)}` : null,
       order.vehicleType,
-      // A 接駁's or 往返's legs each have their own price, so the text has them all and the preview none.
+      total ? `來回 ${total}` : null,
+      // A 接駁's or 往返's legs each have their own price, so the text has them all and the preview
+      // none, but for what 同一位司機來回 pays together.
       !several && order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
     ].filter(Boolean);
     const description = `${facts.join('・')}。${name ? `${name}出的單，` : ''}點開搶單，先搶先得。`;

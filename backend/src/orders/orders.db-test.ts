@@ -764,6 +764,7 @@ test('a 往返 is one order in two legs, there and back: quota and fee once, one
   assert.ok(text.startsWith('【有單・往返】10/15（四）14:30'));
   assert.ok(text.includes('香港 ⇄ 深圳'));
   assert.ok(text.includes('回程：10/15（四）20:00 深圳 → 香港｜HK$500'));
+  assert.ok(text.includes('同一位司機來回，來回共 HK$900'), 'what both legs pay together');
   assert.ok(text.endsWith(`搶單（來回）：${order.links.dispatch}`));
   assert.ok(!text.includes('接駁'));
   assert.ok(order.share.passenger.includes('往返行程'));
@@ -881,4 +882,35 @@ test('the passenger sees both legs with their times and one price; 修改行程 
   const after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
   assert.deepEqual(after.map((leg) => `${leg.origin}→${leg.destination}`), ['香港機場→深圳灣', '深圳灣→香港機場']);
   await rejectsWith(ctx.orders.updateTrip(dispatcher, legs[0].id, { transferPlace: '皇崗' }), 'NOT_A_TRANSFER');
+});
+
+test('each leg of a 往返 has its own flight; 修改行程 changes the flight on that leg only', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx, '來回師傅');
+  await freeForAll();
+  const order = await ctx.orders.create(dispatcher, {
+    ...roundTripOrder,
+    destination: '香港國際機場',
+    flightNo: 'CX101',
+    roundTrip: { ...roundTripOrder.roundTrip, flightNo: 'CX102' },
+  });
+  const legs = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(legs.map((leg) => leg.flightNo), ['CX101', 'CX102']);
+  assert.ok(order.share.dispatch.wechat.includes('去程：10/15（四）14:30 香港 → 香港國際機場｜航班 CX101｜HK$400'));
+  assert.ok(order.share.dispatch.wechat.includes('回程：10/15（四）20:00 香港國際機場 → 香港｜航班 CX102｜HK$500'));
+  assert.deepEqual(order.journey?.legs.map((leg) => leg.flightNo), ['CX101', 'CX102']);
+  const confirmCode = order.links.passengerConfirm.split('/c/')[1];
+  assert.deepEqual(
+    (await ctx.orders.getForPassenger(confirmCode)).legs?.map((leg) => ('flightNo' in leg ? leg.flightNo : null)),
+    ['CX101', 'CX102'],
+  );
+
+  await ctx.orders.updateTrip(dispatcher, legs[1].id, { flightNo: 'CX202' });
+  const after = await ctx.prisma.order.findMany({ where: { journeyId: order.id }, orderBy: { legIndex: 'asc' } });
+  assert.deepEqual(after.map((leg) => leg.flightNo), ['CX101', 'CX202']);
+
+  // 同一位司機來回 claimed: the 已派出 text says when the way back leaves.
+  await ctx.orders.claim(order.code, driver);
+  const seen = await ctx.orders.getForParticipant(dispatcher, legs[1].id);
+  assert.ok('share' in seen && seen.share.claimed?.startsWith('【已派出】10/15（四）14:30 香港 → 香港國際機場（來回，回程 10/15（四）20:00）'));
 });

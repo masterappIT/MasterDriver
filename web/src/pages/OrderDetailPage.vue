@@ -1244,7 +1244,8 @@ watch(id, () => {
             </label>
           </div>
           <label class="line-field">
-            <span>{{ t('航班號（選填）') }}</span>
+            <!-- 往返: each leg has its own flight; this one changes on this leg only. -->
+            <span>{{ roundTrip && order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}航班號（選填）`) : t('航班號（選填）') }}</span>
             <input v-model="tripForm.flightNo" class="line-input" maxlength="20" />
           </label>
           <label class="line-field">

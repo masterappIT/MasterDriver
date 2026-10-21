@@ -218,6 +218,8 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
         immediate: leg.immediate,
         origin: leg.origin,
         destination: leg.destination,
+        /** 往返: each leg's own flight (the way there lands, the way back takes off). */
+        flightNo: leg.flightNo,
         code: leg.code,
         requiredPlates: leg.requiredPlates,
         driverPrice: driverPriceOf(leg),
@@ -476,12 +478,14 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
     legs: transfer
       ? shown!.map(({ legIndex, status: legStatus, passengerConfirmedAt, driver, progress }) => ({ legIndex, status: legStatus, passengerConfirmedAt, driver, progress }))
       : roundTrip
-        ? shown!.map(({ legIndex, status: legStatus, pickupAt, origin, destination, passengerConfirmedAt, driver, progress }) => ({
+        ? shown!.map(({ legIndex, status: legStatus, pickupAt, origin, destination, flightNo, passengerConfirmedAt, driver, progress }) => ({
             legIndex,
             status: legStatus,
             pickupAt,
             origin,
             destination,
+            // The way back flies on its own flight.
+            flightNo,
             passengerConfirmedAt,
             driver,
             progress,

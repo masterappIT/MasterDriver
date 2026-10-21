@@ -30,6 +30,7 @@ withDefaults(defineProps<{ legs: JourneyLeg[]; current: number; kind?: Journey['
         <div class="journey-legs__time">{{ pickup(leg.pickupAt) }}<span v-if="leg.immediate" class="now-tag journey-legs__now">{{ t('即時') }}</span></div>
         <div v-if="leg.selfDrive" class="hint">{{ t('出單者自己開') }}</div>
         <div>{{ t(`${leg.origin} 至 ${leg.destination}`) }}</div>
+        <div v-if="kind === 'ROUND_TRIP' && leg.flightNo" class="hint">{{ t(`航班 ${leg.flightNo}`) }}</div>
         <div v-if="leg.driver && leg.legIndex !== current" class="journey-legs__driver">
           <span>{{ leg.driver.name ? t(leg.driver.name) : t('司機') }}</span>
           <PlateTag :hk="leg.driver.hkPlate" :macau="leg.driver.macauPlate" :mainland="leg.driver.mainlandPlate" />
