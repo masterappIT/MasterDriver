@@ -790,6 +790,8 @@ watch(id, () => {
           <span v-if="order.journey" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(order.journey)}`) }}</span>
           <span v-if="together" class="leg-tag">{{ t('同一位司機來回') }}</span>
           <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
+          <!-- The driver's price sits with the trip, as on the claim page; once it is over, 這趟的帳 says it. -->
+          <strong v-if="!isDispatcher && !endedForDriver" class="detail__trip-price">{{ money(order.driverPrice) || t('出單價未填') }}</strong>
         </div>
         <p v-if="order.journey && !roundTrip" class="detail__line">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
         <p v-if="order.flightNo" class="detail__line">{{ t(`航班：${order.flightNo}`) }}</p>
@@ -799,8 +801,9 @@ watch(id, () => {
         <RouterLink v-if="isDispatcher && order.carpool?.id" class="chip detail__edit-trip" :to="`/app/carpools/${order.carpool.id}`">{{ t('打開拼車') }}</RouterLink>
       </component>
 
-      <!-- 接駁 and 往返: both legs of the order; the dispatcher opens a leg to manage its driver. -->
-      <section v-if="order.journey && !endedForDriver" class="card" style="order: 5">
+      <!-- 接駁 and 往返: both legs of the order; the dispatcher opens a leg to manage its driver.
+           The driver reads it after 乘客 and 出單者: their own leg is already in the trip above. -->
+      <section v-if="order.journey && !endedForDriver" class="card" :style="{ order: isDispatcher ? 5 : 8 }">
         <span class="section-label">
           {{
             roundTrip
@@ -815,14 +818,14 @@ watch(id, () => {
         <JourneyLegs :legs="order.journey.legs" :current="order.journey.legIndex" :kind="order.journey.kind" />
       </section>
 
-      <!-- The passenger: for the dispatcher after the group text or the driver; for the driver after the trip (and the
-           whole 往返 or 接駁), right above 出單者 so the two are never mixed up, even before the phone is shown. -->
+      <!-- The passenger: for the dispatcher after the group text or the driver; for the driver right under the trip and
+           above 出單者, so the two are never mixed up, even before the phone is shown. -->
       <component
         :is="foldDetails ? 'details' : 'section'"
         v-if="!endedForDriver"
         class="card"
         :class="{ detail__fold: foldDetails }"
-        :style="{ order: isDispatcher ? 10 : 6 }"
+        :style="{ order: isDispatcher ? 10 : 4 }"
       >
         <summary v-if="foldDetails">
           <span class="detail__fold-text">
@@ -989,10 +992,10 @@ watch(id, () => {
         </div>
       </section>
 
-      <!-- Prices: the dispatcher sees both and the spread; the driver only the driver price -->
+      <!-- Prices: the dispatcher sees both and the spread; the driver's price is in the trip card. -->
       <component
         :is="foldDetails ? 'details' : 'section'"
-        v-if="!endedForDriver"
+        v-if="isDispatcher"
         id="detail-money"
         class="card"
         :class="{ detail__fold: foldDetails }"
@@ -1492,6 +1495,12 @@ watch(id, () => {
   gap: var(--space-xs) var(--space-sm);
   color: var(--color-label);
   font-size: var(--font-label);
+}
+.detail__trip-price {
+  margin-left: auto;
+  color: var(--color-gold-ink);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
 }
 .detail__line {
   margin: var(--space-sm) 0 0;
