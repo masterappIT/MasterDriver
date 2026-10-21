@@ -185,7 +185,7 @@ onBeforeUnmount(() => clearInterval(clock));
       </RouterLink>
       <RouterLink to="/app/deals" class="home__own-item home__own-item--deal">
         <strong>{{ t('特價車') }}</strong>
-        <span>{{ t('空車便宜賣') }}</span>
+        <span>{{ t('乘客直接下單') }}</span>
       </RouterLink>
     </div>
 

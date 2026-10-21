@@ -123,7 +123,7 @@ onMounted(async () => {
         to="/app/deals"
         icon="tag"
         :title="t('特價車')"
-        :detail="unread.deals ? t(`${unread.deals} 組特價車預約等你處理`) : t('空車回程、冷門時段定一個包車特價，把連結或分享圖發給乘客預約')"
+        :detail="unread.deals ? t(`${unread.deals} 組特價車預約等你處理`) : t('開你自己的路線，乘客用專屬連結直接向你下單，不經中介')"
         :count="unread.deals"
       />
       <MenuRow to="/app/passengers" icon="people" :title="t('客人通訊錄')" :detail="t('你出過的單的乘客，只有你看得到；熟客可以直接出單')" />
