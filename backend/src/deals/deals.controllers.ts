@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Inject, Param, Patch, Post, Req, Res, UseGuards } from '@nestjs/common';
 import {
   dealBookingCreateSchema,
   dealCreateSchema,
@@ -44,6 +44,12 @@ export class DealsController {
   @HttpCode(200)
   close(@CurrentUser() user: SessionUser, @Param('id') id: string) {
     return this.deals.close(user.id, id);
+  }
+
+  /** 刪除: gone from the driver's list and its link; waiting parties are declined. */
+  @Delete(':id')
+  remove(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    return this.deals.remove(user.id, id);
   }
 }
 

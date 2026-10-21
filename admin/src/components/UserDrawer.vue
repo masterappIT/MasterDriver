@@ -436,6 +436,8 @@ interface DealRow {
   ordered: number;
   maxBookings: number | null;
   staffReason: string | null;
+  /** 刪除 by the driver. */
+  deletedAt: string | null;
   createdAt: string;
 }
 const DEAL_STATE: Record<DealRow['state'], { label: string; tone: string }> = {
@@ -710,11 +712,14 @@ onBeforeUnmount(() => {
                   <a :href="deal.url" target="_blank" rel="noopener noreferrer">{{ deal.origin }} 至 {{ deal.destination }}</a>
                   <br v-if="deal.staffReason" /><span v-if="deal.staffReason" class="mt-muted">平台下架：{{ deal.staffReason }}</span>
                 </td>
-                <td><span class="mt-status" :class="DEAL_STATE[deal.state].tone">{{ DEAL_STATE[deal.state].label }}</span></td>
+                <td>
+                  <span class="mt-status" :class="DEAL_STATE[deal.state].tone">{{ DEAL_STATE[deal.state].label }}</span>
+                  <br v-if="deal.deletedAt" /><span v-if="deal.deletedAt" class="mt-muted">司機 {{ dateTime(deal.deletedAt) }} 刪除</span>
+                </td>
                 <td class="num">{{ money(deal.price) }}<template v-if="deal.originalPrice"><br /><s class="mt-muted">{{ money(deal.originalPrice) }}</s></template></td>
                 <td class="num">{{ deal.bookings }}／{{ deal.ordered }}<template v-if="deal.maxBookings"><br /><span class="mt-muted">最多 {{ deal.maxBookings }} 組</span></template></td>
                 <td>
-                  <button v-if="can.write() && deal.state !== 'CANCELLED'" type="button" class="mt-action is-danger" @click="cancelDeal(deal)">下架</button>
+                  <button v-if="can.write() && deal.state !== 'CANCELLED' && !deal.deletedAt" type="button" class="mt-action is-danger" @click="cancelDeal(deal)">下架</button>
                 </td>
               </tr>
             </tbody>

@@ -4,7 +4,7 @@ import type { Money } from './format';
 export interface Booking {
   code: string;
   /** 特價車: sent from that deal at its price, which is not quoted again. */
-  deal: { id: string; code: string } | null;
+  deal: { id: string; code: string; deleted: boolean } | null;
   status: 'PENDING' | 'QUOTED' | 'ACCEPTED' | 'ORDERED' | 'DECLINED' | 'CANCELLED';
   pickupAt: string;
   origin: string;

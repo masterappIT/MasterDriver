@@ -142,6 +142,7 @@ npm run dev:admin
 | `GET /api/deals/:id` | 要 | 一個特價車與它的預約 |
 | `PATCH /api/deals/:id` | 要 | 修改（開放中；已送出的預約不變；最多接幾組不能少於已佔的名額） |
 | `POST /api/deals/:id/close` | 要 | 關閉，不再接新的預約 |
+| `DELETE /api/deals/:id` | 要 | 刪除（標記 `deletedAt`，列表與連結不再出現；等待中的預約婉拒，已成單的不受影響） |
 | `GET /api/public/deals/:code` | — | 特價車連結 |
 | `POST /api/public/deals/:code/bookings` | — | 預約 |
 | `GET /api/public/deals/:code/photos/:id` | — | 特價車連結上司機的車輛照片 |

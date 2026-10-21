@@ -5,7 +5,7 @@ import { apiError } from '../common/errors';
 /** A booking that takes a place in 最多接幾組: waiting for the driver, booked, or made into an order. */
 export const ACTIVE: BookingStatus[] = ['PENDING', 'QUOTED', 'ACCEPTED', 'ORDERED'];
 /** A booking still waiting on the driver or on its order. */
-const WAITING: BookingStatus[] = ['PENDING', 'QUOTED', 'ACCEPTED'];
+export const WAITING: BookingStatus[] = ['PENDING', 'QUOTED', 'ACCEPTED'];
 
 /** Holds the deal's row until the transaction ends: two bookings for the last place, or a booking and 關閉, wait in turn. */
 export async function lockDeal(tx: Prisma.TransactionClient, dealId: string) {

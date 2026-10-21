@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
         {{ t('取消預約') }}
       </button>
       <!-- 特價車: back to the deal, which says whether it is still open. -->
-      <RouterLink v-else-if="booking.deal && booking.status !== 'ORDERED'" class="button secondary block" :to="`/d/${booking.deal.code}`">
+      <RouterLink v-else-if="booking.deal && !booking.deal.deleted && booking.status !== 'ORDERED'" class="button secondary block" :to="`/d/${booking.deal.code}`">
         {{ t('回到特價車') }}
       </RouterLink>
       <RouterLink v-else-if="booking.pageCode && booking.status !== 'ORDERED'" class="button secondary block" :to="`/p/${booking.pageCode}`">

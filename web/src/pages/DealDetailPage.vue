@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { api, errorText } from '../api';
 import { BOOKING_STATUS } from '../booking';
 import { DEAL_STATE, dealLimits, dealTime, type DealBookingLine, type DriverDeal } from '../deal';
@@ -19,6 +19,7 @@ import { toast } from '../toast';
  * where making the order accepts that party; 關閉 stops new ones.
  */
 const route = useRoute();
+const router = useRouter();
 const id = String(route.params.id);
 const justMade = route.query.new === '1';
 const deal = ref<DriverDeal | null>(null);
@@ -60,6 +61,27 @@ async function close() {
     toast(errorText(e));
     await load();
   } finally {
+    busy.value = false;
+  }
+}
+
+/**
+ * 刪除 (2026-10-22): a deal the driver no longer wants leaves their list and its link; the parties
+ * still waiting are declined; orders made from it stay.
+ */
+async function remove() {
+  const waitingCount = toAnswer.value.length;
+  const question = waitingCount
+    ? `還有 ${waitingCount} 組預約等你處理，刪除後會婉拒他們。已成單的單不受影響。確定刪除這個特價車？`
+    : '刪除後乘客打不開這個連結，你的列表也不再顯示。已成單的單不受影響。確定刪除？';
+  if (!confirm(t(question))) return;
+  busy.value = true;
+  try {
+    await api('DELETE', `/deals/${id}`);
+    toast('已刪除');
+    await router.replace('/app/deals');
+  } catch (e) {
+    toast(errorText(e));
     busy.value = false;
   }
 }
@@ -166,9 +188,12 @@ onBeforeUnmount(() => {
         </RouterLink>
       </details>
 
-      <section v-if="live" class="card deal__more">
-        <RouterLink class="button secondary block" :to="`/app/deals/${deal.id}/edit`">{{ t('修改特價車') }}</RouterLink>
-        <button class="deal__remove" type="button" :disabled="busy" @click="close">{{ t('關閉，不再接預約') }}</button>
+      <section class="card deal__more">
+        <template v-if="live">
+          <RouterLink class="button secondary block" :to="`/app/deals/${deal.id}/edit`">{{ t('修改特價車') }}</RouterLink>
+          <button class="deal__remove" type="button" :disabled="busy" @click="close">{{ t('關閉，不再接預約') }}</button>
+        </template>
+        <button class="deal__remove" type="button" :disabled="busy" @click="remove">{{ t('刪除這個特價車') }}</button>
       </section>
 
       <DealCardSheet v-if="showCard" :deal="deal" @close="showCard = false" />

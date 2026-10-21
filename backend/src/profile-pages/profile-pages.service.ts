@@ -36,7 +36,7 @@ type PageRow = Prisma.ProfilePageGetPayload<{ include: typeof pageInclude }>;
 const bookingInclude = {
   order: { select: { id: true, confirmCode: true } },
   // 特價車: the deal the request was sent from, at its price.
-  deal: { select: { id: true, code: true } },
+  deal: { select: { id: true, code: true, deletedAt: true } },
 } satisfies Prisma.BookingRequestInclude;
 type BookingRow = Prisma.BookingRequestGetPayload<{ include: typeof bookingInclude }>;
 
@@ -415,7 +415,8 @@ export class ProfilePagesService {
     return {
       code: row.code,
       /** 特價車: sent from that deal at its price, which the driver cannot change. */
-      deal: row.deal ? { id: row.deal.id, code: row.deal.code } : null,
+      // 刪除 by the driver: still a 特價車 booking, with no deal page to go back to.
+      deal: row.deal ? { id: row.deal.id, code: row.deal.code, deleted: Boolean(row.deal.deletedAt) } : null,
       status: row.status,
       pickupAt: row.pickupAt.toISOString(),
       origin: row.origin,

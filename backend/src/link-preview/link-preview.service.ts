@@ -400,6 +400,7 @@ export class LinkPreviewService {
         currency: true,
         originalPriceMinor: true,
         maxBookings: true,
+        deletedAt: true,
         _count: { select: { bookings: { where: { status: { in: ACTIVE } } } } },
         driver: {
           select: {
@@ -409,7 +410,7 @@ export class LinkPreviewService {
         },
       },
     });
-    if (!deal || deal.status !== 'OPEN' || (deal.pickupUntil ?? deal.pickupAt) <= new Date()) return null;
+    if (!deal || deal.deletedAt || deal.status !== 'OPEN' || (deal.pickupUntil ?? deal.pickupAt) <= new Date()) return null;
     if (deal.maxBookings !== null && deal._count.bookings >= deal.maxBookings) return null;
     const name = deal.driver.profile?.name;
     const page = deal.driver.profilePage;

@@ -10,7 +10,7 @@ import { telemetry } from '../observability/telemetry';
 import { PrismaService } from '../prisma.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
-import { ACTIVE, lockDeal, takeDown } from './deal-hold';
+import { ACTIVE, WAITING, lockDeal, takeDown } from './deal-hold';
 import { dealShareText } from './deal-share-text';
 
 const CODE_LENGTH = 10;
@@ -118,13 +118,13 @@ export class DealsService {
   }
 
   async list(userId: string, now = new Date()) {
-    const rows = await this.prisma.deal.findMany({ where: { driverId: userId }, orderBy: { createdAt: 'desc' }, take: LIST_LIMIT, include: dealInclude });
+    const rows = await this.prisma.deal.findMany({ where: { driverId: userId, deletedAt: null }, orderBy: { createdAt: 'desc' }, take: LIST_LIMIT, include: dealInclude });
     const clashes = await this.clashes(userId, now);
     return rows.map((row) => this.driverView(row, now, clashes));
   }
 
   async get(userId: string, id: string, now = new Date()) {
-    const deal = await this.prisma.deal.findFirst({ where: { id, driverId: userId }, include: dealInclude });
+    const deal = await this.prisma.deal.findFirst({ where: { id, driverId: userId, deletedAt: null }, include: dealInclude });
     if (!deal) throw this.notFound();
     return this.driverView(deal, now, await this.clashes(userId, now));
   }
@@ -132,7 +132,7 @@ export class DealsService {
   /** Changes while it takes bookings. Bookings already sent keep their own time and price. */
   async update(userId: string, id: string, input: DealUpdate, now = new Date()) {
     await this.prisma.$transaction(async (tx) => {
-      const found = await tx.deal.findFirst({ where: { id, driverId: userId }, select: { id: true } });
+      const found = await tx.deal.findFirst({ where: { id, driverId: userId, deletedAt: null }, select: { id: true } });
       if (!found) throw this.notFound();
       const deal = await lockDeal(tx, id);
       if (deal.status !== 'OPEN' || lastPickup(deal) <= now) throw this.notOpen();
@@ -174,13 +174,33 @@ export class DealsService {
 
   /** 關閉: no new bookings. The ones already sent stay, for the driver to make orders of or decline. */
   async close(userId: string, id: string, now = new Date()) {
-    const closed = await this.prisma.deal.updateMany({ where: { id, driverId: userId, status: 'OPEN' }, data: { status: 'CLOSED', closedAt: now } });
+    const closed = await this.prisma.deal.updateMany({ where: { id, driverId: userId, deletedAt: null, status: 'OPEN' }, data: { status: 'CLOSED', closedAt: now } });
     if (closed.count === 0) {
-      if ((await this.prisma.deal.count({ where: { id, driverId: userId } })) === 0) throw this.notFound();
+      if ((await this.prisma.deal.count({ where: { id, driverId: userId, deletedAt: null } })) === 0) throw this.notFound();
       throw this.notOpen();
     }
     telemetry.domain('deal.close');
     return this.get(userId, id, now);
+  }
+
+  /**
+   * 刪除 (2026-10-22): a deal the driver no longer wants. It leaves their list, its link opens on
+   * 「找不到這個特價車」, and the parties still waiting are declined. Orders made from it stay as they
+   * are. The row is kept, marked, so those bookings and orders still say they came from a 特價車.
+   */
+  async remove(userId: string, id: string, now = new Date()) {
+    await this.prisma.$transaction(async (tx) => {
+      const found = await tx.deal.findFirst({ where: { id, driverId: userId, deletedAt: null }, select: { id: true } });
+      if (!found) throw this.notFound();
+      const deal = await lockDeal(tx, id);
+      await tx.deal.update({
+        where: { id },
+        data: { deletedAt: now, ...(deal.status === 'OPEN' ? { status: 'CLOSED', closedAt: now } : {}) },
+      });
+      await tx.bookingRequest.updateMany({ where: { dealId: id, orderId: null, status: { in: WAITING } }, data: { status: 'DECLINED' } });
+    });
+    telemetry.domain('deal.delete');
+    return { deleted: true };
   }
 
   // ------------------------------------------------- the platform's staff
@@ -202,13 +222,15 @@ export class DealsService {
       ordered: row.bookings.filter((booking) => booking.status === 'ORDERED').length,
       maxBookings: row.maxBookings,
       staffReason: row.staffReason,
+      /** 刪除 by the driver: still listed here, for complaints about it. */
+      deletedAt: row.deletedAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
     }));
   }
 
   /** 下架 after a complaint; the reason is shown to the driver. */
   async staffCancel(userId: string, id: string, reason: string, now = new Date()) {
-    const found = await this.prisma.deal.findFirst({ where: { id, driverId: userId }, select: { id: true } });
+    const found = await this.prisma.deal.findFirst({ where: { id, driverId: userId, deletedAt: null }, select: { id: true } });
     if (!found) throw this.notFound();
     await this.prisma.$transaction((tx) => takeDown(tx, id, now, reason));
   }
@@ -217,15 +239,15 @@ export class DealsService {
 
   async publicDeal(code: string, now = new Date()) {
     const deal = await this.prisma.deal.findUnique({ where: { code }, include: dealInclude });
-    if (!deal) throw this.notFound();
+    if (!deal || deal.deletedAt) throw this.notFound();
     return { code: deal.code, ...this.tripFields(deal, now), autoAccept: deal.autoAccept, driver: await this.carOf(deal) };
   }
 
   /** The driver's car photo on the deal's link, while it is up. */
   async photo(code: string, photoId: string) {
-    const deal = await this.prisma.deal.findUnique({ where: { code }, select: { driverId: true, status: true } });
+    const deal = await this.prisma.deal.findUnique({ where: { code }, select: { driverId: true, status: true, deletedAt: true } });
     const photo =
-      deal && deal.status !== 'CANCELLED'
+      deal && deal.status !== 'CANCELLED' && !deal.deletedAt
         ? await this.prisma.profilePhoto.findFirst({ where: { id: photoId, page: { userId: deal.driverId, blockedAt: null } } })
         : null;
     const bytes = photo ? await this.storage.read(photo.storageKey) : null;
@@ -238,8 +260,8 @@ export class DealsService {
    * with 自動接受 it is accepted at once. The passenger follows it on /b/{code}.
    */
   async createBooking(code: string, input: DealBookingCreate, ip: string | undefined, now = new Date()) {
-    const found = await this.prisma.deal.findUnique({ where: { code }, select: { id: true, driverId: true } });
-    if (!found) throw this.notFound();
+    const found = await this.prisma.deal.findUnique({ where: { code }, select: { id: true, driverId: true, deletedAt: true } });
+    if (!found || found.deletedAt) throw this.notFound();
     const page = await this.pages.ensurePage(found.driverId);
     // Limits of their own, apart from 名片頁 requests (2026-10-22): mostly by the passenger's phone,
     // as on mainland mobile networks many passengers share one address.

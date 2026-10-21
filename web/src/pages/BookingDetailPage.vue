@@ -169,7 +169,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <PageBack :title="booking?.deal ? t('特價車預約') : t('詢價詳情')" :fallback="booking?.deal ? `/app/deals/${booking.deal.id}` : '/app/bookings'" />
+    <PageBack
+      :title="booking?.deal ? t('特價車預約') : t('詢價詳情')"
+      :fallback="booking?.deal ? (booking.deal.deleted ? '/app/deals' : `/app/deals/${booking.deal.id}`) : '/app/bookings'"
+    />
     <div v-if="error" class="notice error">{{ error }}</div>
 
     <template v-if="booking">
@@ -189,7 +192,7 @@ onBeforeUnmount(() => {
         </p>
         <p v-if="booking.notes" class="booking-detail__note">{{ t(booking.notes) }}</p>
         <p v-if="booking.deal" class="hint">
-          {{ t(`${shortTime(booking.createdAt)} 從`) }}<RouterLink :to="`/app/deals/${booking.deal.id}`">{{ t('特價車') }}</RouterLink>{{ t('送出') }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>
+          {{ t(`${shortTime(booking.createdAt)} 從`) }}<span v-if="booking.deal.deleted">{{ t('已刪除的特價車') }}</span><RouterLink v-else :to="`/app/deals/${booking.deal.id}`">{{ t('特價車') }}</RouterLink>{{ t('送出') }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>
         </p>
         <p v-else class="hint">
           {{ t(`${shortTime(booking.createdAt)} 從名片頁送出`) }}<template v-if="booking.source">{{ t(`・來自${booking.source}`) }}</template>

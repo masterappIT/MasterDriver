@@ -271,3 +271,28 @@ test('時間相近: a booking close to the driver’s own trip or another waitin
   assert.deepEqual(opened.nearby.map((trip) => trip.kind), ['ORDER']);
   assert.deepEqual((await ctx.profilePages.booking(owner, await idOf(far.code))).nearby, []);
 });
+
+test('刪除: gone from the driver’s list and its link; waiting parties are declined, orders stay', async () => {
+  const owner = await createDriver(ctx);
+  const made = await ctx.deals.create(owner, deal({ pickupAt: iso(inHours(20)), pickupUntil: iso(inHours(60)) }));
+  const ordered = await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(22)) }), '10.0.0.1');
+  const waiting = await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(40)) }), '10.0.0.2');
+  const order = await driveMyself(owner, (await ctx.prisma.bookingRequest.findUniqueOrThrow({ where: { code: ordered.code } })).id);
+
+  assert.deepEqual(await ctx.deals.remove(owner, made.id), { deleted: true });
+  assert.deepEqual((await ctx.deals.list(owner)).map((row) => row.id), []);
+  await rejectsWith(ctx.deals.get(owner, made.id), 'DEAL_NOT_FOUND');
+  await rejectsWith(ctx.deals.publicDeal(made.code), 'DEAL_NOT_FOUND');
+  await rejectsWith(ctx.deals.createBooking(made.code, booking(), '10.0.0.3'), 'DEAL_NOT_FOUND');
+  await rejectsWith(ctx.deals.remove(owner, made.id), 'DEAL_NOT_FOUND');
+
+  const declined = await ctx.profilePages.passengerBooking(waiting.code);
+  assert.equal(declined.status, 'DECLINED');
+  assert.deepEqual(declined.deal, { id: made.id, code: made.code, deleted: true }, 'still a 特價車 booking, with no page to go back to');
+  assert.equal((await ctx.profilePages.passengerBooking(ordered.code)).status, 'ORDERED');
+  assert.equal((await ctx.orders.getForParticipant(owner, order.id)).status, 'ASSIGNED', 'the order goes on');
+
+  // The platform's staff still see it, for complaints.
+  const [listed] = await ctx.deals.staffList(owner);
+  assert.ok(listed.deletedAt);
+});

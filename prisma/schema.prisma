@@ -1426,6 +1426,9 @@ model Deal {
   cancelledAt         DateTime?
   /// Why the platform's staff took it down.
   staffReason         String?
+  /// 刪除 by the driver (2026-10-22): gone from their list and its link, taking no bookings; kept
+  /// so the bookings and orders made from it still say they came from a 特價車.
+  deletedAt           DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
 
