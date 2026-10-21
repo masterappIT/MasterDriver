@@ -205,12 +205,12 @@ test('a 特價車 link says when, where, the price and whose deal it is, only wh
   const pickupAt = new Date(daysFromNow(2));
   const deal = await ctx.deals.create(
     owner,
-    dealCreateSchema.parse({ pickupAt: pickupAt.toISOString(), origin: '深圳灣口岸', destination: '香港國際機場', price: 350, currency: 'CNY', originalPrice: 500, autoAccept: true }),
+    dealCreateSchema.parse({ pickupAt: pickupAt.toISOString(), origin: '深圳灣口岸', destination: '香港國際機場', price: 350, currency: 'CNY', originalPrice: 500, maxBookings: 1 }),
   );
 
   const meta = await previews.page(`/d/${deal.code}`);
   assert.equal(meta.title, `【特價車】${formatPickup(pickupAt)} 深圳灣口岸 → 香港國際機場`);
-  assert.equal(meta.description, '整車 RMB¥350（原價 RMB¥500）。陳師傅的特價車，點開預約，不用註冊。');
+  assert.equal(meta.description, '包車 RMB¥350（原價 RMB¥500）。陳師傅的特價車，點開預約，不用註冊。');
   assert.match(meta.image, new RegExp(`/square/d/${deal.code}\\.jpg\\?v=`));
   assert.deepEqual(await previews.squareData('d', deal.code), { kind: 'driver', name: '陳師傅', photoKey: null });
 
@@ -219,6 +219,6 @@ test('a 特價車 link says when, where, the price and whose deal it is, only wh
     dealBookingCreateSchema.parse({ pickupAt: pickupAt.toISOString(), passengers: 2, passengerName: '王小姐', passengerContact: '+852 61239876' }),
     '10.0.0.1',
   );
-  assert.equal(await previews.tags(`/d/${deal.code}`), null, 'sold: no preview of its own');
+  assert.equal(await previews.tags(`/d/${deal.code}`), null, 'full: no preview of its own');
   assert.equal((await previews.page(`/d/${deal.code}`)).title, GENERIC);
 });

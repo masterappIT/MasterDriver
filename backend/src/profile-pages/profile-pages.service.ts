@@ -6,7 +6,6 @@ import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
 import { NotificationsService } from '../notifications/notifications.service';
-import { releaseDeal } from '../deals/deal-hold';
 import { telemetry } from '../observability/telemetry';
 import { phonesOf } from '../orders/order-view';
 import { PrismaService } from '../prisma.service';
@@ -424,10 +423,7 @@ export class ProfilePagesService {
       await this.ownBooking(userId, id);
       throw this.closed();
     }
-    const row = await this.booking(userId, id);
-    // 特價車: declining the party that had it lets the deal take bookings again.
-    if (row.deal && data.status === 'DECLINED') await releaseDeal(this.prisma, row.deal.id);
-    return row;
+    return this.booking(userId, id);
   }
 
   private async passengerMove(code: string, from: BookingStatus[], status: BookingStatus) {
@@ -442,9 +438,8 @@ export class ProfilePagesService {
     }
     const booking = await this.prisma.bookingRequest.findUnique({
       where: { code },
-      select: { id: true, origin: true, destination: true, pickupAt: true, dealId: true, page: { select: { userId: true } } },
+      select: { id: true, origin: true, destination: true, pickupAt: true, page: { select: { userId: true } } },
     });
-    if (booking?.dealId && status === 'CANCELLED') await releaseDeal(this.prisma, booking.dealId);
     if (booking) {
       await this.notifications.send({
         userId: booking.page.userId,

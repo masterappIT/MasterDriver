@@ -25,7 +25,7 @@ export type NotificationKind =
   | 'CARPOOL_FORMED'
   | 'CARPOOL_CLOSED'
   | 'DEAL_BOOKING_NEW'
-  | 'DEAL_SOLD'
+  | 'DEAL_BOOKING_ACCEPTED'
   | 'SUPPORT_REPLY';
 
 export interface NotificationItem {
@@ -63,7 +63,7 @@ const TITLES: Record<NotificationKind, string> = {
   CARPOOL_FORMED: '你的拼車已成行',
   CARPOOL_CLOSED: '你的拼車已截止報位',
   DEAL_BOOKING_NEW: '特價車有人預約，等你確認',
-  DEAL_SOLD: '你的特價車已被訂走，去安排行程',
+  DEAL_BOOKING_ACCEPTED: '特價車有人訂了，去安排行程',
   SUPPORT_REPLY: '客服回覆了你',
 };
 

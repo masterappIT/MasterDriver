@@ -14,9 +14,9 @@ import { t } from '../i18n';
 import { toast } from '../toast';
 
 /**
- * One 特價車 as its driver runs it: the text, link and picture to send passengers, the bookings
- * (each answered on its own 詢價詳情 page, where making the order accepts that party), changes
- * and 下架.
+ * One 特價車 as its driver runs it: the text, link and picture to send passengers, and its
+ * bookings. Like a product it takes any number of them, each answered on its own 詢價詳情 page,
+ * where making the order accepts that party; 關閉 stops new ones.
  */
 const route = useRoute();
 const id = String(route.params.id);
@@ -26,15 +26,16 @@ const error = ref('');
 const busy = ref(false);
 const showCard = ref(false);
 
-/** The party that has it: booked with 自動接受第一組 and not yet an order, or made into one. */
-const holder = computed(() => deal.value?.bookings.find((booking) => booking.status === 'ACCEPTED' || booking.status === 'ORDERED') ?? null);
-const waiting = computed(() => deal.value?.bookings.filter((booking) => booking.status === 'PENDING') ?? []);
-const others = computed(() => deal.value?.bookings.filter((booking) => booking !== holder.value && booking.status !== 'PENDING') ?? []);
-/** 下架 is refused once it is an order: the order is cancelled instead. */
-const canTakeDown = computed(() => deal.value && deal.value.state !== 'CANCELLED' && holder.value?.status !== 'ORDERED');
+/** Waiting for the driver: to be accepted (我確認), or booked and waiting for their order (自動接受). */
+const toAnswer = computed(() => deal.value?.bookings.filter((booking) => booking.status === 'PENDING' || booking.status === 'ACCEPTED') ?? []);
+const ordered = computed(() => deal.value?.bookings.filter((booking) => booking.status === 'ORDERED') ?? []);
+const others = computed(() => deal.value?.bookings.filter((booking) => booking.status === 'DECLINED' || booking.status === 'CANCELLED') ?? []);
+/** Still taking bookings, or only full for now: it can be changed and closed. */
+const live = computed(() => deal.value?.state === 'OPEN' || deal.value?.state === 'FULL');
 
 const bookingLine = (booking: DealBookingLine) =>
-  [booking.passengerName ?? '乘客', loadLine(booking.passengers, booking.luggage), deal.value?.pickupUntil ? shortTime(booking.pickupAt) : null].filter(Boolean).join('｜');
+  [booking.passengerName ?? '乘客', loadLine(booking.passengers, booking.luggage), shortTime(booking.pickupAt)].join('｜');
+const limitLine = (d: DriverDeal) => (d.maxBookings === null ? '不限組數，直到你關閉' : `最多接 ${d.maxBookings} 組，還剩 ${d.left} 組`);
 
 async function load() {
   try {
@@ -49,13 +50,12 @@ async function copy(text: string, done: string) {
   toast((await copyText(t(text))) ? done : '複製失敗，請長按文字自行複製');
 }
 
-async function takeDown() {
-  const question = waiting.value.length || holder.value ? '下架後乘客不能再預約，還在等的預約會婉拒。確定下架？' : '下架後乘客不能再預約。確定下架？';
-  if (!confirm(t(question))) return;
+async function close() {
+  if (!confirm(t('關閉後乘客不能再預約；已經送出的預約照樣在這裡，你可以成單或婉拒。確定關閉？'))) return;
   busy.value = true;
   try {
-    deal.value = await api<DriverDeal>('POST', `/deals/${id}/cancel`);
-    toast('已下架');
+    deal.value = await api<DriverDeal>('POST', `/deals/${id}/close`);
+    toast('已關閉，不再接新的預約');
   } catch (e) {
     toast(errorText(e));
     await load();
@@ -64,11 +64,11 @@ async function takeDown() {
   }
 }
 
-/** Passengers book on their own at any time, so an open deal is read again while on screen. */
+/** Passengers book on their own at any time, so a live deal is read again while on screen. */
 const REFRESH_MS = 15_000;
 let timer: ReturnType<typeof setInterval> | undefined;
 function refresh() {
-  if (document.visibilityState === 'visible' && !busy.value && !showCard.value && deal.value?.state === 'OPEN') void load();
+  if (document.visibilityState === 'visible' && !busy.value && !showCard.value && live.value) void load();
 }
 
 onMounted(() => {
@@ -96,32 +96,27 @@ onBeforeUnmount(() => {
         <strong class="deal__time">{{ t(dealTime(deal)) }}</strong>
         <div class="deal__route">{{ t(`${deal.origin} 至 ${deal.destination}`) }}</div>
         <p class="deal__price">
-          <strong>{{ t(`整車 ${money(deal.price)}`) }}</strong>
+          <strong>{{ t(`包車 ${money(deal.price)}`) }}</strong>
           <s v-if="deal.originalPrice">{{ t(`原價 ${money(deal.originalPrice)}`) }}</s>
         </p>
         <p v-if="dealLimits(deal)" class="deal__line">{{ t(dealLimits(deal)) }}</p>
         <p v-if="deal.notes" class="deal__note">{{ t(deal.notes) }}</p>
-        <p class="hint">{{ t(deal.autoAccept ? '自動接受第一組' : '乘客預約後由你確認') }}<template v-if="deal.pickupUntil">{{ t('｜乘客在時段內選出發時間') }}</template></p>
+        <div class="deal__counts">
+          <span><strong>{{ deal.waiting }}</strong>{{ t('等你確認') }}</span>
+          <span><strong>{{ deal.toOrder }}</strong>{{ t('已訂到') }}</span>
+          <span><strong>{{ deal.ordered }}</strong>{{ t('已成單') }}</span>
+        </div>
+        <p class="hint">{{ t([deal.autoAccept ? '自動接受' : '每組由你確認', limitLine(deal)].join('｜')) }}</p>
       </section>
 
-      <!-- What to do now, by the deal's stage. -->
-      <section v-if="holder" class="card deal__now">
-        <span class="section-label">{{ t('現在要做的事') }}</span>
-        <template v-if="holder.status === 'ORDERED'">
-          <p>{{ t(`已成單：${bookingLine(holder)}。行程、乘客確認和收款都在訂單裡。`) }}</p>
-          <RouterLink v-if="holder.orderId" class="button block" :to="`/app/orders/${holder.orderId}`">{{ t('打開訂單') }}</RouterLink>
-        </template>
-        <template v-else>
-          <p>{{ t(`${bookingLine(holder)} 已訂到。打開預約，按「這單我自己做」或「派給其他司機」成單。`) }}</p>
-          <RouterLink class="button block" :to="`/app/bookings/${holder.id}`">{{ t('打開預約，去成單') }}</RouterLink>
-        </template>
-      </section>
-
-      <section v-if="waiting.length && deal.state !== 'CANCELLED'" class="card deal__now deal__now--urgent">
-        <strong>{{ t(`${waiting.length} 組預約等你確認`) }}</strong>
-        <p>{{ t('打開一組預約成單，就是接受這一組；其他預約會自動婉拒。') }}</p>
-        <RouterLink v-for="booking in waiting" :key="booking.id" :to="`/app/bookings/${booking.id}`" class="deal__booking">
-          <span>{{ t(bookingLine(booking)) }}</span>
+      <section v-if="toAnswer.length" class="card deal__now deal__now--urgent">
+        <strong>{{ t(`${toAnswer.length} 組預約等你處理`) }}</strong>
+        <p>{{ t('打開一組，按「這單我自己做」或「派給其他司機」成單；每組各成一張單，不影響其他組。') }}</p>
+        <RouterLink v-for="booking in toAnswer" :key="booking.id" :to="`/app/bookings/${booking.id}`" class="deal__booking">
+          <span>
+            {{ t(bookingLine(booking)) }}
+            <small>{{ t(booking.status === 'ACCEPTED' ? '已訂到，等你成單' : '等你確認') }}</small>
+          </span>
           <span v-if="booking.unread" class="deal__dot" :aria-label="t('未讀')"></span>
         </RouterLink>
       </section>
@@ -140,21 +135,39 @@ onBeforeUnmount(() => {
         </div>
         <p class="hint">{{ t('分享圖適合朋友圈、小紅書這些不顯示連結預覽的地方，乘客掃碼就能預約。') }}</p>
       </section>
-      <section v-else-if="deal.state === 'EXPIRED'" class="card">
-        <p class="deal__line">{{ t('已過了最後的出發時間，乘客不能再預約。想再賣，可以發一個新的特價車。') }}</p>
+      <section v-else-if="deal.state !== 'CANCELLED'" class="card">
+        <p class="deal__line">
+          {{
+            t(
+              deal.state === 'FULL'
+                ? '已接滿，乘客暫時不能再預約；有人取消或你把「最多接幾組」改大，就會重新開放。'
+                : deal.state === 'CLOSED'
+                  ? '已關閉，不再接新的預約。已送出的預約照樣處理。'
+                  : '已過了最後的出發時間，乘客不能再預約。想再賣，可以發一個新的特價車。',
+            )
+          }}
+        </p>
+      </section>
+
+      <section v-if="ordered.length" class="card">
+        <span class="section-label">{{ t(`已成單（${ordered.length}）`) }}</span>
+        <RouterLink v-for="booking in ordered" :key="booking.id" :to="booking.orderId ? `/app/orders/${booking.orderId}` : `/app/bookings/${booking.id}`" class="deal__booking">
+          <span>{{ t(bookingLine(booking)) }}</span>
+          <span class="hint">{{ t('打開訂單') }}</span>
+        </RouterLink>
       </section>
 
       <details v-if="others.length" class="card deal__past">
-        <summary>{{ t(`其他預約（${others.length}）`) }}</summary>
+        <summary>{{ t(`已婉拒或取消（${others.length}）`) }}</summary>
         <RouterLink v-for="booking in others" :key="booking.id" :to="`/app/bookings/${booking.id}`" class="deal__booking">
           <span>{{ t(bookingLine(booking)) }}</span>
           <span class="hint">{{ t(BOOKING_STATUS[booking.status].driver) }}</span>
         </RouterLink>
       </details>
 
-      <section v-if="deal.state === 'OPEN' || canTakeDown" class="card deal__more">
-        <RouterLink v-if="deal.state === 'OPEN'" class="button secondary block" :to="`/app/deals/${deal.id}/edit`">{{ t('修改特價車') }}</RouterLink>
-        <button v-if="canTakeDown" class="deal__remove" type="button" :disabled="busy" @click="takeDown">{{ t('下架') }}</button>
+      <section v-if="live" class="card deal__more">
+        <RouterLink class="button secondary block" :to="`/app/deals/${deal.id}/edit`">{{ t('修改特價車') }}</RouterLink>
+        <button class="deal__remove" type="button" :disabled="busy" @click="close">{{ t('關閉，不再接預約') }}</button>
       </section>
 
       <DealCardSheet v-if="showCard" :deal="deal" @close="showCard = false" />
@@ -209,6 +222,28 @@ onBeforeUnmount(() => {
 }
 .deal__trip .hint {
   margin: var(--space-xs) 0 0;
+}
+.deal__counts {
+  display: flex;
+  gap: var(--space-lg);
+  margin: var(--space-sm) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-caption);
+}
+.deal__counts strong {
+  display: block;
+  color: var(--color-text);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.deal__booking .hint {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.deal__booking small {
+  display: block;
+  font-weight: 400;
+  opacity: 0.8;
 }
 .deal__now p {
   margin: var(--space-xs) 0 var(--space-md);

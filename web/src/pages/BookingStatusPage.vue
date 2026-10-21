@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
       </section>
 
       <section v-if="booking.quote && booking.status !== 'CANCELLED' && booking.status !== 'DECLINED'" class="card">
-        <span class="section-label">{{ booking.deal ? t('特價（整車）') : t('司機的報價') }}</span>
+        <span class="section-label">{{ booking.deal ? t('特價（包車）') : t('司機的報價') }}</span>
         <strong class="booking__price">{{ money(booking.quote) }}</strong>
         <p v-if="booking.quoteNote" class="booking__load">{{ t(booking.quoteNote) }}</p>
         <p class="hint">{{ t('車費由你和司機自行約定並直接支付給司機，平台不收款。') }}</p>

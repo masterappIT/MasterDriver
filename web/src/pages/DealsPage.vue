@@ -26,7 +26,7 @@ onMounted(async () => {
     <div v-if="error" class="notice error">{{ error }}</div>
     <RouterLink class="button block large deals__new" to="/app/deals/new">{{ t('發特價車') }}</RouterLink>
     <p v-if="deals && deals.length === 0" class="deals__empty">
-      {{ t('還沒有特價車。空車回程或冷門時段，定一個整車特價，把連結或分享圖發給乘客；有人預約，你挑一組成單。') }}
+      {{ t('還沒有特價車。定好路線、時段和每組的價錢，把連結或分享圖發給乘客；多少組客人都可以預約，每組各成一張單，你自己做或派到群裡。') }}
     </p>
     <RouterLink v-for="deal in deals ?? []" :key="deal.id" :to="`/app/deals/${deal.id}`" class="card deals__item">
       <div class="deals__top">
@@ -35,9 +35,9 @@ onMounted(async () => {
       </div>
       <div class="deals__route">{{ t(`${deal.origin} 至 ${deal.destination}`) }}</div>
       <div class="deals__meta">
-        <span>{{ t(`整車 ${money(deal.price)}`) }}</span>
-        <span v-if="deal.waiting && deal.state !== 'CANCELLED'" class="deals__waiting">{{ t(`${deal.waiting} 組預約等你確認`) }}</span>
-        <span v-else-if="deal.bookings.length">{{ t(`${deal.bookings.length} 組預約`) }}</span>
+        <span>{{ t(`包車 ${money(deal.price)}`) }}</span>
+        <span v-if="deal.waiting + deal.toOrder && deal.state !== 'CANCELLED'" class="deals__waiting">{{ t(`${deal.waiting + deal.toOrder} 組等你處理`) }}</span>
+        <span v-else-if="deal.bookings.length">{{ t(`${deal.bookings.length} 組預約｜${deal.ordered} 張已成單`) }}</span>
       </div>
     </RouterLink>
   </div>

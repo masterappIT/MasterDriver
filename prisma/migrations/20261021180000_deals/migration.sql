@@ -1,12 +1,13 @@
--- 特價車 (2026-10-21): a trip a driver offers at their own price, whole car, to one party who
--- books it from the driver's link (/d/{code}); its bookings are BookingRequest rows with dealId.
+-- 特價車 (2026-10-21, 2026-10-22): a trip a driver offers at their own price, whole car, for each
+-- party; any number of parties book it from the driver's link (/d/{code}), each its own order,
+-- until the driver closes it. Its bookings are BookingRequest rows with dealId.
 -- CreateEnum
-CREATE TYPE "DealStatus" AS ENUM ('OPEN', 'SOLD', 'CANCELLED');
+CREATE TYPE "DealStatus" AS ENUM ('OPEN', 'CLOSED', 'CANCELLED');
 
 -- AlterEnum
 
 ALTER TYPE "NotificationKind" ADD VALUE 'DEAL_BOOKING_NEW';
-ALTER TYPE "NotificationKind" ADD VALUE 'DEAL_SOLD';
+ALTER TYPE "NotificationKind" ADD VALUE 'DEAL_BOOKING_ACCEPTED';
 
 -- AlterTable
 ALTER TABLE "BookingRequest" ADD COLUMN     "dealId" TEXT;
@@ -27,8 +28,9 @@ CREATE TABLE "Deal" (
     "maxPassengers" INTEGER,
     "maxLuggage" INTEGER,
     "notes" TEXT,
+    "maxBookings" INTEGER,
     "autoAccept" BOOLEAN NOT NULL DEFAULT false,
-    "soldAt" TIMESTAMP(3),
+    "closedAt" TIMESTAMP(3),
     "cancelledAt" TIMESTAMP(3),
     "staffReason" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -1,8 +1,11 @@
 import type { CarpoolCar } from './carpool';
 import { pickup, type Money } from './format';
 
-/** 特價車 (docs/DECISIONS.md, 2026-10-21): a trip a driver offers at their own price, whole car, to one party. */
-export type DealState = 'OPEN' | 'SOLD' | 'CANCELLED' | 'EXPIRED';
+/**
+ * 特價車 (docs/DECISIONS.md, 2026-10-21 and 2026-10-22): a trip a driver offers at their own price,
+ * whole car, for each party; like a product, any number of parties book it, each its own order.
+ */
+export type DealState = 'OPEN' | 'FULL' | 'CLOSED' | 'CANCELLED' | 'EXPIRED';
 
 /** What the deal link and the driver's page both say about the trip and the price. */
 export interface DealTrip {
@@ -42,12 +45,20 @@ export interface DriverDeal extends DealTrip {
   code: string;
   url: string;
   autoAccept: boolean;
-  soldAt: string | null;
+  /** 最多接幾組; null: no limit. */
+  maxBookings: number | null;
+  closedAt: string | null;
   cancelledAt: string | null;
-  /** Why the platform's staff took it down; null when the driver did. */
+  /** Why the platform's staff took it down. */
   staffReason: string | null;
   createdAt: string;
+  /** Waiting for the driver to accept. */
   waiting: number;
+  /** Booked (自動接受), waiting for their order. */
+  toOrder: number;
+  ordered: number;
+  /** Places left under maxBookings; null: no limit. */
+  left: number | null;
   unread: boolean;
   bookings: DealBookingLine[];
   car: { name: string | null; vehicleType: string | null; seats: number | null; photoUrl: string | null };
@@ -71,7 +82,8 @@ export function dealLimits(deal: Pick<DealTrip, 'maxPassengers' | 'maxLuggage'>)
 
 export const DEAL_STATE: Record<DealState, { driver: string; passenger: string; tone: 'waiting' | 'passenger' | 'done' | 'closed' }> = {
   OPEN: { driver: '開放預約', passenger: '可以預約', tone: 'passenger' },
-  SOLD: { driver: '已訂出', passenger: '已被訂走', tone: 'done' },
-  CANCELLED: { driver: '已下架', passenger: '已下架', tone: 'closed' },
+  FULL: { driver: '已接滿', passenger: '已接滿', tone: 'done' },
+  CLOSED: { driver: '已關閉', passenger: '已關閉', tone: 'closed' },
+  CANCELLED: { driver: '平台已下架', passenger: '已下架', tone: 'closed' },
   EXPIRED: { driver: '已過期', passenger: '已過期', tone: 'closed' },
 };

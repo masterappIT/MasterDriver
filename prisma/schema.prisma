@@ -1179,8 +1179,8 @@ enum NotificationKind {
   CARPOOL_CLOSED
   /// To the driver who put up a 特價車: a passenger booked it and waits for them.
   DEAL_BOOKING_NEW
-  /// To the driver: the first passenger booked it and got it at once (自動接受第一組).
-  DEAL_SOLD
+  /// To the driver: a passenger booked it and has it at once (自動接受); the order is the driver's to make.
+  DEAL_BOOKING_ACCEPTED
   /// 客服 answered; one line until the user reads it, however many messages.
   SUPPORT_REPLY
 }
@@ -1370,18 +1370,20 @@ model CarpoolSeat {
 }
 
 // ---------------------------------------------------------------------------
-// 特價車 (docs/DECISIONS.md, 2026-10-21): a trip a driver offers at a price of their own, whole
-// car, to one party of passengers who book it from the driver's link. Bookings are
-// BookingRequest rows with dealId, so the driver answers them where they answer 名片頁 requests.
-// The platform never lists, recommends or prices a deal.
+// 特價車 (docs/DECISIONS.md, 2026-10-21, 2026-10-22): a trip a driver offers at a price of their
+// own, whole car, for each party; like a product, any number of parties book it from the driver's
+// link, each its own order, until the driver closes it. Bookings are BookingRequest rows with
+// dealId, so the driver answers them where they answer 名片頁 requests. The platform never
+// lists, recommends or prices a deal.
 // ---------------------------------------------------------------------------
 
 enum DealStatus {
-  /// Takes bookings until its last pickup time; past that it reads as expired.
+  /// Takes bookings until its last pickup time (then it reads as expired), or while fewer than
+  /// maxBookings parties hold one (then it reads as full).
   OPEN
-  /// One party has it: booked with 自動接受第一組, or made into an order.
-  SOLD
-  /// 下架 by the driver, or by the platform's staff after a complaint.
+  /// 關閉 by the driver: no new bookings; the ones sent are answered as before.
+  CLOSED
+  /// 下架 by the platform's staff after a complaint; the bookings still waiting are declined.
   CANCELLED
 }
 
@@ -1391,13 +1393,13 @@ model Deal {
   code                String     @unique
   driverId            String
   status              DealStatus @default(OPEN)
-  /// The pickup time, or the start of 時段 when pickupUntil is set.
+  /// The pickup time, or the start of 時段 when pickupUntil is set; each party picks theirs in it.
   pickupAt            DateTime
   /// 時段: the passenger picks a time from pickupAt to this; null: pickupAt exactly.
   pickupUntil         DateTime?
   origin              String
   destination         String
-  /// 整車特價, set by the driver; the platform neither suggests nor takes it.
+  /// 包車特價 a party, set by the driver; the platform neither suggests nor takes it.
   priceMinor          Int
   currency            Currency   @default(CNY)
   /// 原價, shown struck through; the driver's own figure, above the price.
@@ -1406,11 +1408,13 @@ model Deal {
   maxPassengers       Int?
   maxLuggage          Int?
   notes               String?
-  /// 自動接受第一組: the first booking gets it at once; otherwise the driver picks one.
+  /// 最多接幾組 (庫存): parties waiting, booked or ordered count; null: no limit.
+  maxBookings         Int?
+  /// 自動接受: each booking is accepted as it comes; otherwise the driver answers each.
   autoAccept          Boolean    @default(false)
-  soldAt              DateTime?
+  closedAt            DateTime?
   cancelledAt         DateTime?
-  /// Why the platform's staff took it down; null when the driver did.
+  /// Why the platform's staff took it down.
   staffReason         String?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt

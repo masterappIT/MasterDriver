@@ -1,6 +1,6 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { DEAL_MAX_WINDOW_HOURS, type DealBookingCreate, type DealCreate, type DealUpdate } from '@masterdriver/shared';
-import { Prisma, type DealStatus } from '../../generated/prisma';
+import { Prisma, type BookingStatus, type DealStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
@@ -10,7 +10,7 @@ import { telemetry } from '../observability/telemetry';
 import { PrismaService } from '../prisma.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
-import { HOLDING, lockDeal, takeDown } from './deal-hold';
+import { ACTIVE, lockDeal, takeDown } from './deal-hold';
 import { dealShareText } from './deal-share-text';
 
 const CODE_LENGTH = 10;
@@ -42,19 +42,26 @@ type DealRow = Prisma.DealGetPayload<{ include: typeof dealInclude }>;
 
 /** The last time a deal can leave: the end of its 時段, or its pickup time. */
 const lastPickup = (deal: { pickupAt: Date; pickupUntil: Date | null }) => deal.pickupUntil ?? deal.pickupAt;
+const isActive = (booking: { status: BookingStatus }) => ACTIVE.includes(booking.status);
 
-/** What a deal shows as: EXPIRED once its last pickup time has passed with nobody holding it. */
-export type DealState = DealStatus | 'EXPIRED';
-export function dealState(deal: { status: DealStatus; pickupAt: Date; pickupUntil: Date | null }, now: Date): DealState {
-  return deal.status === 'OPEN' && lastPickup(deal) <= now ? 'EXPIRED' : deal.status;
+/**
+ * What a deal shows as. An open one reads EXPIRED once its last pickup time has passed, and FULL
+ * while 最多接幾組 parties hold a booking (one cancelled or declined frees its place).
+ */
+export type DealState = DealStatus | 'FULL' | 'EXPIRED';
+export function dealState(deal: { status: DealStatus; pickupAt: Date; pickupUntil: Date | null; maxBookings: number | null }, active: number, now: Date): DealState {
+  if (deal.status !== 'OPEN') return deal.status;
+  if (lastPickup(deal) <= now) return 'EXPIRED';
+  return deal.maxBookings !== null && active >= deal.maxBookings ? 'FULL' : 'OPEN';
 }
 
 /**
- * 特價車: a driver offers a trip at their own price, whole car, and sends its link to passengers
- * themselves. A passenger books it without an account; the booking is a 名片頁 request
- * (BookingRequest with dealId) at the deal's price, so the driver answers it in 等我報價 and makes
- * it an order the same way. One car, one party: making the order (or 自動接受第一組) gives the deal
- * to that party and declines the rest. The platform never lists, recommends or prices a deal.
+ * 特價車: a driver offers a trip at their own price, whole car, for each party, and sends its link
+ * to passengers themselves. Like a product, any number of parties book it without an account,
+ * each at its own time in the deal's 時段, until the driver closes it or 最多接幾組 is reached.
+ * Each booking is a 名片頁 request (BookingRequest with dealId) at the deal's price, so the driver
+ * answers it in 等我報價 and makes it its own order the usual way: drives it, or puts it out to
+ * the group. The platform never lists, recommends or prices a deal.
  */
 @Injectable()
 export class DealsService {
@@ -92,6 +99,7 @@ export class DealsService {
             maxPassengers: input.maxPassengers ?? null,
             maxLuggage: input.maxLuggage ?? null,
             notes: input.notes ?? null,
+            maxBookings: input.maxBookings ?? null,
             autoAccept: input.autoAccept,
             createdAt: now,
           },
@@ -123,7 +131,13 @@ export class DealsService {
       const found = await tx.deal.findFirst({ where: { id, driverId: userId }, select: { id: true } });
       if (!found) throw this.notFound();
       const deal = await lockDeal(tx, id);
-      if (dealState(deal, now) !== 'OPEN') throw this.notOpen();
+      if (deal.status !== 'OPEN' || lastPickup(deal) <= now) throw this.notOpen();
+      if (input.maxBookings) {
+        const active = await tx.bookingRequest.count({ where: { dealId: id, status: { in: ACTIVE } } });
+        if (input.maxBookings < active) {
+          throw apiError(HttpStatus.CONFLICT, 'DEAL_MAX_BELOW_BOOKED', 'Fewer places than parties already booked', { booked: active });
+        }
+      }
       const pickupAt = input.pickupAt ? new Date(input.pickupAt) : deal.pickupAt;
       const pickupUntil = input.pickupUntil === undefined ? deal.pickupUntil : input.pickupUntil ? new Date(input.pickupUntil) : null;
       if (input.pickupAt !== undefined || input.pickupUntil !== undefined) this.checkTimes(pickupAt, pickupUntil, now);
@@ -146,6 +160,7 @@ export class DealsService {
           ...(input.maxPassengers !== undefined ? { maxPassengers: input.maxPassengers } : {}),
           ...(input.maxLuggage !== undefined ? { maxLuggage: input.maxLuggage } : {}),
           ...(input.notes !== undefined ? { notes: input.notes || null } : {}),
+          ...(input.maxBookings !== undefined ? { maxBookings: input.maxBookings } : {}),
           ...(input.autoAccept !== undefined ? { autoAccept: input.autoAccept } : {}),
         },
       });
@@ -153,12 +168,14 @@ export class DealsService {
     return this.get(userId, id, now);
   }
 
-  /** 下架: no more bookings; the parties still waiting are declined. Once it is an order, the order is cancelled instead. */
-  async cancel(userId: string, id: string, now = new Date()) {
-    const found = await this.prisma.deal.findFirst({ where: { id, driverId: userId }, select: { id: true } });
-    if (!found) throw this.notFound();
-    await this.prisma.$transaction((tx) => takeDown(tx, id, now, null));
-    telemetry.domain('deal.cancel');
+  /** 關閉: no new bookings. The ones already sent stay, for the driver to make orders of or decline. */
+  async close(userId: string, id: string, now = new Date()) {
+    const closed = await this.prisma.deal.updateMany({ where: { id, driverId: userId, status: 'OPEN' }, data: { status: 'CLOSED', closedAt: now } });
+    if (closed.count === 0) {
+      if ((await this.prisma.deal.count({ where: { id, driverId: userId } })) === 0) throw this.notFound();
+      throw this.notOpen();
+    }
+    telemetry.domain('deal.close');
     return this.get(userId, id, now);
   }
 
@@ -170,7 +187,7 @@ export class DealsService {
     return rows.map((row) => ({
       id: row.id,
       url: this.url(row.code),
-      state: dealState(row, now),
+      state: dealState(row, row.bookings.filter(isActive).length, now),
       pickupAt: row.pickupAt.toISOString(),
       pickupUntil: row.pickupUntil?.toISOString() ?? null,
       origin: row.origin,
@@ -178,6 +195,8 @@ export class DealsService {
       price: money(row.priceMinor, row.currency),
       originalPrice: money(row.originalPriceMinor, row.currency),
       bookings: row.bookings.length,
+      ordered: row.bookings.filter((booking) => booking.status === 'ORDERED').length,
+      maxBookings: row.maxBookings,
       staffReason: row.staffReason,
       createdAt: row.createdAt.toISOString(),
     }));
@@ -212,7 +231,7 @@ export class DealsService {
 
   /**
    * A passenger books the deal. It becomes a request in the driver's 等我報價 at the deal's price;
-   * with 自動接受第一組 the first one gets the deal at once. The passenger follows it on /b/{code}.
+   * with 自動接受 it is accepted at once. The passenger follows it on /b/{code}.
    */
   async createBooking(code: string, input: DealBookingCreate, ip: string | undefined, now = new Date()) {
     const found = await this.prisma.deal.findUnique({ where: { code }, select: { id: true, driverId: true } });
@@ -229,7 +248,10 @@ export class DealsService {
 
     const { booking, deal } = await this.prisma.$transaction(async (tx) => {
       const deal = await lockDeal(tx, found.id);
-      if (dealState(deal, now) !== 'OPEN') throw this.notOpen();
+      const active = await tx.bookingRequest.count({ where: { dealId: deal.id, status: { in: ACTIVE } } });
+      const state = dealState(deal, active, now);
+      if (state === 'FULL') throw apiError(HttpStatus.CONFLICT, 'DEAL_FULL', 'This deal has all the bookings it takes');
+      if (state !== 'OPEN') throw this.notOpen();
       // Without a 時段 the deal's own time stands, whatever the page sent.
       const pickupAt = deal.pickupUntil ? new Date(input.pickupAt) : deal.pickupAt;
       if (deal.pickupUntil && (pickupAt < deal.pickupAt || pickupAt > deal.pickupUntil)) {
@@ -242,10 +264,11 @@ export class DealsService {
       if (deal.maxLuggage !== null && input.luggage > deal.maxLuggage) {
         throw apiError(HttpStatus.BAD_REQUEST, 'DEAL_TOO_MUCH_LUGGAGE', 'More luggage than this deal takes', { max: deal.maxLuggage });
       }
-      const mine = await tx.bookingRequest.count({
-        where: { dealId: deal.id, passengerContact: input.passengerContact, status: { in: ['PENDING', ...HOLDING] } },
+      // The same passenger may book it again for another time, not twice for the same one.
+      const twice = await tx.bookingRequest.count({
+        where: { dealId: deal.id, passengerContact: input.passengerContact, pickupAt, status: { in: ACTIVE } },
       });
-      if (mine > 0) throw apiError(HttpStatus.CONFLICT, 'DEAL_ALREADY_BOOKED', 'This phone already booked this deal');
+      if (twice > 0) throw apiError(HttpStatus.CONFLICT, 'DEAL_ALREADY_BOOKED', 'This phone already booked this deal for this time');
       const booking = await tx.bookingRequest.create({
         data: {
           pageId: page.id,
@@ -271,10 +294,9 @@ export class DealsService {
         },
         select: { id: true, code: true, origin: true, destination: true, pickupAt: true },
       });
-      if (deal.autoAccept) await tx.deal.update({ where: { id: deal.id }, data: { status: 'SOLD', soldAt: now } });
       return { booking, deal };
     });
-    await this.notifications.send({ userId: deal.driverId, kind: deal.autoAccept ? 'DEAL_SOLD' : 'DEAL_BOOKING_NEW', group: 'BOOKINGS', booking });
+    await this.notifications.send({ userId: deal.driverId, kind: deal.autoAccept ? 'DEAL_BOOKING_ACCEPTED' : 'DEAL_BOOKING_NEW', group: 'BOOKINGS', booking });
     telemetry.domain('deal.booking');
     return { code: booking.code, url: `${this.config.publicBaseUrl}/b/${booking.code}` };
   }
@@ -295,7 +317,7 @@ export class DealsService {
   /** What both the driver and the passenger see of the trip and the price. */
   private tripFields(deal: DealRow, now: Date) {
     return {
-      state: dealState(deal, now),
+      state: dealState(deal, deal.bookings.filter(isActive).length, now),
       pickupAt: deal.pickupAt.toISOString(),
       pickupUntil: deal.pickupUntil?.toISOString() ?? null,
       origin: deal.origin,
@@ -343,12 +365,17 @@ export class DealsService {
       url,
       ...this.tripFields(deal, now),
       autoAccept: deal.autoAccept,
-      soldAt: deal.soldAt?.toISOString() ?? null,
+      maxBookings: deal.maxBookings,
+      closedAt: deal.closedAt?.toISOString() ?? null,
       cancelledAt: deal.cancelledAt?.toISOString() ?? null,
       staffReason: deal.staffReason,
       createdAt: deal.createdAt.toISOString(),
-      /** Bookings still waiting on the driver. */
+      /** Bookings waiting for the driver to accept; booked ones (自動接受) waiting for their order; orders made. */
       waiting: deal.bookings.filter((booking) => booking.status === 'PENDING').length,
+      toOrder: deal.bookings.filter((booking) => booking.status === 'ACCEPTED').length,
+      ordered: deal.bookings.filter((booking) => booking.status === 'ORDERED').length,
+      /** Places left under 最多接幾組; null: no limit. */
+      left: deal.maxBookings === null ? null : Math.max(0, deal.maxBookings - deal.bookings.filter(isActive).length),
       unread: deal.bookings.some((booking) => booking.driverUnread && (booking.status === 'PENDING' || booking.status === 'ACCEPTED')),
       bookings: deal.bookings.map((booking) => ({
         id: booking.id,

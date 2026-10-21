@@ -122,7 +122,7 @@ const NOTIFICATION_KIND: Record<string, string> = {
   CARPOOL_FORMED: '拼車已成行',
   CARPOOL_CLOSED: '拼車已截止報位',
   DEAL_BOOKING_NEW: '特價車有人預約',
-  DEAL_SOLD: '特價車已被訂走',
+  DEAL_BOOKING_ACCEPTED: '特價車有人訂了（自動接受）',
   SUPPORT_REPLY: '客服回覆',
 };
 
@@ -423,7 +423,7 @@ const ORDERS_SHOWN = 10;
 interface DealRow {
   id: string;
   url: string;
-  state: 'OPEN' | 'SOLD' | 'CANCELLED' | 'EXPIRED';
+  state: 'OPEN' | 'FULL' | 'CLOSED' | 'CANCELLED' | 'EXPIRED';
   pickupAt: string;
   pickupUntil: string | null;
   origin: string;
@@ -431,12 +431,15 @@ interface DealRow {
   price: { amount: number; currency: string };
   originalPrice: { amount: number; currency: string } | null;
   bookings: number;
+  ordered: number;
+  maxBookings: number | null;
   staffReason: string | null;
   createdAt: string;
 }
 const DEAL_STATE: Record<DealRow['state'], { label: string; tone: string }> = {
   OPEN: { label: '開放預約', tone: 'pending' },
-  SOLD: { label: '已訂出', tone: 'completed' },
+  FULL: { label: '已接滿', tone: 'completed' },
+  CLOSED: { label: '司機已關閉', tone: '' },
   CANCELLED: { label: '已下架', tone: 'cancelled' },
   EXPIRED: { label: '已過期', tone: '' },
 };
@@ -453,7 +456,7 @@ async function loadDeals() {
 async function cancelDeal(deal: DealRow) {
   const reason = await ask({
     title: '下架這個特價車',
-    text: '乘客不能再預約，還在等的預約會婉拒；司機看得到你寫的原因。已成單的不能下架，請取消那張單。',
+    text: '乘客不能再預約，還在等的預約會婉拒；已成單的照常進行，要取消請到那張單。司機看得到你寫的原因。',
     reason: '原因（司機看得到，也會記在操作紀錄）',
     confirm: '下架',
     danger: true,
@@ -696,7 +699,7 @@ onBeforeUnmount(() => {
         <div v-else class="mt-history-wrap">
           <table class="mt-history">
             <thead>
-              <tr><th>出發時間</th><th>路線</th><th>狀態</th><th class="num">整車特價</th><th class="num">預約</th><th></th></tr>
+              <tr><th>出發時間</th><th>路線</th><th>狀態</th><th class="num">每組特價</th><th class="num">預約／成單</th><th></th></tr>
             </thead>
             <tbody>
               <tr v-for="deal in deals" :key="deal.id">
@@ -707,9 +710,9 @@ onBeforeUnmount(() => {
                 </td>
                 <td><span class="mt-status" :class="DEAL_STATE[deal.state].tone">{{ DEAL_STATE[deal.state].label }}</span></td>
                 <td class="num">{{ money(deal.price) }}<template v-if="deal.originalPrice"><br /><s class="mt-muted">{{ money(deal.originalPrice) }}</s></template></td>
-                <td class="num">{{ deal.bookings }}</td>
+                <td class="num">{{ deal.bookings }}／{{ deal.ordered }}<template v-if="deal.maxBookings"><br /><span class="mt-muted">最多 {{ deal.maxBookings }} 組</span></template></td>
                 <td>
-                  <button v-if="can.write() && (deal.state === 'OPEN' || deal.state === 'SOLD')" type="button" class="mt-action is-danger" @click="cancelDeal(deal)">下架</button>
+                  <button v-if="can.write() && deal.state !== 'CANCELLED'" type="button" class="mt-action is-danger" @click="cancelDeal(deal)">下架</button>
                 </td>
               </tr>
             </tbody>

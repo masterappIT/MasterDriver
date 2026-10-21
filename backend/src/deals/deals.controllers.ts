@@ -39,10 +39,11 @@ export class DealsController {
     return this.deals.update(user.id, id, body);
   }
 
-  @Post(':id/cancel')
+  /** 關閉: no new bookings; the ones sent are still answered. */
+  @Post(':id/close')
   @HttpCode(200)
-  cancel(@CurrentUser() user: SessionUser, @Param('id') id: string) {
-    return this.deals.cancel(user.id, id);
+  close(@CurrentUser() user: SessionUser, @Param('id') id: string) {
+    return this.deals.close(user.id, id);
   }
 }
 

@@ -34,9 +34,9 @@ export function formatDealTime(deal: Pick<ShareDeal, 'pickupAt' | 'pickupUntil'>
   return day(start) === day(end) ? `${start}–${end.slice(day(end).length)}` : `${start} – ${end}`;
 }
 
-/** 「整車 RMB¥350（原價 RMB¥500）」 */
+/** 「包車 RMB¥350（原價 RMB¥500）」 */
 export function dealPriceText(deal: Pick<ShareDeal, 'priceMinor' | 'currency' | 'originalPriceMinor'>) {
-  const price = `整車 ${formatPrice(deal.priceMinor, deal.currency)}`;
+  const price = `包車 ${formatPrice(deal.priceMinor, deal.currency)}`;
   return deal.originalPriceMinor !== null ? `${price}（原價 ${formatPrice(deal.originalPriceMinor, deal.currency)}）` : price;
 }
 

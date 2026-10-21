@@ -70,12 +70,14 @@ test('a deal needs driver details and a time ahead, and its text and link are re
   const owner = await createDriver(ctx, '陳師傅');
   await rejectsWith(ctx.deals.create(owner, deal({ pickupAt: iso(inHours(-1)) })), 'DEAL_IN_THE_PAST');
   assert.throws(() => deal({ originalPrice: 300 }), /DEAL_ORIGINAL_NOT_ABOVE/);
-  assert.throws(() => deal({ pickupUntil: iso(inHours(50)) }), /DEAL_WINDOW_INVALID/);
+  assert.throws(() => deal({ pickupUntil: iso(inHours(24 + 8 * 24)) }), /DEAL_WINDOW_INVALID/, 'a 時段 is at most 7 days');
+  assert.ok(deal({ pickupUntil: iso(inHours(24 + 6 * 24)) }), 'a week-long 時段 is fine');
 
   const made = await ctx.deals.create(owner, deal());
   assert.equal(made.state, 'OPEN');
+  assert.equal(made.left, null, 'no limit unless 最多接幾組 is set');
   assert.match(made.url, /^https:\/\/md\.test\/d\/[A-Za-z0-9]{10}$/);
-  assert.match(made.share.wechat, /^【特價車】.+ 深圳灣口岸 → 香港國際機場\n整車 RMB¥350（原價 RMB¥500）\n最多 6 人、6 件行李\n陳師傅的特價車，點開預約，不用註冊：https/);
+  assert.match(made.share.wechat, /^【特價車】.+ 深圳灣口岸 → 香港國際機場\n包車 RMB¥350（原價 RMB¥500）\n最多 6 人、6 件行李\n陳師傅的特價車，點開預約，不用註冊：https/);
   assert.ok(await ctx.prisma.profilePage.findUnique({ where: { userId: owner } }), 'its bookings are kept under the driver’s 名片頁');
 });
 
@@ -104,46 +106,61 @@ test('a booking waits for the driver at the deal price, which cannot be quoted a
   assert.equal(notices.items[0].bookingId, listed.id);
 });
 
-test('making the order from one booking gives that party the deal and declines the others', async () => {
+test('like a product, any number of parties book it, each made into its own order', async () => {
   const owner = await createDriver(ctx);
-  const made = await ctx.deals.create(owner, deal());
-  const first = await ctx.deals.createBooking(made.code, booking(), '10.0.0.1');
-  const second = await ctx.deals.createBooking(made.code, booking(), '10.0.0.2');
+  const made = await ctx.deals.create(owner, deal({ pickupAt: iso(inHours(20)), pickupUntil: iso(inHours(20 + 5 * 24)) }));
+  await rejectsWith(ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(20 + 6 * 24)) }), '10.0.0.1'), 'DEAL_TIME_OUTSIDE');
+  const first = await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(22)) }), '10.0.0.1');
+  const second = await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(50)) }), '10.0.0.2');
+  // The same passenger may book it again for another time.
+  const firstRow = await ctx.prisma.bookingRequest.findUniqueOrThrow({ where: { code: first.code } });
+  await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(70)), passengerContact: firstRow.passengerContact }), '10.0.0.3');
   const secondId = (await ctx.prisma.bookingRequest.findUniqueOrThrow({ where: { code: second.code } })).id;
 
   const order = await driveMyself(owner, secondId);
   assert.equal(order.selfDrive, true);
   assert.deepEqual(order.passengerPrice, { amount: 350, currency: 'CNY' });
-  assert.equal((await ctx.deals.get(owner, made.id)).state, 'SOLD');
   assert.equal((await ctx.profilePages.passengerBooking(second.code)).status, 'ORDERED');
-  assert.equal((await ctx.profilePages.passengerBooking(first.code)).status, 'DECLINED');
-  await rejectsWith(ctx.deals.createBooking(made.code, booking(), '10.0.0.3'), 'DEAL_NOT_OPEN');
-  await rejectsWith(ctx.deals.cancel(owner, made.id), 'DEAL_ORDERED');
+  assert.equal((await ctx.profilePages.passengerBooking(first.code)).status, 'PENDING', 'the others are not touched');
+  await driveMyself(owner, firstRow.id);
+  const view = await ctx.deals.get(owner, made.id);
+  assert.equal(view.state, 'OPEN', 'it keeps taking bookings');
+  assert.equal(view.ordered, 2);
+  assert.equal(view.waiting, 1);
+  await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(90)) }), '10.0.0.4');
 });
 
-test('自動接受第一組: the first booking gets the deal at once; letting go of it opens the deal again', async () => {
-  const owner = await createDriver(ctx);
-  const made = await ctx.deals.create(owner, deal({ autoAccept: true, pickupAt: iso(inHours(20)), pickupUntil: iso(inHours(24)) }));
-  await rejectsWith(ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(25)) }), '10.0.0.1'), 'DEAL_TIME_OUTSIDE');
-
-  const sent = await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(22)) }), '10.0.0.1');
-  assert.equal((await ctx.profilePages.passengerBooking(sent.code)).status, 'ACCEPTED');
-  assert.equal((await ctx.deals.get(owner, made.id)).state, 'SOLD');
-  assert.equal((await ctx.deals.publicDeal(made.code)).state, 'SOLD');
-  await rejectsWith(ctx.deals.createBooking(made.code, booking(), '10.0.0.2'), 'DEAL_NOT_OPEN');
-  assert.equal((await ctx.notifications.list(owner)).items[0].kind, 'DEAL_SOLD');
-
-  await ctx.profilePages.passengerCancel(sent.code);
-  assert.equal((await ctx.deals.get(owner, made.id)).state, 'OPEN', 'the passenger let go of it');
-  const again = await ctx.deals.createBooking(made.code, booking({ pickupAt: iso(inHours(21)) }), '10.0.0.2');
-  const againId = (await ctx.prisma.bookingRequest.findUniqueOrThrow({ where: { code: again.code } })).id;
-  await ctx.profilePages.decline(owner, againId);
-  assert.equal((await ctx.deals.get(owner, made.id)).state, 'OPEN', 'the driver declined the party that had it');
-});
-
-test('two passengers booking at once with 自動接受第一組: exactly one gets the deal', async () => {
+test('自動接受: each booking is accepted as it comes, and the deal stays open', async () => {
   const owner = await createDriver(ctx);
   const made = await ctx.deals.create(owner, deal({ autoAccept: true }));
+  const first = await ctx.deals.createBooking(made.code, booking(), '10.0.0.1');
+  const second = await ctx.deals.createBooking(made.code, booking(), '10.0.0.2');
+  assert.equal((await ctx.profilePages.passengerBooking(first.code)).status, 'ACCEPTED');
+  assert.equal((await ctx.profilePages.passengerBooking(second.code)).status, 'ACCEPTED');
+  const view = await ctx.deals.get(owner, made.id);
+  assert.equal(view.state, 'OPEN');
+  assert.equal(view.toOrder, 2);
+  assert.equal((await ctx.notifications.list(owner)).items[0].kind, 'DEAL_BOOKING_ACCEPTED');
+});
+
+test('最多接幾組: full once that many parties hold a booking; one let go frees its place', async () => {
+  const owner = await createDriver(ctx);
+  const made = await ctx.deals.create(owner, deal({ maxBookings: 2 }));
+  const first = await ctx.deals.createBooking(made.code, booking(), '10.0.0.1');
+  await ctx.deals.createBooking(made.code, booking(), '10.0.0.2');
+  assert.equal((await ctx.deals.publicDeal(made.code)).state, 'FULL');
+  assert.equal((await ctx.deals.get(owner, made.id)).left, 0);
+  await rejectsWith(ctx.deals.createBooking(made.code, booking(), '10.0.0.3'), 'DEAL_FULL');
+  await rejectsWith(ctx.deals.update(owner, made.id, { maxBookings: 1 }), 'DEAL_MAX_BELOW_BOOKED');
+
+  await ctx.profilePages.passengerCancel(first.code);
+  assert.equal((await ctx.deals.publicDeal(made.code)).state, 'OPEN');
+  await ctx.deals.createBooking(made.code, booking(), '10.0.0.3');
+});
+
+test('two passengers booking the last place at once: exactly one gets it', async () => {
+  const owner = await createDriver(ctx);
+  const made = await ctx.deals.create(owner, deal({ maxBookings: 1 }));
   const race = await Promise.allSettled([
     ctx.deals.createBooking(made.code, booking(), '10.0.0.1'),
     ctx.deals.createBooking(made.code, booking(), '10.0.0.2'),
@@ -151,31 +168,46 @@ test('two passengers booking at once with 自動接受第一組: exactly one get
   assert.equal(race.filter((result) => result.status === 'fulfilled').length, 1);
 });
 
-test('下架 declines the parties still waiting; the platform’s staff can take one down with a reason', async () => {
+test('關閉 stops new bookings; the ones sent are still made into orders', async () => {
   const owner = await createDriver(ctx);
   const made = await ctx.deals.create(owner, deal());
   const sent = await ctx.deals.createBooking(made.code, booking(), '10.0.0.1');
-  const down = await ctx.deals.cancel(owner, made.id);
-  assert.equal(down.state, 'CANCELLED');
-  assert.equal((await ctx.profilePages.passengerBooking(sent.code)).status, 'DECLINED');
-  await rejectsWith(ctx.deals.cancel(owner, made.id), 'DEAL_CANCELLED');
+  const closed = await ctx.deals.close(owner, made.id);
+  assert.equal(closed.state, 'CLOSED');
+  await rejectsWith(ctx.deals.createBooking(made.code, booking(), '10.0.0.2'), 'DEAL_NOT_OPEN');
+  await rejectsWith(ctx.deals.close(owner, made.id), 'DEAL_NOT_OPEN');
   await rejectsWith(ctx.deals.update(owner, made.id, { notes: '改一改' }), 'DEAL_NOT_OPEN');
+  assert.equal((await ctx.profilePages.passengerBooking(sent.code)).status, 'PENDING');
+  await driveMyself(owner, (await ctx.prisma.bookingRequest.findUniqueOrThrow({ where: { code: sent.code } })).id);
+  assert.equal((await ctx.profilePages.passengerBooking(sent.code)).status, 'ORDERED');
+});
 
-  const other = await ctx.deals.create(owner, deal());
-  await ctx.deals.staffCancel(owner, other.id, '內容不實');
+test('the platform’s staff take one down with a reason: waiting parties are declined, orders stay', async () => {
+  const owner = await createDriver(ctx);
+  const made = await ctx.deals.create(owner, deal());
+  const ordered = await ctx.deals.createBooking(made.code, booking(), '10.0.0.1');
+  const waiting = await ctx.deals.createBooking(made.code, booking(), '10.0.0.2');
+  await driveMyself(owner, (await ctx.prisma.bookingRequest.findUniqueOrThrow({ where: { code: ordered.code } })).id);
+
+  await ctx.deals.staffCancel(owner, made.id, '內容不實');
+  assert.equal((await ctx.profilePages.passengerBooking(waiting.code)).status, 'DECLINED');
+  assert.equal((await ctx.profilePages.passengerBooking(ordered.code)).status, 'ORDERED');
   const [listed] = await ctx.deals.staffList(owner);
   assert.equal(listed.state, 'CANCELLED');
+  assert.equal(listed.ordered, 1);
   assert.equal(listed.staffReason, '內容不實');
-  assert.equal((await ctx.deals.get(owner, other.id)).staffReason, '內容不實');
+  assert.equal((await ctx.deals.get(owner, made.id)).staffReason, '內容不實');
+  await rejectsWith(ctx.deals.staffCancel(owner, made.id, '再一次'), 'DEAL_CANCELLED');
 });
 
 test('changes apply to new bookings; one sent before keeps its time and price', async () => {
   const owner = await createDriver(ctx);
   const made = await ctx.deals.create(owner, deal());
   const sent = await ctx.deals.createBooking(made.code, booking(), '10.0.0.1');
-  const changed = await ctx.deals.update(owner, made.id, { price: 300, originalPrice: null, notes: '可放嬰兒車' });
+  const changed = await ctx.deals.update(owner, made.id, { price: 300, originalPrice: null, notes: '可放嬰兒車', maxBookings: 5 });
   assert.deepEqual(changed.price, { amount: 300, currency: 'CNY' });
   assert.equal(changed.originalPrice, null);
+  assert.equal(changed.left, 4);
   assert.deepEqual((await ctx.profilePages.passengerBooking(sent.code)).quote, { amount: 350, currency: 'CNY' });
   await rejectsWith(ctx.deals.update(owner, made.id, { originalPrice: 200 }), 'DEAL_ORIGINAL_NOT_ABOVE');
 });

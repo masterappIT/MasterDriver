@@ -8,8 +8,9 @@ import { fromLocalInput, toLocalInput } from '../format';
 import { t } from '../i18n';
 
 /**
- * 發特價車, or 修改 one still taking bookings: when, where and the whole car's price, then the
- * driver sends the link themselves. Nothing here lists the deal anywhere: only the link brings people.
+ * 發特價車, or 修改 one still taking bookings: when, where and the whole car's price for each party,
+ * then the driver sends the link themselves. Like a product, any number of parties may book it,
+ * each its own order. Nothing here lists the deal anywhere: only the link brings people.
  */
 const route = useRoute();
 const router = useRouter();
@@ -35,6 +36,8 @@ const form = reactive({
   maxPassengers: '',
   maxLuggage: '',
   notes: '',
+  /** 最多接幾組; blank: no limit. */
+  maxBookings: '',
   autoAccept: false,
 });
 
@@ -62,6 +65,7 @@ async function submit() {
     maxPassengers: number(form.maxPassengers),
     maxLuggage: number(form.maxLuggage),
     notes: form.notes.trim() || null,
+    maxBookings: number(form.maxBookings),
     autoAccept: form.autoAccept,
   };
   if (body.originalPrice !== null && body.originalPrice <= body.price) {
@@ -106,6 +110,7 @@ onMounted(async () => {
       maxPassengers: deal.maxPassengers === null ? '' : String(deal.maxPassengers),
       maxLuggage: deal.maxLuggage === null ? '' : String(deal.maxLuggage),
       notes: deal.notes ?? '',
+      maxBookings: deal.maxBookings === null ? '' : String(deal.maxBookings),
       autoAccept: deal.autoAccept,
     });
     loaded.value = true;
@@ -127,7 +132,7 @@ onMounted(async () => {
 
     <form v-else-if="loaded" @submit.prevent="submit">
       <p v-if="!editId" class="hint deal-form__intro">
-        {{ t('空車回程、冷門時段，用一個特價把車賣出去。發好後會得到一條連結和一張分享圖，你自己發給乘客；平台不會把特價車列給其他人看。') }}
+        {{ t('定好路線、時段和每組的價錢，像上架一件商品：發好後會得到一條連結和一張分享圖，你自己發給乘客，多少組客人都可以下單，每組各成一張單，你自己做或派到群裡。平台不會把特價車列給其他人看。') }}
       </p>
       <p v-else class="hint deal-form__intro">{{ t('已經送出的預約照原本的時間和價錢；改了之後新的預約才用新的。') }}</p>
 
@@ -144,7 +149,7 @@ onMounted(async () => {
         <label v-if="form.window" class="line-field">
           <span>{{ t('時段結束') }}</span>
           <input v-model="form.pickupUntil" class="line-input" type="datetime-local" required />
-          <small class="hint">{{ t('乘客在這段時間內自己選出發時間，最長 24 小時。') }}</small>
+          <small class="hint">{{ t('每組客人在這段時間內自己選出發時間，最長 7 天。') }}</small>
         </label>
         <ol class="route-inputs">
           <li class="route-inputs__stop route-inputs__stop--origin">
@@ -159,14 +164,14 @@ onMounted(async () => {
       <section class="card">
         <span class="section-label">{{ t('價錢') }}</span>
         <div class="line-field">
-          <span>{{ t('整車特價') }}</span>
+          <span>{{ t('包車特價（每組）') }}</span>
           <div class="amount-line">
             <select v-model="form.currency" :aria-label="t('幣種')">
               <option value="CNY">RMB¥</option>
               <option value="HKD">HK$</option>
               <option value="MOP">MOP$</option>
             </select>
-            <input v-model="form.price" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('整車特價')" :placeholder="t('整車一個價')" required />
+            <input v-model="form.price" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('包車特價')" :placeholder="t('包車一個價')" required />
           </div>
         </div>
         <label class="line-field">
@@ -191,16 +196,22 @@ onMounted(async () => {
       </section>
 
       <section class="card">
-        <span class="section-label">{{ t('乘客預約後') }}</span>
+        <span class="section-label">{{ t('接單') }}</span>
+        <label class="line-field">
+          <span>{{ t('最多接幾組（選填）') }}</span>
+          <input v-model="form.maxBookings" class="line-input" type="number" min="1" max="999" inputmode="numeric" :placeholder="t('不填就不限，直到你按關閉')" />
+          <small class="hint">{{ t('接滿就自動停止預約；有人取消，名額會放回去。') }}</small>
+        </label>
+        <span class="deal-form__label">{{ t('乘客預約後') }}</span>
         <div class="segment segment--block" role="group" :aria-label="t('確認方式')">
           <button type="button" :aria-pressed="!form.autoAccept" @click="form.autoAccept = false">{{ t('我確認') }}</button>
-          <button type="button" :aria-pressed="form.autoAccept" @click="form.autoAccept = true">{{ t('自動接受第一組') }}</button>
+          <button type="button" :aria-pressed="form.autoAccept" @click="form.autoAccept = true">{{ t('自動接受') }}</button>
         </div>
         <small class="hint deal-form__explain">
           {{
             form.autoAccept
-              ? t('第一組送出就訂到，其他人不能再預約。不用登入就能預約，任何拿到連結的人都可以訂。')
-              : t('可以有幾組預約，你挑一組成單；成單後其他預約自動婉拒。')
+              ? t('每組客人送出就算訂到，你再逐張成單。不用登入就能預約，任何拿到連結的人都可以訂。')
+              : t('每組預約由你確認：成單就是接受，也可以婉拒。')
           }}
         </small>
       </section>
@@ -225,6 +236,11 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-md);
+}
+.deal-form__label {
+  display: block;
+  margin: var(--space-md) 0 var(--space-sm);
+  font-weight: 600;
 }
 .deal-form__explain {
   display: block;

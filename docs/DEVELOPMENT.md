@@ -119,26 +119,26 @@ npm run dev:admin
 
 ## 特價車
 
-決定與規則見 `docs/DECISIONS.md` 2026-10-21「特價車」。
+決定與規則見 `docs/DECISIONS.md` 2026-10-21「特價車」與 2026-10-22「特價車像商品一樣接多組客人」。
 
-- 資料表：`Deal`（一個特價車）；乘客的預約就是 `BookingRequest`，多了 `dealId`，`quoteMinor` 是預約當時的特價；預約放在司機的名片頁底下（沒有名片頁就建一個未公開的），所以司機在「等我報價」回覆、用原本的「這單我自己做／派給其他司機」成單。`Notification` 多了 `DEAL_BOOKING_NEW`、`DEAL_SOLD`。程式在 `backend/src/deals/`、`shared/src/deal.ts`、`web/src/deal.ts`、`web/src/pages/Deal*.vue` 與分享圖 `web/src/components/DealCardSheet.vue`。
-- 一部車只接一組：成單時（`OrdersService.takeBooking` 呼叫 `deals/deal-hold.ts` 的 `takeDeal`）、預約、下架都先鎖住特價車那一列（`SELECT … FOR UPDATE`）；成單即接受那一組，其他等待中的預約同一個交易裡改為婉拒。訂到但還沒成單的那組被取消或婉拒時，`releaseDeal` 把特價車放回開放。
-- 「已過期」不寫入資料庫：開放中而最後可出發時間（時段結束或出發時間）已過，就顯示為已過期。
+- 資料表：`Deal`（一個特價車：狀態 `OPEN`／`CLOSED`／`CANCELLED`、選填 `maxBookings`）；乘客的預約就是 `BookingRequest`，多了 `dealId`，`quoteMinor` 是預約當時的特價；預約放在司機的名片頁底下（沒有名片頁就建一個未公開的），所以司機在「等我報價」回覆、用原本的「這單我自己做／派給其他司機」成單，每組各成一張單。`Notification` 多了 `DEAL_BOOKING_NEW`、`DEAL_BOOKING_ACCEPTED`。程式在 `backend/src/deals/`、`shared/src/deal.ts`、`web/src/deal.ts`、`web/src/pages/Deal*.vue` 與分享圖 `web/src/components/DealCardSheet.vue`。
+- 「已接滿」「已過期」不寫入資料庫：開放中而等待確認、已訂到、已成單的預約數到了 `maxBookings` 就顯示已接滿；最後可出發時間（時段結束或出發時間）已過就顯示已過期。
+- 預約時先鎖住特價車那一列（`SELECT … FOR UPDATE`，`deals/deal-hold.ts`），兩組同時搶最後一個名額只有一組成功。平台下架也在同一個鎖下婉拒還在等的預約。
 
 | 頁面 | 用途 |
 |---|---|
 | `/app/deals` | 我的特價車 |
 | `/app/deals/new`、`/app/deals/:id/edit` | 發特價車、修改 |
-| `/app/deals/:id` | 管理一個特價車：乘客版文字、分享圖、等待中的預約、修改、下架 |
-| `/d/:code` | 給乘客的特價車連結：行程、整車特價、預約；預約後到 `/b/:code` |
+| `/app/deals/:id` | 管理一個特價車：乘客版文字、分享圖、等你處理的預約、已成單、修改、關閉 |
+| `/d/:code` | 給乘客的特價車連結：行程、每組的包車特價、預約；預約後到 `/b/:code` |
 
 | 方法與路徑 | 登入 | 用途 |
 |---|---|---|
 | `POST /api/deals` | 要 | 發特價車（要先有司機資料） |
 | `GET /api/deals` | 要 | 我的特價車 |
 | `GET /api/deals/:id` | 要 | 一個特價車與它的預約 |
-| `PATCH /api/deals/:id` | 要 | 修改（開放中；已送出的預約不變） |
-| `POST /api/deals/:id/cancel` | 要 | 下架（已成單的不行） |
+| `PATCH /api/deals/:id` | 要 | 修改（開放中；已送出的預約不變；最多接幾組不能少於已佔的名額） |
+| `POST /api/deals/:id/close` | 要 | 關閉，不再接新的預約 |
 | `GET /api/public/deals/:code` | — | 特價車連結 |
 | `POST /api/public/deals/:code/bookings` | — | 預約 |
 | `GET /api/public/deals/:code/photos/:id` | — | 特價車連結上司機的車輛照片 |

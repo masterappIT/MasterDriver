@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma.service';
 import { renderSeoTemplate } from '../site/seo-rules';
 import { formatPickup } from '../common/hong-kong-time';
 import { formatPrice, isReversed, roundTripTotal } from '../orders/share-text';
+import { ACTIVE } from '../deals/deal-hold';
 import { dealPriceText, formatDealTime } from '../deals/deal-share-text';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import {
@@ -384,7 +385,7 @@ export class LinkPreviewService {
   /**
    * A 特價車 link (/d/): what the driver's own text says, the time, the route and the price, and
    * whose deal it is, with the car photo the deal page shows (2026-10-21). Only while it takes
-   * bookings; a sold, taken down or expired one gets the generic card.
+   * bookings; a closed, full, taken down or expired one gets the generic card.
    */
   private async deal(code: string): Promise<Resolved | null> {
     const deal = await this.prisma.deal.findUnique({
@@ -398,6 +399,8 @@ export class LinkPreviewService {
         priceMinor: true,
         currency: true,
         originalPriceMinor: true,
+        maxBookings: true,
+        _count: { select: { bookings: { where: { status: { in: ACTIVE } } } } },
         driver: {
           select: {
             profile: { select: { name: true } },
@@ -407,6 +410,7 @@ export class LinkPreviewService {
       },
     });
     if (!deal || deal.status !== 'OPEN' || (deal.pickupUntil ?? deal.pickupAt) <= new Date()) return null;
+    if (deal.maxBookings !== null && deal._count.bookings >= deal.maxBookings) return null;
     const name = deal.driver.profile?.name;
     const page = deal.driver.profilePage;
     const title = `【特價車】${formatDealTime(deal)} ${deal.origin} → ${deal.destination}`;

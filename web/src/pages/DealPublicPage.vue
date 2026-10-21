@@ -10,8 +10,9 @@ import { fromLocalInput, money, toLocalInput } from '../format';
 import { t } from '../i18n';
 
 /**
- * The link a driver gives passengers for a 特價車: when, where, the whole car's price, the driver
- * and their car, and a short form to book it. No account; the passenger gets a link of their own.
+ * The link a driver gives passengers for a 特價車: when, where, the whole car's price for a party,
+ * the driver and their car, and a short form to book it. Any number of parties may book, each
+ * its own trip. No account; the passenger gets a link of their own.
  */
 const route = useRoute();
 const router = useRouter();
@@ -37,7 +38,8 @@ const form = reactive({
 const open = computed(() => deal.value?.state === 'OPEN');
 const closedText = computed(() => {
   const state = deal.value?.state;
-  if (state === 'SOLD') return '這個特價車已被訂走。';
+  if (state === 'FULL') return '這個特價車已接滿。';
+  if (state === 'CLOSED') return '司機已關閉這個特價車，不再接受預約。';
   if (state === 'CANCELLED') return '這個特價車已下架。';
   return '這個特價車已過了出發時間。';
 });
@@ -105,7 +107,7 @@ onMounted(load);
         <strong class="deal-public__time">{{ t(dealTime(deal)) }}</strong>
         <div class="deal-public__route">{{ t(`${deal.origin} 至 ${deal.destination}`) }}</div>
         <div class="deal-public__price">
-          <strong>{{ t(`整車 ${money(deal.price)}`) }}</strong>
+          <strong>{{ t(`包車 ${money(deal.price)}`) }}</strong>
           <s v-if="deal.originalPrice">{{ t(`原價 ${money(deal.originalPrice)}`) }}</s>
         </div>
         <p v-if="dealLimits(deal)" class="deal-public__line">{{ t(dealLimits(deal)) }}</p>
@@ -126,7 +128,7 @@ onMounted(load);
       <form v-else class="card deal-public__form" @submit.prevent="submit">
         <span class="section-label">{{ t('預約') }}</span>
         <p class="hint">
-          {{ deal.autoAccept ? t('一部車只接一組。第一個送出的就訂到，不用註冊，也不用先付款。') : t('一部車只接一組。送出後等司機確認，不用註冊，也不用先付款。') }}
+          {{ deal.autoAccept ? t('送出就訂到，整部車給你這一組。不用註冊，也不用先付款。') : t('送出後等司機確認，整部車給你這一組。不用註冊，也不用先付款。') }}
         </p>
         <div v-if="formError" class="notice error">{{ formError }}</div>
         <label v-if="deal.pickupUntil" class="line-field">
@@ -171,7 +173,7 @@ onMounted(load);
           <span>{{ t('備註（選填）') }}</span>
           <textarea v-model="form.notes" class="line-input" maxlength="500" :placeholder="t('例如：航班號碼、帶嬰兒車')" />
         </label>
-        <button class="button block large" type="submit" :disabled="busy">{{ t(`預約，整車 ${money(deal.price)}`) }}</button>
+        <button class="button block large" type="submit" :disabled="busy">{{ t(`預約，包車 ${money(deal.price)}`) }}</button>
       </form>
 
       <footer class="deal-public__footer hint">

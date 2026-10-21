@@ -123,7 +123,7 @@ onMounted(async () => {
         to="/app/deals"
         icon="tag"
         :title="t('特價車')"
-        :detail="t('空車回程、冷門時段定一個整車特價，把連結或分享圖發給乘客預約')"
+        :detail="t('空車回程、冷門時段定一個包車特價，把連結或分享圖發給乘客預約')"
       />
       <MenuRow to="/app/passengers" icon="people" :title="t('客人通訊錄')" :detail="t('你出過的單的乘客，只有你看得到；熟客可以直接出單')" />
       <MenuRow to="/app/drivers" icon="taxi" :title="t('我的司機')" :detail="t('接過你的單的司機，設常用司機、寫備註，只有你看得到')" />

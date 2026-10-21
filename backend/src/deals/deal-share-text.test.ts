@@ -19,7 +19,7 @@ test('the 特價車 text says when, where, the car, the price and the link', () 
   const text = dealShareText(deal, { name: '陳師傅', vehicleType: '埃爾法', seats: 7 }, 'https://x.test/d/abc');
   assert.equal(
     text.wechat,
-    '【特價車】10/25（日）16:00 深圳灣口岸 → 香港國際機場\n埃爾法・7座｜整車 RMB¥350（原價 RMB¥500）\n最多 6 人、6 件行李\n陳師傅的特價車，點開預約，不用註冊：https://x.test/d/abc',
+    '【特價車】10/25（日）16:00 深圳灣口岸 → 香港國際機場\n埃爾法・7座｜包車 RMB¥350（原價 RMB¥500）\n最多 6 人、6 件行李\n陳師傅的特價車，點開預約，不用註冊：https://x.test/d/abc',
   );
   assert.ok(text.whatsapp.startsWith('*【特價車】10/25（日）16:00 深圳灣口岸 → 香港國際機場*\n'));
 });
@@ -32,7 +32,7 @@ test('the 特價車 text leaves out what the driver did not fill in, and says a 
   );
   assert.equal(
     text.wechat,
-    '【特價車】10/25（日）16:00–20:00 深圳灣口岸 → 香港國際機場\n整車 RMB¥350\n時段內任選出發時間\n備註：可放嬰兒車\n點開預約，不用註冊：https://x.test/d/abc',
+    '【特價車】10/25（日）16:00–20:00 深圳灣口岸 → 香港國際機場\n包車 RMB¥350\n時段內任選出發時間\n備註：可放嬰兒車\n點開預約，不用註冊：https://x.test/d/abc',
   );
 });
 

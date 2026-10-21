@@ -245,7 +245,7 @@ onBeforeUnmount(() => {
 
       <template v-if="open">
         <p v-if="booking.deal" class="booking-detail__agreed">
-          {{ booking.status === 'ACCEPTED' ? t('這組已訂到你的特價車，安排行程吧') : t('成單就是接受這一組，其他預約會自動婉拒') }}
+          {{ booking.status === 'ACCEPTED' ? t('這組已訂到你的特價車，安排行程吧') : t('價錢已定，成單就是接受這一組') }}
         </p>
         <p v-else-if="booking.status === 'ACCEPTED'" class="booking-detail__agreed">{{ t('乘客已同意報價，安排行程吧') }}</p>
         <div v-if="!contactPhone" class="card booking-detail__add-phone">

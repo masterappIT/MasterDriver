@@ -2,13 +2,14 @@ import { z } from 'zod';
 import { CURRENCIES, passengerPhoneSchema } from './schemas';
 
 /**
- * 特價車: a driver offers a trip at a price of their own, whole car, to one party of passengers,
- * who book it from the link the driver sends. The platform never lists, recommends or prices a
- * deal, and takes no money (docs/DECISIONS.md, 2026-10-21 特價車).
+ * 特價車: a driver offers a trip at a price of their own, whole car, for each party. Like a
+ * product, any number of parties book it from the link the driver sends, each its own order,
+ * until the driver closes it. The platform never lists, recommends or prices a deal, and takes
+ * no money (docs/DECISIONS.md, 2026-10-21 and 2026-10-22 特價車).
  */
 
-/** 時段: the longest stretch a deal may let passengers pick their time in. */
-export const DEAL_MAX_WINDOW_HOURS = 24;
+/** 時段: the longest stretch a deal may let passengers pick their time in, e.g. 「這個星期」. */
+export const DEAL_MAX_WINDOW_HOURS = 7 * 24;
 
 const line = (max: number) => z.string().trim().min(1).max(max);
 const optionalLine = (max: number) =>
@@ -38,7 +39,7 @@ const dealFields = z.object({
   pickupUntil: time.optional(),
   origin: line(120),
   destination: line(120),
-  /** 整車特價. */
+  /** 包車特價, each party. */
   price: amount,
   currency: z.enum(CURRENCIES),
   /** 原價, shown struck through. */
@@ -46,7 +47,9 @@ const dealFields = z.object({
   maxPassengers: z.number().int().min(1).max(59).optional(),
   maxLuggage: z.number().int().min(0).max(60).optional(),
   notes: optionalLine(500),
-  /** 自動接受第一組; otherwise the driver picks the party. */
+  /** 最多接幾組 (庫存); absent: no limit. */
+  maxBookings: z.number().int().min(1).max(999).optional(),
+  /** 自動接受: each booking is accepted as it comes; otherwise the driver answers each. */
   autoAccept: z.boolean().default(false),
 });
 
@@ -71,6 +74,7 @@ export const dealUpdateSchema = z
     maxPassengers: z.number().int().min(1).max(59).nullable(),
     maxLuggage: z.number().int().min(0).max(60).nullable(),
     notes: z.string().trim().max(500).nullable(),
+    maxBookings: z.number().int().min(1).max(999).nullable(),
     autoAccept: z.boolean(),
   })
   .partial()
