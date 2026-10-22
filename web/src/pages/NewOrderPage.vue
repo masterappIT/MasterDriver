@@ -699,6 +699,8 @@ const lineInput = ref<HTMLTextAreaElement | null>(null);
 
 onMounted(async () => {
   if (route.query.paste === '1') lineInput.value?.focus();
+  // ?kind=charter (the 包鐘 guide's button): the form opens on 包鐘.
+  if (route.query.kind === 'charter' && !bookingId && !returnOf) setMode('charter');
   const [orders, preferences] = await Promise.all([
     api<PastOrder[]>('GET', '/orders?role=dispatched').catch(() => []),
     api<{ contactRevealMinutes: number | null; poolByDefault: boolean }>('GET', '/me/preferences').catch(() => null),

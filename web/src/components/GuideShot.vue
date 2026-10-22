@@ -48,6 +48,7 @@ defineProps<{ name: GuideShotName }>();
         <span>{{ t('直達') }}</span>
         <span>{{ t('往返') }}</span>
         <span class="on">{{ t('接駁') }}</span>
+        <span>{{ t('包鐘') }}</span>
       </div>
       <div class="shot__legs">
         <span>{{ t('第 1 段') }}</span>
@@ -58,8 +59,28 @@ defineProps<{ name: GuideShotName }>();
       </div>
     </div>
 
-    <div v-else-if="name === 'share' || name === 'deal-share'" class="shot__bubble">
-      <template v-if="name === 'share'">
+    <div v-else-if="name === 'charter-form'" class="shot__mock">
+      <div class="shot__segments">
+        <span>{{ t('直達') }}</span>
+        <span>{{ t('往返') }}</span>
+        <span>{{ t('接駁') }}</span>
+        <span class="on">{{ t('包鐘') }}</span>
+      </div>
+      <div class="shot__row"><span>{{ t('包鐘時數') }}</span><strong>{{ t('8 小時') }}</strong></div>
+      <div class="shot__row"><span>{{ t('每小時出單價') }}</span><strong>HK$250</strong></div>
+      <span class="shot__muted">{{ t('8 小時共 HK$2,000') }}</span>
+    </div>
+
+    <div v-else-if="name === 'share' || name === 'deal-share' || name === 'charter-share'" class="shot__bubble">
+      <template v-if="name === 'charter-share'">
+        <strong>{{ t('【有單・包鐘】10/25（日）09:00 起 8 小時') }}</strong>
+        <span>{{ t('深圳灣口岸 上車，原地結束') }}</span>
+        <span>{{ t('行程：東門 → 華強北') }}</span>
+        <span>{{ t('每小時 HK$250，8 小時共 HK$2,000') }}</span>
+        <span>{{ t('超時每小時 HK$250，每 30 分鐘計，15 分鐘內不計') }}</span>
+        <span class="shot__link">{{ t('搶單：') }}masterdriverapp…/o/…</span>
+      </template>
+      <template v-else-if="name === 'share'">
         <strong>{{ t('【有單】10/25（日）15:40') }}</strong>
         <span>{{ t('澳門 → 香港') }}</span>
         <span>{{ t('2人｜2件行李｜7座') }}</span>

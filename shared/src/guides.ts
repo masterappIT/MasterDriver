@@ -7,7 +7,7 @@
  */
 export const GUIDE_INDEX = {
   title: '跨境師傅幫使用教學',
-  description: '每個功能怎樣用、幫你做多少生意：出單、搶單、訂單收款、名片頁、特價車、拼車，一頁一個功能。',
+  description: '每個功能怎樣用、幫你做多少生意：出單、搶單、包鐘、訂單收款、名片頁、特價車、拼車，一頁一個功能。',
 } as const;
 
 /** In reading order: the 目錄 lists them this way. */
@@ -26,6 +26,11 @@ export const GUIDES = [
     slug: 'claim',
     title: '搶單接單',
     description: '在群裡點連結就能搶，先到先得，不用打字搶、不怕看漏，空檔和回程都接得到單。',
+  },
+  {
+    slug: 'charter',
+    title: '包鐘',
+    description: '按小時計的單：寫明幾多小時、每小時幾錢和超時怎樣計，自己做或派到群裡。',
   },
   {
     slug: 'deal',

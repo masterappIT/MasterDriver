@@ -5,7 +5,7 @@ import type { GuideSlug } from '@masterdriver/shared/guides';
  * first says what the feature is for and how it helps a driver run their own business, then how to
  * use it in the app's own words, then tips and questions. Only what the app does today: anything
  * set in the platform admin (出單額度, 平台服務費) is pointed at, never given as a figure.
- * Checked against the screens on 2026-10-22; when a feature changes, change its page here too.
+ * Checked against the screens on 2026-10-22 (包鐘 on 2026-10-23); when a feature changes, change its page here too.
  */
 
 /** The small drawn screens a step may carry (components/GuideShot.vue). */
@@ -20,6 +20,8 @@ export type GuideShotName =
   | 'claim'
   | 'claimed'
   | 'pool'
+  | 'charter-form'
+  | 'charter-share'
   | 'deal-form'
   | 'deal-share'
   | 'deal-split'
@@ -109,8 +111,8 @@ export const GUIDE_CONTENT: Record<GuideSlug, GuideContent> = {
         shot: 'quick',
       },
       {
-        title: '選直達、往返或接駁',
-        text: '往返：一張單兩程，可以同一位司機來回，也可以分開出。接駁：中途換車，一張單分兩段，各由一位司機接。乘客只看到一個價格。',
+        title: '選直達、往返、接駁或包鐘',
+        text: '往返：一張單兩程，可以同一位司機來回，也可以分開出。接駁：中途換車，一張單分兩段，各由一位司機接。乘客只看到一個價格。包鐘：按小時計，寫明時數、每小時價錢和超時規則，見「包鐘」教學。',
         shot: 'kinds',
       },
       {
@@ -180,6 +182,58 @@ export const GUIDE_CONTENT: Record<GuideSlug, GuideContent> = {
       { q: '搶到後做不了怎麼辦？', a: '按「取消接單」，單會回到等人搶。沒有罰則，但出單者看得到你取消過幾次。' },
     ],
     action: { label: '看接單池', to: '/app/pool' },
+  },
+
+  charter: {
+    headline: '包鐘：按小時計的單',
+    lead: '客人要用車半日、一日，去幾個地方見客、行街？出一張包鐘單，寫明幾多小時、每小時幾錢和超時怎樣計，自己做或貼到群裡派出去。',
+    helps: [
+      { title: '一次寫清楚，不用逐樣講', text: '時數、行程、每小時價錢和總價、超時和另計都寫在群文字上，接單司機一看就知道。' },
+      { title: '價錢你定', text: '每小時出單價給接單司機；每小時乘客價只有你看得到。總價只是你定的每小時價錢乘時數，平台不報價。' },
+      { title: '超時規則先講好', text: '超時怎樣計、幾多分鐘內不計、路橋費停車費要不要另付，出單時寫明，乘客確認頁也看得到，事後少爭執。' },
+      { title: '和一般的單一樣', text: '派單、搶單、乘客確認、收款、結清照舊；出單額度和服務費每張單算一次，不按時數。' },
+    ],
+    steps: [
+      {
+        title: '出單選「包鐘」',
+        text: '按底部「出單」，類型選「包鐘」。填開始時間和上車地點，按「加行程地點」填要去的地方；結束地點不填，就是回到上車地點。',
+        shot: 'charter-form',
+      },
+      {
+        title: '填時數和每小時價錢',
+        text: '時數 1 到 24 小時，以半小時為單位。填每小時出單價，下面即時顯示「8 小時共 HK$2,000」。每小時乘客價在「乘客價、備註與更多」裡填。',
+      },
+      {
+        title: '寫明超時和另計',
+        text: '超時選「每 30 分鐘計」或「按每小時計」，填寬限幾多分鐘；超時每小時價不填，就和每小時價一樣。路橋費、停車費、司機膳食要乘客另付的，按一下選上。',
+      },
+      {
+        title: '貼到群，或自己做',
+        text: '出單後照樣複製到群裡，群文字寫出時數、行程、每小時價錢和總價、超時和另計。自己開就打開「這單我自己做」。乘客確認頁寫「包鐘 8 小時（按小時計）」和到幾點結束。',
+        shot: 'charter-share',
+      },
+      {
+        title: '貼一句也能出',
+        text: '貼上「明天9點深圳灣口岸包鐘8小時 每小時250」，按「自動填入」就切到包鐘，填好時數和每小時出單價。只寫總價的，價錢不會自動填，請自己填每小時價。',
+      },
+    ],
+    business: [
+      '半日、一日的客人報整數時數，例如 4 小時、8 小時，客人容易比較。',
+      '超時每小時價和寬限寫清楚，客人要延長時，你和接單司機都有根據。',
+      '過關排隊算不算時數，出單前和客人講好，寫在備註。',
+      '在「我的 → 收款方式」設好收款碼，出單時打開「乘客確認頁顯示收款方式」，乘客直接付給你。',
+    ],
+    faq: [
+      { q: '包鐘和特價車的「包車」有甚麼分別？', a: '特價車的包車是整部車一個價錢；包鐘按小時計，總價是每小時價錢乘時數。' },
+      {
+        q: '客人要延長或縮短？',
+        a: '在那張單按「修改行程」改時數，總價跟著改；已接單的司機會收到通知確認。有司機接單後，每小時出單價不能再改；超時規則和另計出單後不能改。',
+      },
+      { q: '超時的錢平台會計嗎？', a: '不會。平台只把你定的規則寫出來；實際超時多少、收多少，由你、接單司機和乘客自己講好，車費不經平台。' },
+      { q: '可以包幾日嗎？', a: '一張單最多 24 小時；包幾日，一日出一張單。' },
+      { q: '出包鐘單要收費嗎？', a: '和一般的單一樣，每張單算一次，不按時數；以「我的 → 點數餘額」那一行為準。' },
+    ],
+    action: { label: '去出包鐘單', to: '/app/new?kind=charter' },
   },
 
   deal: {
