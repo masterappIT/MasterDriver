@@ -77,7 +77,7 @@ async function openBanner() {
   </div>
   <!-- 更新說明彈窗: once per account, over everything but the toast and new notifications. -->
   <UpdateNotice />
-  <!-- App 意向問卷: once per account, only when the 更新說明彈窗 showed nothing (popups.ts). -->
+  <!-- App 意向問卷: once per account, right after the 更新說明彈窗 when that shows (popups.ts). -->
   <AppInterestSurvey />
   <div v-if="toastState.visible" class="toast" role="status">{{ toastState.text }}</div>
 </template>

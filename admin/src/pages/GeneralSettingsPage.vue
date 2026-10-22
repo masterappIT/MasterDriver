@@ -250,7 +250,7 @@ onMounted(async () => {
         </label>
       </div>
       <p class="muted">
-        司機進入司機端時問一次「你希望 MasterDriver 出哪一種」：微信小程序、iPhone App、Android App、都不用網頁就夠，可以多選，可以留建議。按「略過」也算答過，每個帳號只問一次；同一次已彈出更新說明彈窗的話，等下次打開再問。
+        司機進入司機端時問一次「你希望 MasterDriver 出哪一種」：微信小程序、iPhone App、Android App、都不用網頁就夠，可以多選，可以留建議。按「略過」也算答過，每個帳號只問一次；有更新說明彈窗時，關掉彈窗後接著問。
       </p>
       <table class="table">
         <thead>

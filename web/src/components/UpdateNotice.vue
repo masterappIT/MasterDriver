@@ -60,6 +60,7 @@ async function close() {
   const version = notice.value?.version;
   shown.value = false;
   notice.value = null;
+  popups.updateNotice = 'none';
   if (!version) return;
   try {
     await api('POST', '/me/update-notice/seen', { version });

@@ -26,7 +26,7 @@ const note = ref('');
 const sending = ref(false);
 let askedFor: string | null = null;
 
-// Asked once for each signed-in driver, after the 更新說明彈窗 had its turn and showed nothing.
+// Asked once for each signed-in driver, once the 更新說明彈窗 is out of the way (none, or closed).
 watch(
   () => [session.user?.id ?? null, Boolean(session.profile), Boolean(route.meta.app), popups.updateNotice] as const,
   async ([userId, hasProfile, inApp, updateNotice]) => {
