@@ -67,6 +67,7 @@ const ACTION: Record<string, string> = {
   'settings.limits': '修改防濫用設定',
   'settings.logo': '修改 Logo',
   'settings.updateNotice': '修改更新說明彈窗',
+  'settings.appInterest': '開關 App 意向問卷',
   'channels.spug.save': '修改 Spug 設定',
   'channels.spug.testSend': 'Spug 發送測試簡訊',
 };

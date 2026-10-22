@@ -182,3 +182,47 @@ test('更新說明彈窗 shows once per account, comes back with a new picture, 
   await ctx.site.closeUpdateNotice(a, 2);
   assert.equal((await ctx.site.updateNoticeStatus()).seen, 1);
 });
+
+// App 意向問卷: asked once while it is on; skipping counts; the first answer stays.
+test('App 意向問卷 asks each driver once, keeps the first answer, and counts every choice', async () => {
+  const [a, b, c] = [await createDriver(ctx, '甲'), await createDriver(ctx, '乙'), await createDriver(ctx, '丙')];
+  const noProfile = (await ctx.prisma.user.create({ data: { countryCode: '+852', phone: '98765432' } })).id;
+
+  assert.deepEqual(await ctx.site.appInterestFor(a), { ask: false }, 'off until switched on');
+  const on = await ctx.site.setAppInterestEnabled(true, 'test');
+  assert.equal(on.enabled, true);
+  assert.equal(on.waiting, 3, 'a user still making a profile is not counted');
+  assert.deepEqual(await ctx.site.appInterestFor(a), { ask: true });
+  assert.deepEqual(await ctx.site.appInterestFor(noProfile), { ask: false }, 'not before the profile is made');
+
+  await ctx.site.answerAppInterest(a, { skipped: false, choices: ['MINIPROGRAM', 'ANDROID_APP'], note: '想要小程序卡片' });
+  // From a second phone at the same time, or after the first: the first answer stays.
+  await Promise.all([
+    ctx.site.answerAppInterest(b, { skipped: true }),
+    ctx.site.answerAppInterest(b, { skipped: false, choices: ['IOS_APP'], note: '' }),
+  ]);
+  await ctx.site.answerAppInterest(a, { skipped: false, choices: ['WEB_ENOUGH'], note: '改主意' });
+  assert.deepEqual(await ctx.site.appInterestFor(a), { ask: false });
+  assert.deepEqual(await ctx.site.appInterestFor(b), { ask: false });
+  assert.deepEqual(await ctx.site.appInterestFor(c), { ask: true });
+
+  const status = await ctx.site.appInterestStatus();
+  assert.equal(status.answered + status.skipped, 2);
+  assert.equal(status.waiting, 1);
+  assert.equal(status.choices.MINIPROGRAM, 1);
+  assert.equal(status.choices.WEB_ENOUGH, 0, 'the second answer changed nothing');
+  assert.deepEqual(
+    status.notes.map(({ name, note, choices }) => ({ name, note, choices })),
+    [{ name: '甲', note: '想要小程序卡片', choices: ['MINIPROGRAM', 'ANDROID_APP'] }],
+  );
+
+  // Off and on again: nobody who answered is asked again.
+  await ctx.site.setAppInterestEnabled(false, 'test');
+  assert.deepEqual(await ctx.site.appInterestFor(c), { ask: false });
+  await ctx.site.setAppInterestEnabled(true, 'test');
+  assert.deepEqual(await ctx.site.appInterestFor(a), { ask: false });
+
+  // Deleting the driver deletes their answer.
+  await ctx.prisma.user.delete({ where: { id: a } });
+  assert.equal(await ctx.prisma.appInterestAnswer.count({ where: { userId: a } }), 0);
+});

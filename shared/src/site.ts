@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { APP_INTEREST_CHOICES, APP_INTEREST_NOTE_MAX, validAppInterest } from './app-interest';
 
 /** Empty, or an https:// URL. Anything else (javascript:, http:) is rejected. */
 const httpsUrl = z
@@ -46,6 +47,20 @@ export type UpdateNoticeSetting = z.infer<typeof updateNoticeSettingSchema>;
 /** The driver closed the notice of this version. */
 export const updateNoticeSeenSchema = z.object({ version: z.number().int().min(1) });
 export type UpdateNoticeSeen = z.infer<typeof updateNoticeSeenSchema>;
+
+/** App 意向問卷: switched on or off in 一般設定. */
+export const appInterestSettingSchema = z.object({ enabled: z.boolean() });
+export type AppInterestSetting = z.infer<typeof appInterestSettingSchema>;
+/** The driver's answer: the choices and an optional note, or skipped with neither. */
+export const appInterestAnswerSchema = z.discriminatedUnion('skipped', [
+  z.object({ skipped: z.literal(true) }),
+  z.object({
+    skipped: z.literal(false),
+    choices: z.array(z.enum(APP_INTEREST_CHOICES)).refine(validAppInterest, { message: 'APP_INTEREST_CHOICES_INVALID' }),
+    note: text(APP_INTEREST_NOTE_MAX).default(''),
+  }),
+]);
+export type AppInterestAnswer = z.infer<typeof appInterestAnswerSchema>;
 
 /** 防濫用設定. Zero switches the thing off: for example no pictures from guests. */
 export const limitSettingUpdateSchema = z

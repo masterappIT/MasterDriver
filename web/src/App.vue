@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import AppInterestSurvey from './components/AppInterestSurvey.vue';
 import TabBar from './components/TabBar.vue';
 import UpdateNotice from './components/UpdateNotice.vue';
 import { network, session } from './api';
@@ -76,6 +77,8 @@ async function openBanner() {
   </div>
   <!-- 更新說明彈窗: once per account, over everything but the toast and new notifications. -->
   <UpdateNotice />
+  <!-- App 意向問卷: once per account, only when the 更新說明彈窗 showed nothing (popups.ts). -->
+  <AppInterestSurvey />
   <div v-if="toastState.visible" class="toast" role="status">{{ toastState.text }}</div>
 </template>
 

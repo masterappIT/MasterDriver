@@ -11,3 +11,4 @@ export * from './carpool';
 export * from './deal';
 export * from './charter';
 export * from './guides';
+export * from './app-interest';

@@ -48,6 +48,8 @@ const TABLES = [
   'LimitSetting',
   'SiteLogo',
   'UpdateNotice',
+  'AppInterestAnswer',
+  'AppInterestSurvey',
   'SupportMessage',
   'SupportMedia',
   'SupportConversation',

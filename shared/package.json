@@ -25,6 +25,7 @@
     "./vehicle-plate": "./src/vehicle-plate.ts",
     "./phone": "./src/phone.ts",
     "./guides": "./src/guides.ts",
-    "./charter": "./src/charter.ts"
+    "./charter": "./src/charter.ts",
+    "./app-interest": "./src/app-interest.ts"
   }
 }

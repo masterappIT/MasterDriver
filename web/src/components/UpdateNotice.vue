@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { api, session } from '../api';
 import { language, t } from '../i18n';
+import { popups } from '../popups';
 import AppIcon from './AppIcon.vue';
 
 /**
@@ -32,11 +33,13 @@ watch(
   async ([userId, hasProfile, inApp]) => {
     if (!userId || !hasProfile || !inApp || askedFor === userId) return;
     askedFor = userId;
+    popups.updateNotice = 'pending';
     try {
       notice.value = (await api<{ notice: Notice | null }>('GET', '/me/update-notice')).notice;
     } catch {
       notice.value = null;
     }
+    if (!image.value) popups.updateNotice = 'none';
   },
   { immediate: true },
 );
@@ -44,6 +47,13 @@ watch(
 /** Shown once the picture has loaded, so a slow network never shows an empty box. */
 function loaded() {
   shown.value = true;
+  popups.updateNotice = 'shown';
+}
+
+/** A picture that does not load is never shown, so the next pop-up may have its turn. */
+function failed() {
+  notice.value = null;
+  if (popups.updateNotice === 'pending') popups.updateNotice = 'none';
 }
 
 async function close() {
@@ -67,7 +77,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey));
 
 <template>
   <div v-if="image && route.meta.app" v-show="shown" class="update-notice" role="dialog" aria-modal="true" :aria-label="t('更新說明')">
-    <img class="update-notice__image" :src="image" :alt="t('師傅幫更新說明')" @load="loaded" @error="notice = null" />
+    <img class="update-notice__image" :src="image" :alt="t('師傅幫更新說明')" @load="loaded" @error="failed" />
     <button class="update-notice__close" type="button" :aria-label="t('關閉')" @click="close">
       <AppIcon name="close" :size="22" />
     </button>

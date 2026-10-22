@@ -3,6 +3,8 @@ import type {
   AdCreate,
   AdPositionKey,
   AdUpdate,
+  AppInterestAnswer,
+  AppInterestChoice,
   AppSettingUpdate,
   LeadUpdate,
   LeadsQuery,
@@ -12,6 +14,8 @@ import type {
   SeoSiteUpdate,
   UpdateNoticeLanguage,
 } from '@masterdriver/shared';
+import { APP_INTEREST_CHOICES } from '@masterdriver/shared';
+import type { Prisma } from '../../generated/prisma';
 import { apiError } from '../common/errors';
 import { retryFirstWrite } from '../common/first-write';
 import { readLimits } from '../common/limits';
@@ -24,6 +28,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** The 升級 entry in 我的 shows only for drivers who put out more than this many trips in 30 days (2026-10-14). */
 const UPGRADE_MIN_TRIPS = 30;
 const MAX_IMPRESSION_IDS = 10;
+/** 一般設定 lists this many of the latest App 意向問卷 notes. */
+const APP_INTEREST_NOTES_SHOWN = 100;
 
 /** Calendar day in Hong Kong, e.g. "2026-10-13". */
 function hongKongDay(now: Date) {
@@ -160,6 +166,78 @@ export class SiteService {
     const upTo = Math.min(version, notice?.version ?? 0);
     if (upTo < 1) return;
     await this.prisma.user.updateMany({ where: { id: userId, updateNoticeSeen: { lt: upTo } }, data: { updateNoticeSeen: upTo } });
+  }
+
+  // ------------------------------------------------------------ App 意向問卷
+
+  private appInterestSurvey() {
+    return retryFirstWrite(() => this.prisma.appInterestSurvey.upsert({ where: { id: DEFAULT_ID }, update: {}, create: { id: DEFAULT_ID } }));
+  }
+
+  /** Asked once: only while it is on, of a driver with a profile who has not answered or skipped it. */
+  async appInterestFor(userId: string) {
+    const survey = await this.prisma.appInterestSurvey.findUnique({ where: { id: DEFAULT_ID }, select: { enabled: true } });
+    if (!survey?.enabled) return { ask: false };
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { profile: { select: { userId: true } }, appInterestAnswer: { select: { userId: true } } },
+    });
+    return { ask: Boolean(user?.profile && !user.appInterestAnswer) };
+  }
+
+  /** The first answer stays as given; another from a second phone, or after skipping, changes nothing. */
+  async answerAppInterest(userId: string, input: AppInterestAnswer) {
+    const answer = input.skipped ? { skipped: true } : { skipped: false, choices: input.choices, note: input.note };
+    await this.prisma.appInterestAnswer.createMany({ data: [{ userId, ...answer }], skipDuplicates: true });
+  }
+
+  /** What 一般設定 shows: the switch, how many chose each kind, and the latest notes with who left them. */
+  async appInterestStatus() {
+    const survey = await this.appInterestSurvey();
+    const drivers = { suspendedAt: null, profile: { isNot: null } } satisfies Prisma.UserWhereInput;
+    const [answered, skipped, counts, users, waiting, notes] = await Promise.all([
+      this.prisma.appInterestAnswer.count({ where: { skipped: false } }),
+      this.prisma.appInterestAnswer.count({ where: { skipped: true } }),
+      Promise.all(APP_INTEREST_CHOICES.map((choice) => this.prisma.appInterestAnswer.count({ where: { choices: { has: choice } } }))),
+      this.prisma.user.count({ where: drivers }),
+      this.prisma.user.count({ where: { ...drivers, appInterestAnswer: { is: null } } }),
+      this.prisma.appInterestAnswer.findMany({
+        where: { note: { not: '' } },
+        orderBy: { createdAt: 'desc' },
+        take: APP_INTEREST_NOTES_SHOWN,
+        select: {
+          userId: true,
+          choices: true,
+          note: true,
+          createdAt: true,
+          user: { select: { countryCode: true, phone: true, profile: { select: { name: true } } } },
+        },
+      }),
+    ]);
+    return {
+      enabled: survey.enabled,
+      answered,
+      skipped,
+      waiting,
+      users,
+      choices: Object.fromEntries(APP_INTEREST_CHOICES.map((choice, index) => [choice, counts[index]])) as Record<AppInterestChoice, number>,
+      notes: notes.map((answer) => ({
+        userId: answer.userId,
+        name: answer.user.profile?.name ?? null,
+        phone: `${answer.user.countryCode} ${answer.user.phone}`,
+        choices: answer.choices,
+        note: answer.note,
+        createdAt: answer.createdAt.toISOString(),
+      })),
+      updatedAt: survey.updatedAt.toISOString(),
+    };
+  }
+
+  /** On or off; answers stay, so a driver who answered is not asked again when it comes back on. */
+  async setAppInterestEnabled(enabled: boolean, actor: string) {
+    await this.appInterestSurvey();
+    await this.prisma.appInterestSurvey.update({ where: { id: DEFAULT_ID }, data: { enabled, updatedBy: actor } });
+    return this.appInterestStatus();
   }
 
   /**

@@ -112,6 +112,42 @@ async function setNoticeEnabled(enabled: boolean) {
   }
 }
 
+/** App 意向問卷: asked once in the driver app; the counts and the notes drivers left. */
+type AppInterestChoice = 'MINIPROGRAM' | 'IOS_APP' | 'ANDROID_APP' | 'WEB_ENOUGH';
+const APP_INTEREST_NAMES: Record<AppInterestChoice, string> = {
+  MINIPROGRAM: '微信小程序',
+  IOS_APP: 'iPhone App',
+  ANDROID_APP: 'Android App',
+  WEB_ENOUGH: '都不用，網頁就夠',
+};
+interface AppInterest {
+  enabled: boolean;
+  answered: number;
+  skipped: number;
+  waiting: number;
+  users: number;
+  choices: Record<AppInterestChoice, number>;
+  notes: { userId: string; name: string | null; phone: string; choices: AppInterestChoice[]; note: string; createdAt: string }[];
+}
+const interest = ref<AppInterest | null>(null);
+
+/** Of the drivers who answered (not those who skipped), so the shares say what the answers want. */
+function share(count: number) {
+  const answered = interest.value?.answered ?? 0;
+  return answered ? `${Math.round((count / answered) * 100)}%` : '—';
+}
+
+async function setInterestEnabled(enabled: boolean) {
+  error.value = '';
+  message.value = '';
+  try {
+    interest.value = await api<AppInterest>('PUT', '/settings/app-interest', { enabled });
+    message.value = enabled ? 'App 意向問卷已開啟' : 'App 意向問卷已關閉';
+  } catch (e) {
+    error.value = (e as Error).message;
+  }
+}
+
 function fill(setting: Setting) {
   const { updatedAt, updatedBy, ...fields } = setting;
   Object.assign(form, Object.fromEntries(Object.keys(form).map((key) => [key, fields[key as keyof typeof fields]])));
@@ -134,6 +170,7 @@ onMounted(async () => {
     fill(await api<Setting>('GET', '/settings/general'));
     logoUrl.value = (await api<{ logoUrl: string | null }>('GET', '/settings/logo')).logoUrl;
     notice.value = await api<UpdateNotice>('GET', '/settings/update-notice');
+    interest.value = await api<AppInterest>('GET', '/settings/app-interest');
   } catch (e) {
     error.value = (e as Error).message;
   }
@@ -201,6 +238,54 @@ onMounted(async () => {
         {{ notice.version ? `已有 ${notice.seen} 位司機看過這次的更新說明（共 ${notice.users} 位司機）。` : '還沒有上傳過圖片。' }}
         PNG、JPG 或 WebP，400 KB 以內，建議直向 3:4。上傳和開關都立即生效，不用按「儲存全部」。
       </p>
+    </div>
+
+    <div v-if="interest" class="card general-settings__card general-settings__notice">
+      <div class="general-settings__notice-head">
+        <h2>App 意向問卷</h2>
+        <span class="general-settings__notice-state" :class="{ 'general-settings__notice-state--on': interest.enabled }">{{ interest.enabled ? '詢問中' : '已關閉' }}</span>
+        <label class="switch" :title="interest.enabled ? '關閉 App 意向問卷' : '開啟 App 意向問卷'">
+          <input type="checkbox" :checked="interest.enabled" aria-label="詢問 App 意向問卷" @change="setInterestEnabled(($event.target as HTMLInputElement).checked)" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p class="muted">
+        司機進入司機端時問一次「你希望 MasterDriver 出哪一種」：微信小程序、iPhone App、Android App、都不用網頁就夠，可以多選，可以留建議。按「略過」也算答過，每個帳號只問一次；同一次已彈出更新說明彈窗的話，等下次打開再問。
+      </p>
+      <table class="table">
+        <thead>
+          <tr><th>選擇</th><th class="num">人數</th><th class="num">佔答了的司機</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="(name, choice) in APP_INTEREST_NAMES" :key="choice">
+            <td>{{ name }}</td>
+            <td class="num">{{ interest.choices[choice] }}</td>
+            <td class="num">{{ share(interest.choices[choice]) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="hint">
+        {{ interest.answered }} 位司機答了，{{ interest.skipped }} 位略過，{{ interest.waiting }} 位還沒問到（共 {{ interest.users }} 位已建立資料、沒有停用的司機）。可以多選，所以各項加起來會多過答了的人數。開關立即生效，不用按「儲存全部」。
+      </p>
+      <template v-if="interest.notes.length">
+        <h3 class="general-settings__notes-title">司機的建議（最新 {{ interest.notes.length }} 則）</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>司機</th><th>選擇</th><th class="wide">建議</th><th>時間</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in interest.notes" :key="item.userId">
+                <td class="nowrap"><RouterLink :to="`/users/${item.userId}`">{{ item.name ?? item.phone }}</RouterLink></td>
+                <td>{{ item.choices.map((choice) => APP_INTEREST_NAMES[choice]).join('、') }}</td>
+                <td class="wide">{{ item.note }}</td>
+                <td class="nowrap">{{ dateTime(item.createdAt) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+      <p v-else class="hint">還沒有司機留下建議。</p>
     </div>
 
     <form id="general-settings-form" class="general-settings" @submit.prevent="save">
@@ -282,6 +367,11 @@ onMounted(async () => {
 
 .general-settings__notice {
   margin-bottom: 18px;
+}
+
+.general-settings__notes-title {
+  margin: 0;
+  font-size: 16px;
 }
 
 .general-settings__notice-head {

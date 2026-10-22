@@ -54,6 +54,7 @@ model User {
   supportConversation  SupportConversation?
   profilePage          ProfilePage?
   notifications        Notification[]
+  appInterestAnswer    AppInterestAnswer?
   /// 拼車 this user opened.
   carpools             Carpool[]
   /// 特價車 this user put up.
@@ -616,6 +617,37 @@ model UpdateNotice {
   hansImage Bytes?
   updatedAt DateTime @updatedAt
   updatedBy String?
+}
+
+/// App 意向問卷 (2026-10-23): asked once in the driver app whether drivers want a WeChat mini
+/// program or an app, switched on in 一般設定. Kept apart from AppSetting so the general form never
+/// switches it by accident.
+model AppInterestSurvey {
+  id        String   @id @default("default")
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+enum AppInterestChoice {
+  MINIPROGRAM
+  IOS_APP
+  ANDROID_APP
+  WEB_ENOUGH
+}
+
+/// One driver's answer, given once and kept as given. Skipped is an answer too: no choices, no note.
+/// Deleted with the user.
+model AppInterestAnswer {
+  userId    String              @id
+  skipped   Boolean             @default(false)
+  choices   AppInterestChoice[] @default([])
+  note      String              @default("")
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
 
 /// The platform's logo, uploaded in the admin (一般設定) and shown on the public

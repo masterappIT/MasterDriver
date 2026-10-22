@@ -3,6 +3,8 @@ import {
   adCreateSchema,
   adPositionQuerySchema,
   adUpdateSchema,
+  appInterestAnswerSchema,
+  appInterestSettingSchema,
   appSettingUpdateSchema,
   leadUpdateSchema,
   leadsQuerySchema,
@@ -17,6 +19,8 @@ import {
   updateNoticeSettingSchema,
   type AdCreate,
   type AdUpdate,
+  type AppInterestAnswer,
+  type AppInterestSetting,
   type AppSettingUpdate,
   type LeadUpdate,
   type LeadsQuery,
@@ -157,6 +161,24 @@ export class UpdateNoticeController {
   }
 }
 
+/** App 意向問卷 for the signed-in driver: whether to ask, and the answer (or skipping it), given once. */
+@Controller('me/app-interest')
+@UseGuards(AuthGuard)
+export class AppInterestController {
+  constructor(@Inject(SiteService) private readonly site: SiteService) {}
+
+  @Get()
+  get(@CurrentUser() user: SessionUser) {
+    return this.site.appInterestFor(user.id);
+  }
+
+  @Post()
+  @HttpCode(204)
+  async answer(@CurrentUser() user: SessionUser, @Body(new ZodPipe(appInterestAnswerSchema)) body: AppInterestAnswer) {
+    await this.site.answerAppInterest(user.id, body);
+  }
+}
+
 @Controller('admin')
 @UseGuards(AdminGuard)
 export class AdminSiteController {
@@ -256,6 +278,22 @@ export class AdminSiteController {
   async setUpdateNotice(@Body(new ZodPipe(updateNoticeSettingSchema)) body: UpdateNoticeSetting, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
     const result = await this.site.setUpdateNoticeEnabled(body.enabled, `admin:${admin.username}`);
     await this.log(admin, 'settings.updateNotice', request, { action: body.enabled ? 'on' : 'off' });
+    return result;
+  }
+
+  // ---- App 意向問卷
+
+  @Get('settings/app-interest')
+  @AdminRoles(...WRITE_ROLES)
+  appInterest() {
+    return this.site.appInterestStatus();
+  }
+
+  @Put('settings/app-interest')
+  @AdminRoles(...WRITE_ROLES)
+  async setAppInterest(@Body(new ZodPipe(appInterestSettingSchema)) body: AppInterestSetting, @CurrentAdmin() admin: AdminUser, @Req() request: Request) {
+    const result = await this.site.setAppInterestEnabled(body.enabled, `admin:${admin.username}`);
+    await this.log(admin, 'settings.appInterest', request, { action: body.enabled ? 'on' : 'off' });
     return result;
   }
 
