@@ -280,7 +280,7 @@ function fillFromLine() {
   }
   if (parsed.origin) {
     form.origin = parsed.origin;
-    filled.push(`出發地 ${parsed.origin}`);
+    filled.push(`${parsed.charter ? '上車地點' : '出發地'} ${parsed.origin}`);
   }
   if (parsed.destination) {
     form.destination = parsed.destination;
@@ -945,12 +945,12 @@ onMounted(async () => {
         </div>
         <div class="new-order__load new-order__overtime">
           <label class="line-field">
-            <span>{{ t('幾多分鐘內不計') }}</span>
+            <span>{{ t('寬限（分鐘）') }}</span>
             <input v-model="form.overtimeGrace" class="line-input" type="number" min="0" :max="MAX_OVERTIME_GRACE" inputmode="numeric" />
           </label>
           <label v-if="form.driverPrice" class="line-field">
-            <span>{{ t('超時每小時出單價') }}</span>
-            <input v-model="form.overtimeDriverHourly" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" :placeholder="t(`同每小時 ${form.driverPrice}`)" />
+            <span>{{ t('超時每小時') }}</span>
+            <input v-model="form.overtimeDriverHourly" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" :placeholder="form.driverPrice" />
           </label>
         </div>
         <span class="section-label new-order__overtime-label">{{ t('另計（乘客另外付）') }}</span>
@@ -1045,8 +1045,8 @@ onMounted(async () => {
       <template v-if="form.charter && form.passengerPrice">
         <p v-if="passengerTotal" class="hint new-order__total">{{ t(`${charterHours(charterMinutes!)}共 ${money(passengerTotal)}`) }}</p>
         <label class="line-field new-order__overtime-passenger">
-          <span>{{ t('超時每小時乘客價') }}</span>
-          <input v-model="form.overtimePassengerHourly" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" :placeholder="t(`同每小時 ${form.passengerPrice}`)" />
+          <span>{{ t('超時每小時乘客價（不填和每小時乘客價一樣）') }}</span>
+          <input v-model="form.overtimePassengerHourly" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" :placeholder="form.passengerPrice" />
         </label>
       </template>
       <p v-if="margin !== null" class="new-order__margin">{{ t(`差價 ${margin}`) }}</p>

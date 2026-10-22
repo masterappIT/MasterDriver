@@ -220,8 +220,8 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
     state.text = `${state.text.slice(0, between.index + 1)} → ${state.text.slice(between.index + between[0].length)} ${between[2]}`;
   }
 
-  // Whatever service words remain are notes ("直車", "接駁").
-  const services = state.text.match(SERVICE_WORDS) ?? [];
+  // Whatever service words remain are notes ("直車", "接駁"); 包車 is the order's type, not a note.
+  const services = (state.text.match(SERVICE_WORDS) ?? []).filter((word) => !(result.charter && /包[車车]/.test(word)));
   state.text = state.text.replace(SERVICE_WORDS, ' ');
 
   const [before, ...afterParts] = state.text.split(CONNECTOR);
@@ -233,6 +233,13 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
     const extra = rest.map(trimPlace).filter(Boolean);
     const notes = [...services, ...extra].join(' ').trim();
     if (notes) result.notes = notes;
+  } else if (result.charter) {
+    // 包車 often names only where the car is taken ("深圳灣口岸包車", "福田出發"): the 上車地點.
+    const [place, ...rest] = state.text.split(/[,，。;；]|\s+/).map(trimPlace).filter(Boolean);
+    const origin = place?.replace(/(上車|上车|出發|出发)$/, '');
+    if (origin) result.origin = origin;
+    const notes = [...services, ...rest].join(' ').trim();
+    if (notes) result.notes = notes;
   } else {
     const notes = [...services, trimPlace(state.text)].filter(Boolean).join(' ').trim();
     if (notes) result.notes = notes;
@@ -240,6 +247,7 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
 
   if (!result.pickupAt && !result.immediate) result.missing.push('pickupAt');
   if (!result.origin) result.missing.push('origin');
-  if (!result.destination) result.missing.push('destination');
+  // 包車 may end where it started: no 結束地點 is not missing.
+  if (!result.destination && !result.charter) result.missing.push('destination');
   return result;
 }

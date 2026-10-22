@@ -229,7 +229,13 @@ onBeforeUnmount(() => {
         </template>
         <template v-else>
           <strong>{{ t('你接到這張單了') }}</strong>
-          <span>{{ t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`) }}</span>
+          <span>
+            {{
+              order.charter
+                ? t(`${pickup(order.pickupAt)} 起包車 ${charterHours(order.charter.minutes)} · ${order.origin}上車`)
+                : t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`)
+            }}
+          </span>
         </template>
         <!-- 行程進度 is reported on the order's own page; say so while the driver is still here. -->
         <RouterLink v-if="order.id && order.status === 'ASSIGNED'" class="claim-page__progress-hint" :to="`/app/orders/${order.id}`">
@@ -267,6 +273,7 @@ onBeforeUnmount(() => {
           :origin="offering ? trip!.origin : order.origin"
           :destination="offering ? trip!.destination : order.destination"
           :waypoints="order.waypoints"
+          :charter="Boolean(order.charter)"
         />
         <p v-if="trip && !roundTrip" class="claim-page__transfer">{{ t(`在 ${trip.transferPlaces.join('、')} 換車`) }}</p>
 

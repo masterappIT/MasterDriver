@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { charterExtrasLine, charterHours, overtimeCount, type CharterExtra } from '@masterdriver/shared/charter';
+import { CHARTER_EXTRAS, CHARTER_EXTRA_NAMES, charterHours, overtimeCount, type CharterExtra } from '@masterdriver/shared/charter';
 import { computed } from 'vue';
 import { money, pickup, type Money } from '../format';
 import { t } from '../i18n';
@@ -26,7 +26,12 @@ const overtime = computed(() => {
   const count = overtimeCount(props.overtimeUnitMinutes, props.overtimeGraceMinutes);
   return props.overtimeHourly ? `每小時 ${money(props.overtimeHourly)}，${count}` : count;
 });
-const extras = computed(() => charterExtrasLine(props.extras));
+/** Under the 另計 heading, the costs alone: "路橋費、停車費". */
+const extras = computed(() =>
+  CHARTER_EXTRAS.filter((extra) => props.extras.includes(extra))
+    .map((extra) => CHARTER_EXTRA_NAMES[extra])
+    .join('、'),
+);
 </script>
 
 <template>

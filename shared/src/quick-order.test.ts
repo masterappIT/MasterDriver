@@ -107,6 +107,16 @@ test('「包一日」 is 包車 without guessing the hours; a price not said to 
   const order = parseQuickOrder('明天包一日 福田出發 HK$2000', now);
   assert.deepEqual(order.charter, {});
   assert.deepEqual(order.price, { amount: 2000, currency: 'HKD' });
+  assert.equal(order.origin, '福田');
+});
+
+test('包車 with one place: it is the 上車地點, and 包車 is the type, not a note', () => {
+  const order = parseQuickOrder('後天9點深圳灣口岸包車8小時 每小時250蚊 7座 3人 要兒童座椅', now);
+  assert.equal(order.origin, '深圳灣口岸');
+  assert.equal(order.destination, undefined);
+  assert.equal(order.notes, '要兒童座椅');
+  assert.deepEqual(order.missing, []);
+  assert.equal(parseQuickOrder('明天10點羅湖包車6小時送機場', now).destination, '機場');
 });
 
 test('a line without 包車 has no charter, and 包 in a place name stays', () => {

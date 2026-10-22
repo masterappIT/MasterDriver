@@ -348,6 +348,8 @@ const foldDetails = computed(() => isDispatcher.value && !ownTrip.value);
 const tripSummary = computed(() => {
   const o = order.value;
   if (!o) return '';
+  // 包車: from when and for how long, and where the car is taken.
+  if (o.charter) return `${o.immediate ? '即時 ' : ''}${pickup(o.pickupAt)} 起包車 ${charterHours(o.charter.minutes)} · ${o.origin}上車`;
   return `${o.immediate ? '即時 ' : ''}${pickup(o.pickupAt)} · ${o.origin} → ${o.destination}`;
 });
 const passengerSummary = computed(() => {
@@ -857,7 +859,7 @@ watch(id, () => {
           <strong class="detail__time">{{ pickup(order.pickupAt) }}<span v-if="order.immediate" class="now-tag detail__now">{{ t('即時') }}</span></strong>
           <StatusBadge :status="order.status" :confirmed="Boolean(order.passengerConfirmedAt)" />
         </div>
-        <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" /></div>
+        <div class="detail__route"><RoutePoints :origin="order.origin" :destination="order.destination" :waypoints="order.waypoints" :charter="Boolean(order.charter)" /></div>
         <div class="detail__meta">
           <span>{{ t(loadLine(order.passengers, order.luggage, order.vehicleType)) }}</span>
           <span v-if="order.journey" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(order.journey)}`) }}</span>

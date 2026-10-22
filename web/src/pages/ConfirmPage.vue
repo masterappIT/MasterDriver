@@ -272,7 +272,7 @@ onBeforeUnmount(() => {
         <section class="card">
           <span v-if="trip.charter" class="leg-tag">{{ t(`包車 ${charterHours(trip.charter.minutes)}`) }}</span>
           <div class="confirm-page__time">{{ trip.charter ? t(`${pickup(trip.pickupAt)} 起`) : pickup(trip.pickupAt) }}</div>
-          <RoutePoints :origin="trip.origin" :destination="trip.destination" :waypoints="trip.waypoints" />
+          <RoutePoints :origin="trip.origin" :destination="trip.destination" :waypoints="trip.waypoints" :charter="Boolean(trip.charter)" />
           <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
           <p v-if="trip.flightNo" class="confirm-page__load">{{ t(`航班：${trip.flightNo}`) }}</p>
           <!-- 包車: until when, and how 超時 and 另計 are paid, as the person who arranged it set them. -->

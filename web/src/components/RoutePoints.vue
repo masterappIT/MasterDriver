@@ -3,9 +3,9 @@ import { t } from '../i18n';
 
 /**
  * 上車 → 途經 → 目的地 as dots on a line: green for 上車 and yellow for 目的地,
- * the colours of Master Travel's passenger order pages.
+ * the colours of Master Travel's passenger order pages. 包車 reads 上車 → 行程 → 結束.
  */
-defineProps<{ origin: string; destination: string; waypoints?: string[] }>();
+defineProps<{ origin: string; destination: string; waypoints?: string[]; charter?: boolean }>();
 </script>
 
 <template>
@@ -15,11 +15,11 @@ defineProps<{ origin: string; destination: string; waypoints?: string[] }>();
       <strong>{{ t(origin) }}</strong>
     </li>
     <li v-for="(stop, index) in waypoints ?? []" :key="index" class="route-points__point route-points__point--stop">
-      <span class="route-points__label">{{ t('途經') }}</span>
+      <span class="route-points__label">{{ charter ? t('行程') : t('途經') }}</span>
       <strong>{{ t(stop) }}</strong>
     </li>
     <li class="route-points__point route-points__point--destination">
-      <span class="route-points__label">{{ t('目的地') }}</span>
+      <span class="route-points__label">{{ charter ? t('結束') : t('目的地') }}</span>
       <strong>{{ t(destination) }}</strong>
     </li>
   </ol>
