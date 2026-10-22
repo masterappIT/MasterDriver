@@ -2,6 +2,7 @@
 import { onBeforeUnmount } from 'vue';
 import { GUIDE_INDEX, GUIDES, guidePageTitle, guidePath } from '@masterdriver/shared/guides';
 import BrandHeader from '../../components/BrandHeader.vue';
+import PageBack from '../../components/PageBack.vue';
 import GuideLanguage from '../../components/GuideLanguage.vue';
 import { t } from '../../i18n';
 
@@ -18,6 +19,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page guide-index">
+    <!-- From 我的: 返回 goes back there. Opened from a link sent to the driver, there is nothing to go back to. -->
+    <PageBack fallback="/app/me" history only-in-app />
     <BrandHeader />
     <div class="guide-index__top">
       <h1>{{ t('使用教學') }}</h1>

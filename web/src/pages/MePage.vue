@@ -103,7 +103,8 @@ onMounted(async () => {
     <!-- 我的客源 keeps its explanations: a driver new to the tool learns from them what each is for. -->
     <section class="card me__group">
       <span class="section-label">{{ t('我的客源') }}</span>
-      <MenuRow to="/app/guide/customers" icon="help" :title="t('怎麼用名片頁找客人')" :detail="t('名片頁可以做什麼、連結放在哪裡、客人怎樣向你詢價')" />
+      <!-- The one way into 使用教學 from the app (2026-10-22): no page of a feature links to it. -->
+      <MenuRow to="/guide" icon="help" :title="t('使用教學')" :detail="t('每個功能怎樣用、怎樣幫你做生意')" />
       <MenuRow to="/app/profile-page" icon="card" :title="t('我的名片頁')" :detail="t('放到朋友圈、小紅書或傳給熟客，客人在上面向你詢價')" />
       <MenuRow
         to="/app/bookings"
