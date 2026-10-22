@@ -83,8 +83,11 @@
 html,
 body {
   margin: 0;
-  /* Fixed washes stay put while the page scrolls; iOS ignores fixed and scrolls them, which is fine. */
+  /* Fixed washes stay put while the page scrolls; iOS ignores fixed and scrolls them, which is fine.
+     The first layer fades the washes out at the very top, so the page meets Safari's status bar,
+     painted in the plain background colour, with no seam. */
   background:
+    linear-gradient(180deg, var(--color-background) 0, rgba(237, 242, 247, 0) 96px),
     radial-gradient(120% 60% at 0% 0%, var(--wash-blue), transparent 60%),
     radial-gradient(90% 50% at 100% 35%, var(--wash-teal), transparent 60%),
     var(--color-background);
