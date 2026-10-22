@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CHARTER_EXTRAS, CHARTER_MAX_MINUTES, CHARTER_MIN_MINUTES, CHARTER_STEP_MINUTES, MAX_OVERTIME_GRACE } from './charter';
 import { COUNTRY_CODES, formatPassengerPhone, isValidMobile, normalizePhone, splitPassengerPhone } from './phone';
 import { PLATE_TYPES, VEHICLE_OWNERSHIPS, normalizeVehiclePlates, vehiclePlateError } from './vehicle-plate';
 
@@ -129,6 +130,14 @@ const requiredPlatesSchema = z
   .default([])
   .transform((plates) => PLATE_REGIONS.filter((plate) => plates.includes(plate)));
 
+/** 包車: the hours booked, in minutes, by half hours up to one day. */
+export const charterMinutesSchema = z
+  .number()
+  .int()
+  .min(CHARTER_MIN_MINUTES)
+  .max(CHARTER_MAX_MINUTES)
+  .refine((minutes) => minutes % CHARTER_STEP_MINUTES === 0, { message: 'CHARTER_STEP' });
+
 /** Up to 24 hours before pickup, or null for "as soon as the order is claimed". */
 export const contactReveal = z.number().int().min(0).max(1440).nullable();
 
@@ -213,6 +222,35 @@ export const createOrderSchema = z.object({
       selfDriveLeg: z.union([z.literal(1), z.literal(2)]).nullable().default(null),
     })
     .optional(),
+  /**
+   * 包車 (按小時計費) instead of 直達: the car is the passenger's from `pickupAt` for `minutes`, from
+   * `origin` (上車地點) to `destination` (結束地點) by the `waypoints` (行程安排). The prices are an
+   * hour; the API keeps them times the hours as the order's driver and passenger prices, so
+   * `driverPrice` and `passengerPrice` are not given. Overtime and 另計 are only stated. Not
+   * together with 接駁 or 往返.
+   */
+  charter: z
+    .object({
+      minutes: charterMinutesSchema,
+      driverHourly: priceSchema.optional(),
+      passengerHourly: priceSchema.optional(),
+      /** 超時 an hour, in the hourly price's currency; absent: the hourly price. */
+      overtimeDriverHourly: z.number().min(0).max(1_000_000).optional(),
+      overtimePassengerHourly: z.number().min(0).max(1_000_000).optional(),
+      overtimeUnitMinutes: z.union([z.literal(30), z.literal(60)]).default(30),
+      overtimeGraceMinutes: z.number().int().min(0).max(MAX_OVERTIME_GRACE).default(15),
+      extras: z
+        .array(z.enum(CHARTER_EXTRAS))
+        .max(CHARTER_EXTRAS.length)
+        .default([])
+        .transform((extras) => CHARTER_EXTRAS.filter((extra) => extras.includes(extra))),
+    })
+    .refine((value) => value.overtimeDriverHourly === undefined || value.driverHourly, { message: 'OVERTIME_WITHOUT_HOURLY', path: ['overtimeDriverHourly'] })
+    .refine((value) => value.overtimePassengerHourly === undefined || value.passengerHourly, {
+      message: 'OVERTIME_WITHOUT_HOURLY',
+      path: ['overtimePassengerHourly'],
+    })
+    .optional(),
   /** Plates the car needs, e.g. ['MACAU']; only stated to drivers, never enforced. With 接駁, the first leg's. */
   requiredPlates: requiredPlatesSchema,
   /** 名片頁: the booking request this order is made from; it must be the dispatcher's own and still open. */
@@ -228,6 +266,8 @@ export const createOrderSchema = z.object({
   showPaymentMethods: z.boolean().default(false),
 })
   .refine((value) => !(value.transfer && value.roundTrip), { message: 'ONE_JOURNEY_KIND', path: ['roundTrip'] })
+  .refine((value) => !(value.charter && (value.transfer || value.roundTrip)), { message: 'ONE_JOURNEY_KIND', path: ['charter'] })
+  .refine((value) => !(value.charter && (value.driverPrice || value.passengerPrice)), { message: 'CHARTER_PRICE_HOURLY', path: ['charter'] })
   .refine((value) => !(value.transfer && value.selfDrive), { message: 'SELF_DRIVE_ONE_LEG', path: ['selfDrive'] })
   .refine((value) => !(value.roundTrip && !value.roundTrip.sameDriver && value.selfDrive), {
     message: 'SELF_DRIVE_ONE_LEG',
@@ -247,6 +287,9 @@ export const updateOrderPricesSchema = z
   .object({
     driverPrice: priceSchema.nullable().optional(),
     passengerPrice: priceSchema.nullable().optional(),
+    /** 包車: its prices change by the hour, and the totals follow (instead of driverPrice and passengerPrice). */
+    driverHourly: priceSchema.nullable().optional(),
+    passengerHourly: priceSchema.nullable().optional(),
     showPassengerPrice: z.boolean().optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });
@@ -339,6 +382,8 @@ export const updateTripSchema = z
     vehicleType: z.string().trim().min(1).max(30).optional(),
     notes: z.string().trim().max(500).nullable().optional(),
     flightNo: z.string().trim().max(20).nullable().optional(),
+    /** 包車: the hours booked; the totals follow the hourly prices. */
+    charterMinutes: charterMinutesSchema.optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });
 export type UpdateTripInput = z.infer<typeof updateTripSchema>;

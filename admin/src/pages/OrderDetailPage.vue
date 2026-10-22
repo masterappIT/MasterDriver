@@ -31,6 +31,8 @@ interface OrderDetail {
   inPool: boolean;
   /** kind: TRANSFER (接駁) or ROUND_TRIP (往返); sameDriver: one driver takes both legs of a 往返. */
   journey: { kind: 'TRANSFER' | 'ROUND_TRIP'; sameDriver: boolean; legIndex: number; legCount: number } | null;
+  /** 包車: the hours booked and the prices an hour; the order's prices are those times the hours. */
+  charter: { minutes: number; driverHourly: Money | null; passengerHourly: Money | null } | null;
   contactRevealMinutes: number | null;
   fromBooking: boolean;
   payment: { showPaymentMethods: boolean; paidAt: string | null; settledAt: string | null };
@@ -156,6 +158,7 @@ onMounted(async () => {
       <div class="order-detail__tags">
         <span v-if="order.journey?.kind === 'ROUND_TRIP'" class="tag">往返{{ order.journey.legIndex === 1 ? '去程' : '回程' }}{{ order.journey.sameDriver ? '・同一位司機來回' : '・可分開接' }}</span>
         <span v-else-if="order.journey" class="tag">接駁第 {{ order.journey.legIndex }}／{{ order.journey.legCount }} 段</span>
+        <span v-if="order.charter" class="tag">包車 {{ order.charter.minutes / 60 }} 小時</span>
         <span v-if="order.selfDrive" class="tag">出單者自己做</span>
         <span v-if="order.inPool" class="tag">在接單池</span>
         <span v-if="order.fromBooking" class="tag">來自名片頁預約</span>
@@ -167,7 +170,7 @@ onMounted(async () => {
 
     <div class="card">
       <dl class="facts facts--numbers">
-        <div><dt>出單價</dt><dd>{{ money(order.driverPrice) }}</dd></div>
+        <div><dt>出單價</dt><dd>{{ money(order.driverPrice) }}<template v-if="order.charter?.driverHourly">（每小時 {{ money(order.charter.driverHourly) }}）</template></dd></div>
         <div>
           <dt>乘客價<span class="tag">{{ order.showPassengerPrice ? '乘客看得到' : '乘客看不到' }}</span></dt>
           <dd>{{ money(order.passengerPrice) }}</dd>

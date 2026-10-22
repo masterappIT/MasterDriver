@@ -190,3 +190,35 @@ test('a 往返 is A to B and back: no 接駁位置, and the passenger sees both 
     ],
   );
 });
+
+test('包車: anyone sees the hours and what the driver is paid an hour; the passenger\'s hourly price only the dispatcher, or the passenger when shown', () => {
+  const charter = {
+    ...order,
+    destination: '深圳灣口岸',
+    driverPriceMinor: 200000,
+    passengerPriceMinor: 240000,
+    charterMinutes: 480,
+    driverHourlyMinor: 25000,
+    passengerHourlyMinor: 30000,
+    overtimeDriverHourlyMinor: null,
+    overtimePassengerHourlyMinor: 35000,
+    overtimeUnitMinutes: 30,
+    overtimeGraceMinutes: 15,
+    charterExtras: ['TOLLS'],
+  } as OrderWithPeople;
+  const other = toOrderView(charter, 'other', 'https://x.test').charter as Record<string, unknown>;
+  assert.deepEqual(other, {
+    minutes: 480,
+    overtimeUnitMinutes: 30,
+    overtimeGraceMinutes: 15,
+    extras: ['TOLLS'],
+    driverHourly: { amount: 250, currency: 'HKD' },
+    overtimeDriverHourly: { amount: 250, currency: 'HKD' },
+  });
+  const mine = toOrderView(charter, 'dispatcher', 'https://x.test').charter as Record<string, unknown>;
+  assert.deepEqual(mine.passengerHourly, { amount: 300, currency: 'HKD' });
+  assert.deepEqual(mine.overtimePassengerHourly, { amount: 350, currency: 'HKD' });
+  assert.equal(toPassengerView(charter).charter?.hourly, null, 'the passenger price is hidden');
+  assert.deepEqual(toPassengerView({ ...charter, showPassengerPrice: true }).charter?.hourly, { amount: 300, currency: 'HKD' });
+  assert.equal(toOrderView(order, 'other', 'https://x.test').charter, null, 'any other order has no 包車');
+});

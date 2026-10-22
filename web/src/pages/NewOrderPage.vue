@@ -1,11 +1,23 @@
 <script setup lang="ts">
 import { COUNTRY_CODES, type CountryCode, formatPassengerPhone, isValidPassengerPhone, splitPassengerPhone } from '@masterdriver/shared/phone';
 import { parseQuickOrder } from '@masterdriver/shared/quick-order';
+import {
+  CHARTER_EXTRAS,
+  CHARTER_EXTRA_NAMES,
+  CHARTER_MAX_MINUTES,
+  CHARTER_MIN_MINUTES,
+  CHARTER_STEP_MINUTES,
+  DEFAULT_OVERTIME_GRACE,
+  DEFAULT_OVERTIME_UNIT,
+  MAX_OVERTIME_GRACE,
+  charterHours,
+  type CharterExtra,
+} from '@masterdriver/shared/charter';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api, errorText, session } from '../api';
 import RevealSelect, { revealLabel } from '../components/RevealSelect.vue';
-import { fromLocalInput, pickup, toLocalInput } from '../format';
+import { fromLocalInput, money, pickup, toLocalInput } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import AppIcon from '../components/AppIcon.vue';
@@ -26,6 +38,17 @@ interface PastOrder {
   showPassengerPrice?: boolean;
   /** 接駁: the whole order's end, where its first leg ends at the 接駁位置. */
   journey?: { destination: string } | null;
+  /** 包車: its hours and prices an hour, copied as they are. */
+  charter?: {
+    minutes: number;
+    driverHourly: { amount: number; currency: string } | null;
+    passengerHourly?: { amount: number; currency: string } | null;
+    overtimeDriverHourly: { amount: number; currency: string } | null;
+    overtimePassengerHourly?: { amount: number; currency: string } | null;
+    overtimeUnitMinutes: number;
+    overtimeGraceMinutes: number;
+    extras: CharterExtra[];
+  } | null;
 }
 
 const route = useRoute();
@@ -118,6 +141,19 @@ const form = reactive({
   favoritesFirst: false,
   /** 即時單: leaves now; no time to pick, the API takes the moment it is put out. */
   immediate: false,
+  /**
+   * 包車 (按小時計費): the car is the passenger's for some hours from the time above, from 上車地點
+   * to 結束地點 (back where it started when left blank) by the 行程 stops. The driver and passenger
+   * prices above are then an hour's. Never together with 接駁 or 往返.
+   */
+  charter: false,
+  charterHours: '8',
+  /** 超時 an hour; blank: the hourly price. */
+  overtimeDriverHourly: '',
+  overtimePassengerHourly: '',
+  overtimeUnit: DEFAULT_OVERTIME_UNIT as number,
+  overtimeGrace: String(DEFAULT_OVERTIME_GRACE),
+  charterExtras: [] as CharterExtra[],
 });
 /** 接駁 or 往返: two legs, the second's time and driver price asked too. */
 const twoLegs = computed(() => form.transfer || form.roundTrip);
@@ -133,12 +169,36 @@ const legName = (legIndex: 1 | 2) => (form.roundTrip ? (legIndex === 1 ? '去程
  * 往返 starts with no time for the way back: any guess would go out to the group unnoticed, so the
  * dispatcher fills it in. 接駁 suggests the second leg an hour after the first.
  */
-function setMode(mode: 'direct' | 'roundTrip' | 'transfer') {
+function setMode(mode: 'direct' | 'roundTrip' | 'transfer' | 'charter') {
   if (mode === 'roundTrip' && !form.roundTrip) form.secondPickupAt = '';
   if (mode === 'transfer' && !form.secondPickupAt) form.secondPickupAt = hourAfter(form.pickupAt || toLocalInput(inAnHour));
   form.transfer = mode === 'transfer';
   form.roundTrip = mode === 'roundTrip';
+  form.charter = mode === 'charter';
   form.selfDriveLeg = null;
+}
+
+/** 包車: the hours as typed, in minutes; null when not a whole or half hour from 1 to 24. */
+const charterMinutes = computed(() => {
+  const minutes = Math.round(Number(form.charterHours) * 60);
+  const valid =
+    form.charterHours.trim() !== '' &&
+    Number.isFinite(minutes) &&
+    minutes >= CHARTER_MIN_MINUTES &&
+    minutes <= CHARTER_MAX_MINUTES &&
+    minutes % CHARTER_STEP_MINUTES === 0;
+  return valid ? minutes : null;
+});
+/** 包車: an hourly price times the hours, as the API keeps it; null without both. */
+function charterTotal(hourly: string, currency: string) {
+  if (!hourly || charterMinutes.value === null) return null;
+  return { amount: Math.round(Number(hourly) * charterMinutes.value * 100 / 60) / 100, currency };
+}
+const driverTotal = computed(() => (form.charter ? charterTotal(form.driverPrice, form.currency) : null));
+const passengerTotal = computed(() => (form.charter ? charterTotal(form.passengerPrice, form.passengerCurrency) : null));
+
+function toggleExtra(extra: CharterExtra) {
+  form.charterExtras = form.charterExtras.includes(extra) ? form.charterExtras.filter((one) => one !== extra) : [...form.charterExtras, extra];
 }
 
 /**
@@ -238,7 +298,19 @@ function fillFromLine() {
     form.vehicleType = parsed.vehicleType;
     filled.push(parsed.vehicleType);
   }
-  if (parsed.price) {
+  // 包車: only a price said to be an hour's is taken; a total is left for the dispatcher to work out.
+  if (parsed.charter) {
+    setMode('charter');
+    if (parsed.charter.minutes) form.charterHours = String(parsed.charter.minutes / 60);
+    filled.push(parsed.charter.minutes ? `包車 ${charterHours(parsed.charter.minutes)}` : '類型 包車');
+    if (parsed.charter.hourly) {
+      if (parsed.charter.hourly.currency) form.currency = parsed.charter.hourly.currency;
+      form.driverPrice = String(parsed.charter.hourly.amount);
+      filled.push(`每小時出單價 ${parsed.charter.hourly.amount}`);
+    } else if (parsed.price) {
+      filled.push(`價錢 ${parsed.price.amount} 沒有填入，請填每小時出單價`);
+    }
+  } else if (parsed.price) {
     form.currency = parsed.price.currency;
     form.driverPrice = String(parsed.price.amount);
     filled.push(`出單價 ${parsed.price.amount}`);
@@ -268,6 +340,13 @@ watch(
 /** The spread, only when every price is in the same currency (the API counts it the same way). */
 const margin = computed(() => {
   if (!form.passengerPrice) return null;
+  // 包車: what the hours come to at both prices an hour.
+  if (form.charter) {
+    const driver = driverTotal.value;
+    const passenger = passengerTotal.value;
+    if (!driver || !passenger || driver.currency !== passenger.currency) return null;
+    return Math.round((passenger.amount - driver.amount) * 100) / 100;
+  }
   // 接駁 and 往返: the passenger's one price against what both legs' drivers are paid; a leg the
   // dispatcher drives pays nobody.
   const self = (legIndex: 1 | 2) => (perLegSelf.value ? form.selfDriveLeg === legIndex : form.selfDrive);
@@ -315,6 +394,39 @@ watch(
 function copyLast() {
   const last = past.value[0];
   if (!last) return;
+  // A 包車 copies as one, with its prices an hour; a form on 包車 goes back to 直達 for any other order.
+  if (last.charter) {
+    const charter = last.charter;
+    setMode('charter');
+    Object.assign(form, {
+      origin: last.origin,
+      destination: last.destination === last.origin ? '' : last.destination,
+      waypoints: [...last.waypoints],
+      passengers: String(last.passengers),
+      luggage: String(last.luggage),
+      vehicleType: last.vehicleType ?? '',
+      notes: last.notes ?? '',
+      charterHours: String(charter.minutes / 60),
+      currency: charter.driverHourly?.currency ?? 'CNY',
+      driverPrice: charter.driverHourly ? String(charter.driverHourly.amount) : '',
+      passengerCurrency: charter.passengerHourly?.currency ?? charter.driverHourly?.currency ?? 'CNY',
+      passengerPrice: charter.passengerHourly ? String(charter.passengerHourly.amount) : '',
+      showPassengerPrice: last.showPassengerPrice ?? false,
+      // 超時 at the hourly price is left blank, so it follows the price if that changes.
+      overtimeDriverHourly:
+        charter.overtimeDriverHourly && charter.overtimeDriverHourly.amount !== charter.driverHourly?.amount ? String(charter.overtimeDriverHourly.amount) : '',
+      overtimePassengerHourly:
+        charter.overtimePassengerHourly && charter.overtimePassengerHourly.amount !== charter.passengerHourly?.amount
+          ? String(charter.overtimePassengerHourly.amount)
+          : '',
+      overtimeUnit: charter.overtimeUnitMinutes,
+      overtimeGrace: String(charter.overtimeGraceMinutes),
+      charterExtras: [...charter.extras],
+    });
+    passengerCurrencyChosen.value = Boolean(charter.passengerHourly);
+    return;
+  }
+  if (form.charter) setMode('direct');
   Object.assign(form, {
     origin: last.origin,
     destination: last.journey?.destination ?? last.destination,
@@ -363,6 +475,10 @@ async function submit() {
   }
   // 即時單 leaves now: the API takes the moment it is put out; this is only for the check below.
   const firstAt = form.immediate ? toLocalInput(new Date()) : form.pickupAt;
+  if (form.charter && charterMinutes.value === null) {
+    void showError(t('包車時數請填 1 到 24 小時，以半小時為單位'));
+    return;
+  }
   if (form.roundTrip && !form.secondPickupAt) {
     void showError(t('往返請填回程時間'));
     return;
@@ -377,13 +493,27 @@ async function submit() {
       pickupAt: fromLocalInput(firstAt),
       immediate: form.immediate,
       origin: form.origin,
-      destination: form.destination,
+      // 包車 with no 結束地點 ends where it started.
+      destination: form.charter ? form.destination.trim() || form.origin : form.destination,
       waypoints: form.waypoints.filter((stop) => stop.trim()),
       passengers: Number(form.passengers),
       luggage: Number(form.luggage),
       vehicleType: form.vehicleType,
-      driverPrice: price(form.driverPrice, form.currency),
-      passengerPrice: price(form.passengerPrice, form.passengerCurrency),
+      // 包車: the prices are an hour's, sent with its hours; the API keeps the totals.
+      driverPrice: form.charter ? undefined : price(form.driverPrice, form.currency),
+      passengerPrice: form.charter ? undefined : price(form.passengerPrice, form.passengerCurrency),
+      charter: form.charter
+        ? {
+            minutes: charterMinutes.value,
+            driverHourly: price(form.driverPrice, form.currency),
+            passengerHourly: price(form.passengerPrice, form.passengerCurrency),
+            overtimeDriverHourly: form.driverPrice && form.overtimeDriverHourly ? Number(form.overtimeDriverHourly) : undefined,
+            overtimePassengerHourly: form.passengerPrice && form.overtimePassengerHourly ? Number(form.overtimePassengerHourly) : undefined,
+            overtimeUnitMinutes: form.overtimeUnit,
+            overtimeGraceMinutes: Math.min(MAX_OVERTIME_GRACE, Math.max(0, Math.round(Number(form.overtimeGrace) || 0))),
+            extras: form.charterExtras,
+          }
+        : undefined,
       showPassengerPrice: form.showPassengerPrice,
       notes: form.notes,
       rawText: line.value.trim() || undefined,
@@ -481,7 +611,7 @@ async function loadBooking() {
 /** What the folded 乘客價、備註與更多 currently says, so nothing is hidden by surprise. */
 const moreSummary = computed(() =>
   [
-    form.passengerPrice ? `乘客價 ${form.passengerPrice}` : '',
+    form.passengerPrice ? (form.charter ? `每小時乘客價 ${form.passengerPrice}` : `乘客價 ${form.passengerPrice}`) : '',
     form.notes.trim() ? '有備註' : '',
     `乘客電話${revealLabel(form.contactRevealMinutes)}`,
     perLegSelf.value && form.selfDriveLeg ? `${legName(form.selfDriveLeg)}我自己做` : '',
@@ -633,11 +763,15 @@ onMounted(async () => {
 
     <!-- The trip: when, from where to where, and the flight when an airport is at either end. -->
     <section class="card">
-      <div class="segment segment--block new-order__mode" role="group" :aria-label="t('直達、往返或接駁')">
-        <button type="button" :aria-pressed="!twoLegs" @click="setMode('direct')">{{ t('直達') }}</button>
+      <div class="segment segment--block new-order__mode" role="group" :aria-label="t('直達、往返、接駁或包車')">
+        <button type="button" :aria-pressed="!twoLegs && !form.charter" @click="setMode('direct')">{{ t('直達') }}</button>
         <button type="button" :aria-pressed="form.roundTrip" @click="setMode('roundTrip')">{{ t('往返') }}</button>
         <button type="button" :aria-pressed="form.transfer" @click="setMode('transfer')">{{ t('接駁') }}</button>
+        <button type="button" :aria-pressed="form.charter" @click="setMode('charter')">{{ t('包車') }}</button>
       </div>
+      <p v-if="form.charter" class="hint new-order__explain">
+        {{ t('按小時計費：乘客由開始時間起用車，司機照行程安排開。群裡寫明時數、每小時價錢和超時規則。') }}
+      </p>
       <p v-if="form.transfer" class="hint new-order__explain">
         {{ t('中途換車：一張單分兩段，在接駁位置換車，各由一位司機接。群裡貼一條訊息，司機選段搶；乘客只看到一個價格。乘客自行過關不算接駁。') }}
       </p>
@@ -656,13 +790,13 @@ onMounted(async () => {
 
       <label class="new-order__switch new-order__now">
         <span>
-          {{ twoLegs ? t(`${legName(1)}即時（現在出發）`) : t('即時（現在出發）') }}
+          {{ twoLegs ? t(`${legName(1)}即時（現在出發）`) : form.charter ? t('即時（現在開始）') : t('即時（現在出發）') }}
           <small>{{ form.immediate ? t('放進接單池，10 分鐘沒人接會提醒你') : t('馬上要車就打開') }}</small>
         </span>
         <input v-model="form.immediate" class="switch" type="checkbox" />
       </label>
       <label v-if="!form.immediate" class="line-field">
-        <span>{{ twoLegs ? t(`${legName(1)}出發時間（香港時間）`) : t('出發時間（香港時間）') }}</span>
+        <span>{{ twoLegs ? t(`${legName(1)}出發時間（香港時間）`) : form.charter ? t('開始時間（香港時間）') : t('出發時間（香港時間）') }}</span>
         <input v-model="form.pickupAt" class="line-input new-order__time" type="datetime-local" required />
       </label>
 
@@ -673,14 +807,20 @@ onMounted(async () => {
             v-model="form.origin"
             class="line-input"
             maxlength="120"
-            :aria-label="t('出發地')"
-            :placeholder="t('從哪裡出發，例如：深圳灣口岸')"
+            :aria-label="form.charter ? t('上車地點') : t('出發地')"
+            :placeholder="form.charter ? t('在哪裡上車，例如：深圳灣口岸') : t('從哪裡出發，例如：深圳灣口岸')"
             required
           />
         </li>
         <li v-for="(_, index) in form.waypoints" :key="index" class="route-inputs__stop route-inputs__stop--via">
           <div class="new-order__via">
-            <input v-model="form.waypoints[index]" class="line-input" maxlength="120" :aria-label="t(`途經點 ${index + 1}`)" :placeholder="t('途經')" />
+            <input
+              v-model="form.waypoints[index]"
+              class="line-input"
+              maxlength="120"
+              :aria-label="form.charter ? t(`行程地點 ${index + 1}`) : t(`途經點 ${index + 1}`)"
+              :placeholder="form.charter ? t('要去的地方，例如：東門') : t('途經')"
+            />
             <button class="new-order__remove" type="button" :aria-label="t(`刪除途經點 ${index + 1}`)" @click="form.waypoints.splice(index, 1)">
               <AppIcon name="close" :size="18" />
             </button>
@@ -695,12 +835,22 @@ onMounted(async () => {
             v-model="form.destination"
             class="line-input"
             maxlength="120"
-            :aria-label="t('目的地')"
-            :placeholder="form.transfer ? t('最後去哪裡，例如：廣州') : t('去哪裡，例如：香港國際機場')"
-            required
+            :aria-label="form.charter ? t('結束地點') : t('目的地')"
+            :placeholder="
+              form.charter ? t('在哪裡結束（不填就是回到上車地點）') : form.transfer ? t('最後去哪裡，例如：廣州') : t('去哪裡，例如：香港國際機場')
+            "
+            :required="!form.charter"
           />
         </li>
       </ol>
+      <!-- 包車: how long the car is the passenger's, by half hours, one day at most. -->
+      <label v-if="form.charter" class="line-field new-order__hours">
+        <span>{{ t('包車時數（1 到 24 小時，以半小時為單位）') }}</span>
+        <span class="new-order__hours-input">
+          <input v-model="form.charterHours" class="line-input" type="number" min="1" max="24" step="0.5" inputmode="decimal" required />
+          <span>{{ t('小時') }}</span>
+        </span>
+      </label>
       <label v-if="twoLegs" class="line-field new-order__second-time">
         <span>{{ form.roundTrip ? t('回程出發時間（香港時間）') : t('第 2 段出發時間（在接駁位置換車）') }}</span>
         <input v-model="form.secondPickupAt" class="line-input new-order__time" type="datetime-local" :min="form.immediate ? undefined : form.pickupAt" required />
@@ -724,7 +874,7 @@ onMounted(async () => {
         {{ form.roundTrip ? t('回程的時間不能早於去程') : t('第 2 段的時間不能早於第 1 段') }}
       </p>
       <div class="chips new-order__places">
-        <button v-if="form.waypoints.length < 5" class="chip" type="button" @click="form.waypoints.push('')">{{ t('加途經點') }}</button>
+        <button v-if="form.waypoints.length < 5" class="chip" type="button" @click="form.waypoints.push('')">{{ form.charter ? t('加行程地點') : t('加途經點') }}</button>
         <button v-for="place in shownPlaces" :key="place" class="chip" type="button" @click="fillPlace(place)">{{ t(place) }}</button>
         <button v-if="places.length > 4 && !allPlaces" class="chip" type="button" @click="allPlaces = true">{{ t('更多地點') }}</button>
       </div>
@@ -757,7 +907,9 @@ onMounted(async () => {
       </div>
       <span class="section-label new-order__driver-price">
         {{
-          form.transfer
+          form.charter
+            ? t('每小時出單價，拿到連結的司機看得到')
+            : form.transfer
             ? t('出單價，每段給接那一段的司機')
             : form.roundTrip
               ? form.sameDriver
@@ -779,10 +931,43 @@ onMounted(async () => {
           min="0"
           step="0.01"
           inputmode="decimal"
-          :aria-label="twoLegs ? t(`${legName(1)}出單價`) : t('出單價')"
-          :placeholder="t('出單價')"
+          :aria-label="twoLegs ? t(`${legName(1)}出單價`) : form.charter ? t('每小時出單價') : t('出單價')"
+          :placeholder="form.charter ? t('每小時出單價') : t('出單價')"
         />
       </div>
+      <!-- 包車: what the hours come to, and the dispatcher's 超時 and 另計 rules. -->
+      <template v-if="form.charter">
+        <p v-if="driverTotal" class="hint new-order__total">{{ t(`${charterHours(charterMinutes!)}共 ${money(driverTotal)}`) }}</p>
+        <span class="section-label new-order__overtime-label">{{ t('超時') }}</span>
+        <div class="segment segment--block" role="group" :aria-label="t('超時怎樣計')">
+          <button type="button" :aria-pressed="form.overtimeUnit === 30" @click="form.overtimeUnit = 30">{{ t('每 30 分鐘計') }}</button>
+          <button type="button" :aria-pressed="form.overtimeUnit === 60" @click="form.overtimeUnit = 60">{{ t('按每小時計') }}</button>
+        </div>
+        <div class="new-order__load new-order__overtime">
+          <label class="line-field">
+            <span>{{ t('幾多分鐘內不計') }}</span>
+            <input v-model="form.overtimeGrace" class="line-input" type="number" min="0" :max="MAX_OVERTIME_GRACE" inputmode="numeric" />
+          </label>
+          <label v-if="form.driverPrice" class="line-field">
+            <span>{{ t('超時每小時出單價') }}</span>
+            <input v-model="form.overtimeDriverHourly" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" :placeholder="t(`同每小時 ${form.driverPrice}`)" />
+          </label>
+        </div>
+        <span class="section-label new-order__overtime-label">{{ t('另計（乘客另外付）') }}</span>
+        <div class="chips">
+          <button
+            v-for="extra in CHARTER_EXTRAS"
+            :key="extra"
+            class="chip"
+            :class="{ 'chip--on': form.charterExtras.includes(extra) }"
+            type="button"
+            :aria-pressed="form.charterExtras.includes(extra)"
+            @click="toggleExtra(extra)"
+          >
+            {{ t(CHARTER_EXTRA_NAMES[extra]) }}
+          </button>
+        </div>
+      </template>
       <div v-if="twoLegs" class="amount-line new-order__second-price">
         <span class="new-order__leg-label">{{ t(legName(2)) }}</span>
         <select v-model="form.secondCurrency" :aria-label="t(`${legName(2)}幣種`)">
@@ -838,15 +1023,32 @@ onMounted(async () => {
         <textarea v-model="form.notes" class="line-input" maxlength="500" :placeholder="t('例如：需要兒童座椅')" />
       </label>
 
-      <span class="section-label new-order__passenger-price">{{ twoLegs ? t('乘客價（整趟一個價），只有你看得到') : t('乘客價，只有你看得到') }}</span>
+      <span class="section-label new-order__passenger-price">
+        {{ twoLegs ? t('乘客價（整趟一個價），只有你看得到') : form.charter ? t('每小時乘客價，只有你看得到') : t('乘客價，只有你看得到') }}
+      </span>
       <div class="amount-line amount-line--quiet">
         <select v-model="form.passengerCurrency" :aria-label="t('乘客價幣種')" @change="passengerCurrencyChosen = true">
           <option value="CNY">RMB¥</option>
           <option value="HKD">HK$</option>
           <option value="MOP">MOP$</option>
         </select>
-        <input v-model="form.passengerPrice" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('乘客價')" :placeholder="t('乘客價（選填）')" />
+        <input
+          v-model="form.passengerPrice"
+          type="number"
+          min="0"
+          step="0.01"
+          inputmode="decimal"
+          :aria-label="form.charter ? t('每小時乘客價') : t('乘客價')"
+          :placeholder="form.charter ? t('每小時乘客價（選填）') : t('乘客價（選填）')"
+        />
       </div>
+      <template v-if="form.charter && form.passengerPrice">
+        <p v-if="passengerTotal" class="hint new-order__total">{{ t(`${charterHours(charterMinutes!)}共 ${money(passengerTotal)}`) }}</p>
+        <label class="line-field new-order__overtime-passenger">
+          <span>{{ t('超時每小時乘客價') }}</span>
+          <input v-model="form.overtimePassengerHourly" class="line-input" type="number" min="0" step="0.01" inputmode="decimal" :placeholder="t(`同每小時 ${form.passengerPrice}`)" />
+        </label>
+      </template>
       <p v-if="margin !== null" class="new-order__margin">{{ t(`差價 ${margin}`) }}</p>
       <p v-else-if="form.driverPrice && form.passengerPrice" class="hint new-order__margin-none">{{ t('兩個價格幣種不同，不計差價。') }}</p>
       <!-- Only once there is a price to show, or a way to be paid. -->
@@ -988,6 +1190,32 @@ onMounted(async () => {
   white-space: nowrap;
 }
 .new-order__flight {
+  margin-top: var(--space-md);
+}
+.new-order__hours {
+  margin-top: var(--space-md);
+}
+.new-order__hours-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-weight: 600;
+}
+.new-order__hours-input .line-input {
+  max-width: 96px;
+}
+.new-order__total {
+  margin: var(--space-xs) 0 0;
+}
+.new-order__overtime-label {
+  display: block;
+  margin: var(--space-lg) 0 var(--space-sm);
+}
+.new-order__overtime {
+  grid-template-columns: 1fr 1fr;
+  margin-top: var(--space-md);
+}
+.new-order__overtime-passenger {
   margin-top: var(--space-md);
 }
 .new-order__driver-price {

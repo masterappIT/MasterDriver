@@ -24,6 +24,7 @@
     "./quick-order": "./src/quick-order.ts",
     "./vehicle-plate": "./src/vehicle-plate.ts",
     "./phone": "./src/phone.ts",
-    "./guides": "./src/guides.ts"
+    "./guides": "./src/guides.ts",
+    "./charter": "./src/charter.ts"
   }
 }

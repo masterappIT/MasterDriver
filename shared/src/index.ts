@@ -9,4 +9,5 @@ export * from './profile-page';
 export * from './notifications';
 export * from './carpool';
 export * from './deal';
+export * from './charter';
 export * from './guides';

@@ -18,6 +18,7 @@ import {
   type UpdateOrderPricesInput,
   type CarpoolSeatPayment,
   type CarpoolSeatProgress,
+  charterTotalMinor,
 } from '@masterdriver/shared';
 import { Prisma, type NotificationKind, type OrderStatus } from '../../generated/prisma';
 import { APP_CONFIG, type AppConfig } from '../config';
@@ -57,6 +58,43 @@ export type ClaimResult = 'WON' | 'LOST';
 
 type Money = { amount: number; currency: 'HKD' | 'CNY' | 'MOP' } | null | undefined;
 const toMinor = (price: Money) => (price ? Math.round(price.amount * 100) : null);
+/** An amount without its currency (it is the hourly price's), in minor units. */
+const amountMinor = (amount: number | undefined) => (amount === undefined ? null : Math.round(amount * 100));
+/** 包車: what the hours come to at a price an hour; null without one. */
+const charterTotal = (hourlyMinor: number | null, minutes: number) => (hourlyMinor === null ? null : charterTotalMinor(hourlyMinor, minutes));
+
+/**
+ * 包車 (按小時計費): the order's fields for its hours, hourly prices and overtime rules, with its
+ * driver and passenger prices being the hourly prices times the hours. Without a 包車, the order's
+ * own prices as given.
+ */
+function priceFields(input: CreateOrderInput) {
+  const charter = input.charter;
+  if (!charter) {
+    return {
+      driverPriceMinor: toMinor(input.driverPrice),
+      driverCurrency: input.driverPrice?.currency ?? 'HKD',
+      passengerPriceMinor: toMinor(input.passengerPrice),
+      passengerCurrency: input.passengerPrice?.currency ?? input.driverPrice?.currency ?? 'HKD',
+    };
+  }
+  const driverHourlyMinor = toMinor(charter.driverHourly);
+  const passengerHourlyMinor = toMinor(charter.passengerHourly);
+  return {
+    driverPriceMinor: charterTotal(driverHourlyMinor, charter.minutes),
+    driverCurrency: charter.driverHourly?.currency ?? 'HKD',
+    passengerPriceMinor: charterTotal(passengerHourlyMinor, charter.minutes),
+    passengerCurrency: charter.passengerHourly?.currency ?? charter.driverHourly?.currency ?? 'HKD',
+    charterMinutes: charter.minutes,
+    driverHourlyMinor,
+    passengerHourlyMinor,
+    overtimeDriverHourlyMinor: amountMinor(charter.overtimeDriverHourly),
+    overtimePassengerHourlyMinor: amountMinor(charter.overtimePassengerHourly),
+    overtimeUnitMinutes: charter.overtimeUnitMinutes,
+    overtimeGraceMinutes: charter.overtimeGraceMinutes,
+    charterExtras: charter.extras,
+  };
+}
 
 @Injectable()
 export class OrdersService {
@@ -117,7 +155,8 @@ export class OrdersService {
           // 特價車 the driver drives themselves uses no quota and pays no service fee (2026-10-22);
           // handed to another driver later, it pays then (reopen).
           const ownDeal = Boolean(input.bookingId && input.selfDrive && !second) && (await this.isDealBooking(tx, userId, input.bookingId!));
-          // A 接駁 or 往返 order uses the quota and pays the service fee once, like any order.
+          // A 接駁 or 往返 order uses the quota and pays the service fee once, like any order; a 包車 too,
+          // however many hours.
           if (!ownDeal) await this.entitlements.consume(tx, userId, FEATURES.orderCreate, now);
           const fee = ownDeal ? 0 : await this.commission.feeFor(tx, userId, now);
           const defaults =
@@ -167,11 +206,8 @@ export class OrdersService {
               // (the way back may leave from somewhere else).
               destination: second?.kind === 'TRANSFER' ? second.origin : input.destination,
               waypoints: input.waypoints,
-              driverPriceMinor: toMinor(input.driverPrice),
-              driverCurrency: input.driverPrice?.currency ?? 'HKD',
               // The passenger pays one price for the whole trip; it is kept on the first leg.
-              passengerPriceMinor: toMinor(input.passengerPrice),
-              passengerCurrency: input.passengerPrice?.currency ?? input.driverPrice?.currency ?? 'HKD',
+              ...priceFields(input),
               showPassengerPrice: input.showPassengerPrice,
               commissionMinor: fee > 0 ? fee : null,
               requiredPlates: input.requiredPlates,
@@ -577,10 +613,16 @@ export class OrdersService {
    * whole trip's. A driver who already took a changed leg is told and confirms with 知道了.
    */
   async updateTrip(userId: string, id: string, input: UpdateTripInput, now = new Date()) {
-    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true, journeyId: true, journeyKind: true } });
+    const order = await this.prisma.order.findFirst({
+      where: { id, dispatcherId: userId },
+      select: { status: true, journeyId: true, journeyKind: true, charterMinutes: true },
+    });
     if (!order) throw this.notFound();
     if (order.status !== 'OPEN' && order.status !== 'ASSIGNED') throw this.invalidStatus();
     const roundTrip = order.journeyKind === 'ROUND_TRIP';
+    if (input.charterMinutes !== undefined && order.charterMinutes === null) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'NOT_A_CHARTER', 'Only a 包車 order has hours booked');
+    }
     // 拼車: the parties' seats made the trip; to change it, the carpool is opened again.
     if ((await this.prisma.carpool.count({ where: { orderId: id } })) > 0) {
       throw apiError(HttpStatus.CONFLICT, 'CARPOOL_TRIP_FIXED', 'A carpool order keeps the trip its passengers asked for');
@@ -627,6 +669,16 @@ export class OrdersService {
         if (input.notes !== undefined) put(leg, 'notes', input.notes || null, '備註');
         // 往返: each leg has its own flight, so the flight changes on this leg only.
         if (input.flightNo !== undefined && (!roundTrip || leg.id === id)) put(leg, 'flightNo', input.flightNo || null, '航班');
+      }
+      // 包車: other hours, and so other totals at the same prices an hour. The driver who took it
+      // confirms the hours like any change; what they are paid an hour stays.
+      if (input.charterMinutes !== undefined) {
+        put(first, 'charterMinutes', input.charterMinutes, '時數');
+        if (changes.get(first.id)!.what.includes('時數')) {
+          const data = changes.get(first.id)!.data;
+          data.driverPriceMinor = charterTotal(first.driverHourlyMinor, input.charterMinutes);
+          data.passengerPriceMinor = charterTotal(first.passengerHourlyMinor, input.charterMinutes);
+        }
       }
       // The second leg still starts after the first: at the 接駁位置, or on the way back.
       if (legs.length > 1) {
@@ -763,14 +815,23 @@ export class OrdersService {
    * driver price is locked once a driver has claimed at that price.
    */
   async updatePrices(userId: string, id: string, input: UpdateOrderPricesInput) {
-    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true, legIndex: true } });
+    const order = await this.prisma.order.findFirst({ where: { id, dispatcherId: userId }, select: { status: true, legIndex: true, charterMinutes: true } });
     if (!order) throw this.notFound();
     if (order.status === 'CANCELLED' || order.status === 'COMPLETED') throw this.invalidStatus();
+    // 包車: priced by the hour; the totals are those prices times the hours, never set apart.
+    const charterMinutes = order.charterMinutes;
+    if (charterMinutes !== null && (input.driverPrice !== undefined || input.passengerPrice !== undefined)) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'CHARTER_PRICE_HOURLY', 'A 包車 order is priced by the hour');
+    }
+    if (charterMinutes === null && (input.driverHourly !== undefined || input.passengerHourly !== undefined)) {
+      throw apiError(HttpStatus.BAD_REQUEST, 'NOT_A_CHARTER', 'Only a 包車 order is priced by the hour');
+    }
+    const driverChange = input.driverPrice !== undefined || input.driverHourly !== undefined;
     // 接駁: the passenger pays one price for the whole order, kept on its first leg.
     if ((order.legIndex ?? 1) > 1 && (input.passengerPrice !== undefined || input.showPassengerPrice !== undefined)) {
       throw apiError(HttpStatus.CONFLICT, 'TRIP_PRICE_ON_FIRST_LEG', 'The passenger price of a 接駁 order is set on its first leg');
     }
-    if (input.driverPrice !== undefined && order.status !== 'OPEN') {
+    if (driverChange && order.status !== 'OPEN') {
       throw apiError(HttpStatus.CONFLICT, 'DRIVER_PRICE_LOCKED', 'The driver price cannot change after the order is claimed');
     }
     const data: Prisma.OrderUncheckedUpdateManyInput = {};
@@ -782,10 +843,21 @@ export class OrdersService {
       data.passengerPriceMinor = toMinor(input.passengerPrice);
       if (input.passengerPrice) data.passengerCurrency = input.passengerPrice.currency;
     }
+    if (charterMinutes !== null && input.driverHourly !== undefined) {
+      const hourly = toMinor(input.driverHourly);
+      data.driverHourlyMinor = hourly;
+      data.driverPriceMinor = charterTotal(hourly, charterMinutes);
+      if (input.driverHourly) data.driverCurrency = input.driverHourly.currency;
+    }
+    if (charterMinutes !== null && input.passengerHourly !== undefined) {
+      const hourly = toMinor(input.passengerHourly);
+      data.passengerHourlyMinor = hourly;
+      data.passengerPriceMinor = charterTotal(hourly, charterMinutes);
+      if (input.passengerHourly) data.passengerCurrency = input.passengerHourly.currency;
+    }
     if (input.showPassengerPrice !== undefined) data.showPassengerPrice = input.showPassengerPrice;
     // The status condition closes the race with a claim landing in between.
-    const statusGuard: Prisma.OrderWhereInput =
-      input.driverPrice !== undefined ? { status: 'OPEN' } : { status: { in: ['OPEN', 'ASSIGNED'] } };
+    const statusGuard: Prisma.OrderWhereInput = driverChange ? { status: 'OPEN' } : { status: { in: ['OPEN', 'ASSIGNED'] } };
     const updated = await this.prisma.order.updateMany({ where: { id, dispatcherId: userId, ...statusGuard }, data });
     if (updated.count === 0) {
       throw apiError(HttpStatus.CONFLICT, 'DRIVER_PRICE_LOCKED', 'The order changed while updating; reload and try again');

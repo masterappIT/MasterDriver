@@ -193,3 +193,65 @@ test('a 往返 is one text with both legs, their flights, prices and who takes t
   assert.ok(passenger.includes('費用 HK$1,000'));
   assert.ok(!passenger.includes('HK$850') && !passenger.includes('HK$600'));
 });
+
+/** 包車: 8 hours from 09:00 on Sunday 25 October, back where it started, by the day's stops. */
+const charter: ShareOrder = {
+  ...order,
+  pickupAt: new Date('2026-10-25T01:00:00Z'),
+  destination: '深圳灣口岸',
+  waypoints: ['羅湖', '東門', '華強北'],
+  passengers: 3,
+  luggage: 0,
+  driverPriceMinor: 200000,
+  passengerPriceMinor: 240000,
+  notes: null,
+  charterMinutes: 480,
+  driverHourlyMinor: 25000,
+  overtimeDriverHourlyMinor: null,
+  overtimeUnitMinutes: 30,
+  overtimeGraceMinutes: 15,
+  charterExtras: ['TOLLS', 'PARKING'],
+};
+
+test('包車 group text: from when and how long, the stops, an hour and the total, and the dispatcher\'s rules', () => {
+  const text = dispatchShareText(charter, 'https://x.test/o/abc');
+  assert.equal(
+    text.wechat,
+    [
+      '【有單・包車】10/25（日）09:00 起 8 小時',
+      '深圳灣口岸 上車，原地結束',
+      '行程：羅湖 → 東門 → 華強北',
+      '3人｜0件行李｜7座',
+      '每小時 HK$250，8 小時共 HK$2,000',
+      '超時每小時 HK$250，每 30 分鐘計，15 分鐘內不計',
+      '路橋費、停車費另計',
+      '搶單：https://x.test/o/abc',
+    ].join('\n'),
+  );
+  assert.ok(text.whatsapp.startsWith('*【有單・包車】10/25（日）09:00 起 8 小時*\n'));
+  assert.doesNotMatch(text.wechat, /2,400|91234567/, 'never the passenger price or contact');
+});
+
+test('包車 without a price says how 超時 is counted; one ending elsewhere says where; 即時 starts now', () => {
+  const unpriced = dispatchShareText(
+    { ...charter, destination: '香港國際機場', driverHourlyMinor: null, driverPriceMinor: null, overtimeUnitMinutes: 60, overtimeGraceMinutes: 0, charterExtras: [] },
+    'https://x.test/o/abc',
+  ).wechat;
+  assert.match(unpriced, /\n深圳灣口岸 上車 → 香港國際機場 結束\n/);
+  assert.match(unpriced, /\n超時按每小時計\n/);
+  assert.doesNotMatch(unpriced, /每小時 HK|另計/);
+  const overtime = dispatchShareText({ ...charter, overtimeDriverHourlyMinor: 30000 }, 'https://x.test/o/abc').wechat;
+  assert.match(overtime, /\n超時每小時 HK\$300，每 30 分鐘計，15 分鐘內不計\n/);
+  assert.match(dispatchShareText({ ...charter, immediate: true, charterMinutes: 390 }, 'https://x.test/o/abc').wechat, /^【即時・包車】現在出發，6\.5 小時\n/);
+});
+
+test('包車 to the passenger and back to the group once a driver has it', () => {
+  assert.equal(
+    passengerShareText({ ...charter, showPassengerPrice: true }, 'https://x.test/c/xyz'),
+    '您好，您的包車 10/25（日）09:00 起 8 小時（深圳灣口岸上車）已安排，費用 HK$2,400，請按連結查看並確認：https://x.test/c/xyz',
+  );
+  assert.equal(
+    claimedShareText(charter, { name: '陳師傅', hkPlate: 'AB1234', macauPlate: null, mainlandPlate: null }),
+    '【已派出】10/25（日）09:00 起包車 8 小時（深圳灣口岸上車）\n司機：陳師傅\n車牌：AB1234',
+  );
+});

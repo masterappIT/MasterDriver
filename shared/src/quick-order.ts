@@ -21,6 +21,12 @@ export interface QuickOrder {
   notes?: string;
   /** 往返: "往返", "來回" and the like; the order goes there and back. */
   roundTrip?: boolean;
+  /**
+   * 包車 (按小時計費): "包車 8 小時", "包8個鐘", "包一日". `minutes` only when the hours are said
+   * (never guessed from 一日); `hourly` only for a price said to be an hour's ("每小時 250",
+   * "250/小時"). Any other price stays in `price`, for the dispatcher to read: it may be a total.
+   */
+  charter?: { minutes?: number; hourly?: { amount: number; currency?: 'HKD' | 'CNY' | 'MOP' } };
   /** Which of time, origin and destination could not be read. */
   missing: ('pickupAt' | 'origin' | 'destination')[];
 }
@@ -60,6 +66,32 @@ const VEHICLE_WORDS = /(埃爾法|埃尔法|阿爾法|阿尔法|alphard|威爾�
 const SERVICE_WORDS = /(直車|直车|接駁|接驳|包車|包车|拼車|拼车|單程|单程|往返|來回|来回|專車|专车|順路|顺路|急單|急单|急)/g;
 
 const ROUND_TRIP_WORDS = /(往返|來回|来回)/;
+
+/** 包車: the word itself, or 包 straight before the hours or a day. */
+const CHARTER_WORDS = /(包車|包车|包\s*(?=\d{1,2}(?:\.5)?\s*(?:個|个)?\s*(?:小時|小时|鐘|钟))|包(?:一|全|成)\s*(?:日|天))/;
+/** 包車 hours: "8小時", "8.5 小时", "8個鐘", "8个钟头". */
+const CHARTER_HOURS = /(\d{1,2}(?:\.5)?)\s*(?:個|个)?\s*(?:小時|小时|鐘頭|钟头|鐘|钟)/;
+const CURRENCY_MARKS: { pattern: RegExp; currency: 'HKD' | 'CNY' | 'MOP' }[] = [
+  { pattern: /HK\$|HKD|港幣|港币|港元|蚊/i, currency: 'HKD' },
+  { pattern: /MOP\$?|澳門幣|澳门币/i, currency: 'MOP' },
+  { pattern: /RMB|CNY|￥|¥|人民幣|人民币|元|块|塊/i, currency: 'CNY' },
+];
+const MONEY_MARK = '(?:HK\\$|HKD|MOP\\$?|RMB|CNY|￥|¥)?';
+const MONEY_UNIT = '(?:港幣|港币|港元|蚊|澳門幣|澳门币|人民幣|人民币|元|块|塊|HKD|RMB|CNY|MOP)?';
+const PER_HOUR = '(?:每小時|每小时|每個鐘|每个钟|時租|时租)';
+const AN_HOUR = '(?:\\/|每|一)\\s*(?:小時|小时|個鐘|个钟|鐘|钟|h(?:r|our)?)';
+/** 包車 price an hour: "每小時250", "每小时 HK$250", "250蚊一個鐘", "RMB300/小時". */
+const HOURLY_PRICE = new RegExp(
+  `${PER_HOUR}\\s*(${MONEY_MARK}\\s*\\d+(?:\\.\\d+)?\\s*${MONEY_UNIT})|(${MONEY_MARK}\\s*\\d+(?:\\.\\d+)?\\s*${MONEY_UNIT})\\s*${AN_HOUR}`,
+  'i',
+);
+
+/** The amount and currency of a price as written; the currency only when it is said. */
+function readHourly(written: string): { amount: number; currency?: 'HKD' | 'CNY' | 'MOP' } {
+  const amount = Number(written.match(/\d+(?:\.\d+)?/)?.[0]);
+  const currency = CURRENCY_MARKS.find(({ pattern }) => pattern.test(written))?.currency;
+  return currency ? { amount, currency } : { amount };
+}
 
 const CONNECTOR = /\s*(?:送去|送到|送往|送至|送|到|去|往|至|→|->|－|—|➡️?)\s*/;
 const CONNECTOR_ANYWHERE = new RegExp(CONNECTOR.source);
@@ -143,6 +175,19 @@ const trimPlace = (value: string) =>
 export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrder {
   const state = { text: normalize(input) };
   const result: QuickOrder = { missing: [] };
+
+  // 包車 first: its hours ("8小時") would otherwise read as a clock or as children ("8小").
+  if (CHARTER_WORDS.test(state.text)) {
+    result.charter = {};
+    const hours = take(state, CHARTER_HOURS);
+    const minutes = hours ? Math.round(Number(hours[1]) * 60) : 0;
+    if (minutes >= 60 && minutes <= 24 * 60) result.charter.minutes = minutes;
+    const hourly = take(state, HOURLY_PRICE);
+    if (hourly) result.charter.hourly = readHourly(hourly[1] ?? hourly[2]);
+    // "包8個鐘" leaves a lone 包 once the hours are taken; "包一日" says nothing more.
+    take(state, /包(?:一|全|成)\s*(?:日|天)/);
+    state.text = state.text.replace(/包(?=\s|$)/g, ' ');
+  }
 
   for (const { pattern, currency } of PRICE_PATTERNS) {
     const match = take(state, pattern);

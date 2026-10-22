@@ -236,6 +236,61 @@ function journeyOf(order: OrderWithPeople, viewer: Viewer, contactVisible: boole
   };
 }
 
+type CharterOrder = Pick<
+  OrderWithPeople,
+  | 'charterMinutes'
+  | 'driverHourlyMinor'
+  | 'driverCurrency'
+  | 'passengerHourlyMinor'
+  | 'passengerCurrency'
+  | 'overtimeDriverHourlyMinor'
+  | 'overtimePassengerHourlyMinor'
+  | 'overtimeUnitMinutes'
+  | 'overtimeGraceMinutes'
+  | 'charterExtras'
+>;
+
+/** 包車: the hours, what an hour and an hour of 超時 cost, and how 超時 is counted, as stated. */
+function charterRules(order: CharterOrder, minutes: number) {
+  return {
+    minutes,
+    overtimeUnitMinutes: order.overtimeUnitMinutes ?? 30,
+    overtimeGraceMinutes: order.overtimeGraceMinutes ?? 0,
+    extras: order.charterExtras,
+  };
+}
+
+/**
+ * 包車 (按小時計費): the hours booked and the dispatcher's rules. Anyone sees what the driver is paid
+ * an hour, as with the driver price; only the dispatcher sees the passenger's. 超時 with no price of
+ * its own costs the hourly price.
+ */
+function charterOf(order: CharterOrder, viewer: Viewer) {
+  if (!order.charterMinutes) return null;
+  return {
+    ...charterRules(order, order.charterMinutes),
+    driverHourly: money(order.driverHourlyMinor, order.driverCurrency),
+    overtimeDriverHourly: money(order.overtimeDriverHourlyMinor ?? order.driverHourlyMinor, order.driverCurrency),
+    ...(viewer === 'dispatcher'
+      ? {
+          passengerHourly: money(order.passengerHourlyMinor, order.passengerCurrency),
+          overtimePassengerHourly: money(order.overtimePassengerHourlyMinor ?? order.passengerHourlyMinor, order.passengerCurrency),
+        }
+      : {}),
+  };
+}
+
+/** 包車 on the passenger's link: their prices an hour only when the dispatcher shows their price. */
+function passengerCharterOf(order: CharterOrder & Pick<OrderWithPeople, 'showPassengerPrice'>) {
+  if (!order.charterMinutes) return null;
+  const shown = order.showPassengerPrice;
+  return {
+    ...charterRules(order, order.charterMinutes),
+    hourly: shown ? money(order.passengerHourlyMinor, order.passengerCurrency) : null,
+    overtimeHourly: shown ? money(order.overtimePassengerHourlyMinor ?? order.passengerHourlyMinor, order.passengerCurrency) : null,
+  };
+}
+
 /** The 上車點 of a carpool's parties, each once, in the order the parties asked. */
 export function carpoolStopsOf(parties: Pick<CarpoolParty, 'pickupPoint'>[]) {
   return [...new Set(parties.map((party) => party.pickupPoint))];
@@ -321,6 +376,7 @@ export function toOrderView(order: OrderWithPeople, viewer: Viewer, baseUrl: str
     favoritesOnlyUntil: order.favoritesUntil && order.favoritesUntil > now ? order.favoritesUntil.toISOString() : null,
     journey: journeyOf(order, viewer, contactVisible, userId),
     carpool: carpoolOf(order, viewer, contactVisible),
+    charter: charterOf(order, viewer),
     dispatcherName: order.dispatcher.profile?.name ?? null,
     // Before claiming, a driver can look at who put the order out: their 名片頁, when it is public.
     dispatcherPageCode: order.dispatcher.profilePage?.published ? order.dispatcher.profilePage.code : null,
@@ -449,6 +505,8 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
     vehicleType: lead.vehicleType,
     passengerName: order.passengerName,
     price: lead.price,
+    // 包車: the hours and how 超時 is counted; never part of a 接駁 or 往返.
+    charter: passengerCharterOf(order),
     dispatcherName: order.dispatcher.profile?.name ?? null,
     // Who arranged the trip, for questions and changes. The passenger got this link from them,
     // so their phone, WeChat ID and WhatsApp are theirs to give here. Left out while they drive

@@ -996,3 +996,53 @@ test('出單者代確認 on 往返 and 接駁 covers the whole order from either
     assert.equal(await ctx.prisma.order.count({ where: { journeyId: order.id, passengerConfirmedAt: { not: null } } }), 0);
   }
 });
+
+test('包車: the prices an hour make the totals; hours and prices change by the hour, and the driver confirms new hours', async () => {
+  const dispatcher = await createDriver(ctx);
+  const driver = await createDriver(ctx, '李師傅');
+  const created = await ctx.orders.create(dispatcher, {
+    ...sampleOrder,
+    pickupAt: daysFromNow(2),
+    destination: sampleOrder.origin,
+    waypoints: ['羅湖', '東門'],
+    charter: {
+      minutes: 480,
+      driverHourly: { amount: 250, currency: 'HKD' as const },
+      passengerHourly: { amount: 300, currency: 'HKD' as const },
+      overtimeUnitMinutes: 30 as const,
+      overtimeGraceMinutes: 15,
+      extras: ['TOLLS' as const],
+    },
+  });
+  // Quota and fee as any order: one.
+  assert.equal(await ctx.prisma.order.count({ where: { dispatcherId: dispatcher } }), 1);
+  assert.deepEqual(created.driverPrice, { amount: 2000, currency: 'HKD' });
+  assert.deepEqual(created.passengerPrice, { amount: 2400, currency: 'HKD' });
+  assert.deepEqual(created.margin, { amount: 400, currency: 'HKD' });
+  assert.equal(created.charter?.minutes, 480);
+  assert.match(created.share.dispatch.wechat, /^【有單・包車】.+ 起 8 小時\n/);
+  assert.match(created.share.dispatch.wechat, /\n每小時 HK\$250，8 小時共 HK\$2,000\n/);
+  assert.doesNotMatch(created.share.dispatch.wechat, /2,400|HK\$300/, 'never the passenger price');
+
+  // A total of its own is refused; its prices change by the hour.
+  await rejectsWith(ctx.orders.updatePrices(dispatcher, created.id, { driverPrice: { amount: 1800, currency: 'HKD' } }), 'CHARTER_PRICE_HOURLY');
+  const raised = (await ctx.orders.updatePrices(dispatcher, created.id, { driverHourly: { amount: 260, currency: 'HKD' } })) as typeof created;
+  assert.deepEqual(raised.driverPrice, { amount: 2080, currency: 'HKD' });
+
+  // A driver sees what an hour pays, never the passenger's.
+  const claimed = await ctx.orders.claim(created.code, driver);
+  assert.deepEqual(claimed.order.charter?.driverHourly, { amount: 260, currency: 'HKD' });
+  assert.equal('passengerHourly' in (claimed.order.charter ?? {}), false);
+
+  // Two more hours: the totals follow, and the driver is asked to confirm.
+  const longer = (await ctx.orders.updateTrip(dispatcher, created.id, { charterMinutes: 600 })) as typeof created;
+  assert.deepEqual(longer.driverPrice, { amount: 2600, currency: 'HKD' });
+  assert.deepEqual(longer.passengerPrice, { amount: 3000, currency: 'HKD' });
+  const stored = await ctx.prisma.order.findUniqueOrThrow({ where: { id: created.id } });
+  assert.equal(stored.changeSummary, '時數');
+
+  // Hours only on a 包車; prices by the hour only on a 包車.
+  const plain = await ctx.orders.create(dispatcher, sampleOrder);
+  await rejectsWith(ctx.orders.updateTrip(dispatcher, plain.id, { charterMinutes: 480 }), 'NOT_A_CHARTER');
+  await rejectsWith(ctx.orders.updatePrices(dispatcher, plain.id, { driverHourly: { amount: 250, currency: 'HKD' } }), 'NOT_A_CHARTER');
+});

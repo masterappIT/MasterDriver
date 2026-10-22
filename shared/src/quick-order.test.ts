@@ -87,3 +87,29 @@ test('「明天9點香港到深圳來回」 — 來回 after the route marks the
   assert.equal(order.roundTrip, true);
   assert.equal(parseQuickOrder('明天15:40澳门送香港，直车', now).roundTrip, undefined);
 });
+
+test('「明天9點深圳灣包車8小時 每小時250蚊 7座」 — 包車 with its hours and price an hour', () => {
+  const order = parseQuickOrder('明天9點深圳灣包車8小時 每小時250蚊 7座', now);
+  assert.equal(order.pickupAt, '2026-10-14T09:00:00+08:00');
+  assert.deepEqual(order.charter, { minutes: 480, hourly: { amount: 250, currency: 'HKD' } });
+  assert.equal(order.price, undefined);
+  assert.equal(order.passengers, undefined, '8小時 is not 8 children');
+  assert.equal(order.vehicleType, '7座');
+});
+
+test('包車 hours written other ways, and a price an hour after the amount', () => {
+  assert.deepEqual(parseQuickOrder('后天10:00 包8个钟 RMB300/小时', now).charter, { minutes: 480, hourly: { amount: 300, currency: 'CNY' } });
+  assert.deepEqual(parseQuickOrder('明早8點 包車 6.5 小時 羅湖上車', now).charter, { minutes: 390 });
+  assert.equal(parseQuickOrder('明早8點 包8個鐘 羅湖上車', now).pickupAt, '2026-10-14T08:00:00+08:00');
+});
+
+test('「包一日」 is 包車 without guessing the hours; a price not said to be an hour\'s stays a price', () => {
+  const order = parseQuickOrder('明天包一日 福田出發 HK$2000', now);
+  assert.deepEqual(order.charter, {});
+  assert.deepEqual(order.price, { amount: 2000, currency: 'HKD' });
+});
+
+test('a line without 包車 has no charter, and 包 in a place name stays', () => {
+  assert.equal(parseQuickOrder('明天15:40澳门送香港，直车', now).charter, undefined);
+  assert.equal(parseQuickOrder('明天10點包頭送北京', now).destination, '北京');
+});

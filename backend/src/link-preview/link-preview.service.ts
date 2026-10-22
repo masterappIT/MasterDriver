@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { GUIDE_INDEX, PROFILE_PHOTO_MAX, findGuide, guidePageTitle, guidePath, plateRegions } from '@masterdriver/shared';
+import { GUIDE_INDEX, PROFILE_PHOTO_MAX, charterHours, findGuide, guidePageTitle, guidePath, plateRegions } from '@masterdriver/shared';
 import sharp from 'sharp';
 import { APP_CONFIG, type AppConfig } from '../config';
 import { PrismaService } from '../prisma.service';
@@ -319,6 +319,8 @@ export class LinkPreviewService {
         vehicleType: true,
         driverPriceMinor: true,
         driverCurrency: true,
+        charterMinutes: true,
+        driverHourlyMinor: true,
         journeyId: true,
         journeyKind: true,
         sameDriver: true,
@@ -345,22 +347,27 @@ export class LinkPreviewService {
     const total =
       roundTrip && order.sameDriver ? roundTripTotal(legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId }))) : null;
     const badge = first.immediate ? '即時' : '有單';
+    // 包車: from when and for how long, and what an hour pays (the hours' total is in the text).
+    const charter = order.charterMinutes;
     const name = order.dispatcher.profile?.name;
     // 往返 back the way it went reads A⇄B; back from or to somewhere else, both legs' places.
     const title = roundTrip
       ? isReversed(legs)
         ? `【${badge}・往返】${first.origin}⇄${first.destination}`
         : `【${badge}・往返】${first.origin}→${first.destination}・回程 ${legs[1].origin}→${legs[1].destination}`
-      : `【${badge}${transfer ? '・接駁' : ''}】${first.origin}→${legs[legs.length - 1].destination}`;
+      : charter
+        ? `【${badge}・包車】${first.origin}${first.destination === first.origin ? '' : `→${first.destination}`}・${charterHours(charter)}`
+        : `【${badge}${transfer ? '・接駁' : ''}】${first.origin}→${legs[legs.length - 1].destination}`;
     const facts = [
-      first.immediate ? '現在出發' : formatPickup(first.pickupAt),
+      first.immediate ? '現在出發' : charter ? `${formatPickup(first.pickupAt)} 起` : formatPickup(first.pickupAt),
       transfer ? `接駁 ${legs.length} 段` : null,
       roundTrip ? `回程 ${formatPickup(legs[1].pickupAt)}` : null,
       order.vehicleType,
       total ? `來回 ${total}` : null,
       // A 接駁's or 往返's legs each have their own price, so the text has them all and the preview
       // none, but for what 同一位司機來回 pays together.
-      !several && order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
+      charter && order.driverHourlyMinor !== null ? `每小時 ${formatPrice(order.driverHourlyMinor, order.driverCurrency)}` : null,
+      !several && !charter && order.driverPriceMinor !== null ? formatPrice(order.driverPriceMinor, order.driverCurrency) : null,
     ].filter(Boolean);
     const description = `${facts.join('・')}。${name ? `${name}出的單，` : ''}點開搶單，先搶先得。`;
     // 「10/16 02:57」: the weekday would not fit at the square's size.

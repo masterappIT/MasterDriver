@@ -158,6 +158,14 @@ enum JourneyKind {
   ROUND_TRIP
 }
 
+/// 包車: costs on the way the passenger pays besides the hours, as the dispatcher lists them
+/// (路橋費、停車費、司機膳食). Only stated; the platform never adds them up.
+enum CharterExtra {
+  TOLLS
+  PARKING
+  MEALS
+}
+
 /// Who may claim an order. TEAM is reserved for the paid team tier.
 enum ClaimScope {
   PUBLIC
@@ -235,6 +243,23 @@ model Order {
   /// 往返: one driver takes both legs with one claim (同一位司機來回); false: each leg is claimed
   /// on its own (可分開接), and one driver may take both. Always false outside a 往返.
   sameDriver           Boolean       @default(false)
+  /// 包車 (按小時計費): the hours booked, in minutes; null for an order that is not 包車. The car
+  /// is the passenger's from pickupAt for this long, from origin to destination by the waypoints.
+  /// driverPriceMinor and passengerPriceMinor hold the hourly prices times the hours.
+  charterMinutes       Int?
+  /// 包車: what the driver is paid an hour, in driverCurrency.
+  driverHourlyMinor    Int?
+  /// 包車: what the passenger pays an hour, in passengerCurrency. Never shown to drivers.
+  passengerHourlyMinor Int?
+  /// 包車 超時: an hour past the hours booked; null means the hourly price.
+  overtimeDriverHourlyMinor Int?
+  overtimePassengerHourlyMinor Int?
+  /// 包車 超時: counted by 30 or 60 minutes, and not at all within the grace minutes. Only stated:
+  /// what is owed is between the people on the trip.
+  overtimeUnitMinutes  Int?
+  overtimeGraceMinutes Int?
+  /// 包車: 另計 costs the passenger pays besides the hours.
+  charterExtras        CharterExtra[] @default([])
   /// Plates the car for this order needs (e.g. a Macau car for the leg after a
   /// 接駁). Shown in the group text and on the claim page; never enforced.
   requiredPlates       PlateRegion[] @default([])

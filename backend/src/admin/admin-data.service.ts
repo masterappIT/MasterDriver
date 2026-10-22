@@ -708,6 +708,8 @@ export class AdminDataService {
         selfDrive: isSelfDriven(order),
         legIndex: order.legIndex,
         journeyKind: order.journeyKind,
+        /** 包車: the hours booked, in minutes; null for any other order. */
+        charterMinutes: order.charterMinutes,
         /** The dispatcher's own marks; null while not marked. */
         paidAt: order.paidAt?.toISOString() ?? null,
         settledAt: order.settledAt?.toISOString() ?? null,
@@ -764,6 +766,15 @@ export class AdminDataService {
               sameDriver: order.sameDriver,
               legIndex: order.legIndex,
               legCount: order.journeyHead?.journeyLegs.length ?? order.legIndex,
+            },
+      /** 包車: the hours booked and the prices an hour; the order's prices are those times the hours. */
+      charter:
+        order.charterMinutes === null
+          ? null
+          : {
+              minutes: order.charterMinutes,
+              driverHourly: order.driverHourlyMinor === null ? null : { amount: order.driverHourlyMinor / 100, currency: order.driverCurrency },
+              passengerHourly: order.passengerHourlyMinor === null ? null : { amount: order.passengerHourlyMinor / 100, currency: order.passengerCurrency },
             },
       /** Minutes before pickup at which the driver sees the passenger's phone; null means as soon as claimed. */
       contactRevealMinutes: order.contactRevealMinutes,

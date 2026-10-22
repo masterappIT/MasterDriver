@@ -14,6 +14,9 @@ import { PAYMENT_KINDS, type PassengerPayment } from '../payment';
 import { toast } from '../toast';
 import type { PlateType } from '@masterdriver/shared/vehicle-plate';
 import LinkProblem from '../components/LinkProblem.vue';
+import CharterRules from '../components/CharterRules.vue';
+import { charterHours } from '@masterdriver/shared/charter';
+import type { PassengerCharter } from '../charter';
 
 interface TripDriver {
   name: string | null;
@@ -64,6 +67,8 @@ interface PassengerView {
   /** 行程進度 of the leg under way, as its driver reported it. */
   progress: TripProgress;
   price: { amount: number; currency: string } | null;
+  /** 包車 (按小時計費): the hours and the rules; the prices an hour only when the price is shown. */
+  charter: PassengerCharter | null;
   dispatcherName: string | null;
   /** Who arranged the trip and how to reach them; null when they are the driver. */
   dispatcher: {
@@ -265,11 +270,26 @@ onBeforeUnmount(() => {
 
       <template v-else>
         <section class="card">
-          <div class="confirm-page__time">{{ pickup(trip.pickupAt) }}</div>
+          <span v-if="trip.charter" class="leg-tag">{{ t(`包車 ${charterHours(trip.charter.minutes)}`) }}</span>
+          <div class="confirm-page__time">{{ trip.charter ? t(`${pickup(trip.pickupAt)} 起`) : pickup(trip.pickupAt) }}</div>
           <RoutePoints :origin="trip.origin" :destination="trip.destination" :waypoints="trip.waypoints" />
           <p class="confirm-page__load">{{ t(loadLine(trip.passengers, trip.luggage, trip.vehicleType)) }}</p>
           <p v-if="trip.flightNo" class="confirm-page__load">{{ t(`航班：${trip.flightNo}`) }}</p>
-          <div v-if="trip.price" class="confirm-page__price"><span>{{ t('費用') }}</span><strong>{{ money(trip.price) }}</strong></div>
+          <!-- 包車: until when, and how 超時 and 另計 are paid, as the person who arranged it set them. -->
+          <CharterRules
+            v-if="trip.charter"
+            :minutes="trip.charter.minutes"
+            :start="trip.pickupAt"
+            :hourly="trip.charter.hourly"
+            :total="trip.price"
+            :overtime-hourly="trip.charter.overtimeHourly"
+            :overtime-unit-minutes="trip.charter.overtimeUnitMinutes"
+            :overtime-grace-minutes="trip.charter.overtimeGraceMinutes"
+            :extras="trip.charter.extras"
+          />
+          <div v-if="trip.price" class="confirm-page__price">
+            <span>{{ trip.charter ? t(`費用（${charterHours(trip.charter.minutes)}）`) : t('費用') }}</span><strong>{{ money(trip.price) }}</strong>
+          </div>
         </section>
 
         <section v-if="trip.driver" class="card">

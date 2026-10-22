@@ -20,6 +20,9 @@ import AppIcon from '../components/AppIcon.vue';
 import GroupText from '../components/GroupText.vue';
 import { t } from '../i18n';
 import { PROGRESS_STEPS, legLabel, legName, plateRequirement, progressLine, type Journey, type PlateRegion, type TripProgress } from '../journey';
+import { charterHours } from '@masterdriver/shared/charter';
+import CharterRules from '../components/CharterRules.vue';
+import type { OrderCharter } from '../charter';
 import { toast } from '../toast';
 import type { PlateType } from '@masterdriver/shared/vehicle-plate';
 
@@ -61,6 +64,8 @@ interface Detail {
   immediate?: boolean;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
+  /** 包車 (按小時計費): its hours, prices an hour and rules; null for any other order. */
+  charter?: OrderCharter | null;
   /** 拼車: the order's parties of passengers, each with its own progress (and, for the dispatcher, fare). */
   carpool?: CarpoolOnOrder | null;
   /** 行程進度 the driver reported. */
@@ -357,7 +362,7 @@ const moneySummary = computed(() => {
   const o = order.value;
   if (!o) return '';
   return [
-    `出單價 ${money(o.driverPrice) || '未填'}`,
+    o.charter?.driverHourly ? `出單價 ${money(o.driverPrice)}（每小時 ${money(o.charter.driverHourly)}）` : `出單價 ${money(o.driverPrice) || '未填'}`,
     tripPriceHere.value && o.passengerPrice ? `乘客價 ${money(o.passengerPrice)}` : '',
     o.status === 'CANCELLED' || o.carpool ? '' : o.paidAt ? '已收款' : '未收款',
     canSettle.value ? (o.settledAt ? '已結清' : '未結清') : '',
@@ -368,7 +373,19 @@ const moneySummary = computed(() => {
 
 /** 修改行程: time, places and load; with 接駁 the time is this leg's, the places the trip's. */
 const editingTrip = ref(false);
-const tripForm = reactive({ pickupAt: '', origin: '', destination: '', transferPlace: '', passengers: '', luggage: '', vehicleType: '', flightNo: '', notes: '' });
+const tripForm = reactive({
+  pickupAt: '',
+  origin: '',
+  destination: '',
+  transferPlace: '',
+  passengers: '',
+  luggage: '',
+  vehicleType: '',
+  flightNo: '',
+  notes: '',
+  /** 包車: the hours booked; the totals follow the prices an hour. */
+  charterHours: '',
+});
 let tripBefore = { ...tripForm };
 
 function editTrip() {
@@ -385,6 +402,7 @@ function editTrip() {
     vehicleType: o.vehicleType ?? '',
     flightNo: o.flightNo ?? '',
     notes: o.notes ?? '',
+    charterHours: o.charter ? String(o.charter.minutes / 60) : '',
   });
   tripBefore = { ...tripForm };
   editingTrip.value = true;
@@ -401,6 +419,7 @@ async function saveTrip() {
   if (changed('luggage')) body.luggage = Number(tripForm.luggage);
   if (changed('flightNo')) body.flightNo = String(tripForm.flightNo).trim() || null;
   if (changed('notes')) body.notes = String(tripForm.notes).trim() || null;
+  if (order.value?.charter && changed('charterHours')) body.charterMinutes = Math.round(Number(tripForm.charterHours) * 60);
   if (Object.keys(body).length === 0) {
     editingTrip.value = false;
     return;
@@ -638,11 +657,14 @@ async function copy(text: string | undefined | null, done: string) {
 function editPrices() {
   const o = order.value;
   if (!o) return;
-  prices.currency = o.driverPrice?.currency ?? o.passengerPrice?.currency ?? 'HKD';
-  prices.passengerCurrency = o.passengerPrice?.currency ?? prices.currency;
-  prices.driver = o.driverPrice ? String(o.driverPrice.amount) : '';
+  // 包車 is priced by the hour: its prices an hour are edited, and the totals follow.
+  const driverPrice = o.charter ? o.charter.driverHourly : o.driverPrice;
+  const passengerPrice = o.charter ? o.charter.passengerHourly : o.passengerPrice;
+  prices.currency = driverPrice?.currency ?? passengerPrice?.currency ?? 'HKD';
+  prices.passengerCurrency = passengerPrice?.currency ?? prices.currency;
+  prices.driver = driverPrice ? String(driverPrice.amount) : '';
   // 自己做 shows one price, the driver price when no passenger price was set; editing keeps that figure.
-  const passenger = o.passengerPrice ?? (ownTrip.value ? o.driverPrice : null);
+  const passenger = passengerPrice ?? (ownTrip.value ? driverPrice : null);
   if (passenger) prices.passengerCurrency = passenger.currency;
   prices.passenger = passenger ? String(passenger.amount) : '';
   editingPrices.value = true;
@@ -664,11 +686,15 @@ async function patchPrices(body: Record<string, unknown>, done: string) {
 function savePrices() {
   const money = (value: string, currency: string) => (value ? { amount: Number(value), currency } : null);
   // 接駁: the second leg has no passenger price of its own.
-  const body: Record<string, unknown> = tripPriceHere.value ? { passengerPrice: money(prices.passenger, prices.passengerCurrency) } : {};
+  // 包車: its prices an hour, the totals worked out by the API.
+  const charter = Boolean(order.value?.charter);
+  const body: Record<string, unknown> = tripPriceHere.value
+    ? { [charter ? 'passengerHourly' : 'passengerPrice']: money(prices.passenger, prices.passengerCurrency) }
+    : {};
   // The driver price (and its currency) is fixed once a driver has taken the order.
   if (order.value?.status === 'OPEN') {
-    body.driverPrice = money(prices.driver, prices.currency);
-    const before = order.value.driverPrice;
+    body[charter ? 'driverHourly' : 'driverPrice'] = money(prices.driver, prices.currency);
+    const before = charter ? order.value.charter!.driverHourly : order.value.driverPrice;
     if (prices.driver && (!before || (before.currency === prices.currency && Number(prices.driver) > before.amount))) raised.value = true;
   }
   return patchPrices(body, '價格已更新');
@@ -836,12 +862,25 @@ watch(id, () => {
           <span>{{ t(loadLine(order.passengers, order.luggage, order.vehicleType)) }}</span>
           <span v-if="order.journey" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(order.journey)}`) }}</span>
           <span v-if="together" class="leg-tag">{{ t('同一位司機來回') }}</span>
+          <span v-if="order.charter" class="leg-tag">{{ t(`包車 ${charterHours(order.charter.minutes)}`) }}</span>
           <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
           <!-- The driver's price sits with the trip, as on the claim page; once it is over, 這趟的帳 says it. -->
           <strong v-if="!isDispatcher && !endedForDriver" class="detail__trip-price">{{ money(order.driverPrice) || t('出單價未填') }}</strong>
         </div>
         <p v-if="order.journey && !roundTrip" class="detail__line">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
         <p v-if="order.flightNo" class="detail__line">{{ t(`航班：${order.flightNo}`) }}</p>
+        <!-- 包車: until when, and the 超時 and 另計 rules; the prices an hour the driver's, as the group text says. -->
+        <CharterRules
+          v-if="order.charter"
+          :minutes="order.charter.minutes"
+          :start="order.immediate ? null : order.pickupAt"
+          :hourly="order.charter.driverHourly"
+          :total="order.driverPrice"
+          :overtime-hourly="order.charter.overtimeDriverHourly"
+          :overtime-unit-minutes="order.charter.overtimeUnitMinutes"
+          :overtime-grace-minutes="order.charter.overtimeGraceMinutes"
+          :extras="order.charter.extras"
+        />
         <p v-if="order.notes" class="detail__note">{{ t(order.notes) }}</p>
         <p v-if="progressText && !endedForDriver" class="detail__progress">{{ t(progressText) }}</p>
         <button v-if="isDispatcher && live && !order.carpool" class="chip detail__edit-trip" type="button" :disabled="busy" @click="editTrip">{{ t('修改行程') }}</button>
@@ -1096,7 +1135,9 @@ watch(id, () => {
           </div>
           <template v-if="isDispatcher">
             <p v-if="tripPriceHere" class="detail__line">
-              {{ t(`乘客價 ${money(order.passengerPrice) || '未填'}`) }}<template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
+              {{ t(`乘客價 ${money(order.passengerPrice) || '未填'}`)
+              }}<template v-if="order.charter?.passengerHourly">{{ t(`（每小時 ${money(order.charter.passengerHourly)}）`) }}</template
+              ><template v-if="order.margin">{{ t(`，差價 ${money(order.margin)}`) }}</template>
             </p>
             <p v-else-if="order.carpool" class="detail__line">{{ t('拼車沒有整張單的乘客價：每組按每位價錢乘人數，在「拼車乘客」查看') }}</p>
             <p v-else class="detail__line">{{ t(roundTrip ? '乘客價整張單一個，在去程查看和修改' : '乘客價整張單一個，在第 1 段查看和修改') }}</p>
@@ -1120,7 +1161,17 @@ watch(id, () => {
         </template>
         <form v-if="editingPrices" @submit.prevent="savePrices">
           <template v-if="!ownTrip">
-            <span class="section-label">{{ order.status === 'OPEN' ? t('出單價') : t('出單價（已有司機接單，不能再改）') }}</span>
+            <span class="section-label">
+              {{
+                order.status === 'OPEN'
+                  ? order.charter
+                    ? t('每小時出單價')
+                    : t('出單價')
+                  : order.charter
+                    ? t('每小時出單價（已有司機接單，不能再改）')
+                    : t('出單價（已有司機接單，不能再改）')
+              }}
+            </span>
             <div class="amount-line detail__gap-bottom">
               <select v-model="prices.currency" :aria-label="t('出單價幣種')" :disabled="order.status !== 'OPEN'">
                 <option value="HKD">HK$</option>
@@ -1130,7 +1181,19 @@ watch(id, () => {
               <input v-model="prices.driver" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('出單價')" :disabled="order.status !== 'OPEN'" />
             </div>
           </template>
-          <span v-if="tripPriceHere" class="section-label">{{ ownTrip ? t('價錢') : order.journey ? t('乘客價（整張單一個價），只有你看得到') : t('乘客價，只有你看得到') }}</span>
+          <span v-if="tripPriceHere" class="section-label">
+            {{
+              order.charter
+                ? ownTrip
+                  ? t('每小時價錢')
+                  : t('每小時乘客價，只有你看得到')
+                : ownTrip
+                  ? t('價錢')
+                  : order.journey
+                    ? t('乘客價（整張單一個價），只有你看得到')
+                    : t('乘客價，只有你看得到')
+            }}
+          </span>
           <div v-if="tripPriceHere" class="amount-line amount-line--quiet detail__gap-bottom">
             <select v-model="prices.passengerCurrency" :aria-label="t('乘客價幣種')">
               <option value="HKD">HK$</option>
@@ -1139,6 +1202,7 @@ watch(id, () => {
             </select>
             <input v-model="prices.passenger" type="number" min="0" step="0.01" inputmode="decimal" :aria-label="t('乘客價')" :placeholder="t('乘客價（選填）')" />
           </div>
+          <p v-if="order.charter" class="hint detail__gap-bottom">{{ t(`總價按每小時價錢乘 ${charterHours(order.charter.minutes)}計算。`) }}</p>
           <div class="detail__pair">
             <button class="button secondary" type="button" @click="editingPrices = false">{{ t('取消') }}</button>
             <button class="button" type="submit" :disabled="busy">{{ t('儲存') }}</button>
@@ -1280,7 +1344,7 @@ watch(id, () => {
 
       <!-- 出回程單: the same trip back, the route turned around; from the trip's first leg for 接駁.
            A 往返 already comes back. -->
-      <RouterLink v-if="isDispatcher && !roundTrip" class="button secondary block detail__return" style="order: 21" :to="`/app/new?return=${order.journey?.legs[0]?.id ?? order.id}`">
+      <RouterLink v-if="isDispatcher && !roundTrip && !order.charter" class="button secondary block detail__return" style="order: 21" :to="`/app/new?return=${order.journey?.legs[0]?.id ?? order.id}`">
         {{ t('出回程單') }}
       </RouterLink>
 
@@ -1293,11 +1357,24 @@ watch(id, () => {
             {{ t(`這裡只改${legName(order.journey.kind, order.journey.legIndex)}的時間、地點和航班；另一程請在上面的行程點進去修改。人數、行李、車型和備註兩程一起改。`) }}
           </p>
           <label class="line-field">
-            <span>{{ order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}出發時間（香港時間）`) : t('出發時間（香港時間）') }}</span>
+            <span>
+              {{
+                order.journey
+                  ? t(`${legName(order.journey.kind, order.journey.legIndex)}出發時間（香港時間）`)
+                  : order.charter
+                    ? t('開始時間（香港時間）')
+                    : t('出發時間（香港時間）')
+              }}
+            </span>
             <input v-model="tripForm.pickupAt" class="line-input" type="datetime-local" required />
           </label>
+          <!-- 包車: other hours; the totals follow the prices an hour. -->
+          <label v-if="order.charter" class="line-field">
+            <span>{{ t('包車時數（1 到 24 小時，以半小時為單位）') }}</span>
+            <input v-model="tripForm.charterHours" class="line-input" type="number" min="1" max="24" step="0.5" inputmode="decimal" required />
+          </label>
           <label class="line-field">
-            <span>{{ roundTrip && order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}出發地`) : t('出發地') }}</span>
+            <span>{{ roundTrip && order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}出發地`) : order.charter ? t('上車地點') : t('出發地') }}</span>
             <input v-model="tripForm.origin" class="line-input" maxlength="120" required />
           </label>
           <label v-if="order.journey && !roundTrip" class="line-field">
@@ -1305,7 +1382,7 @@ watch(id, () => {
             <input v-model="tripForm.transferPlace" class="line-input" maxlength="120" required />
           </label>
           <label class="line-field">
-            <span>{{ roundTrip && order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}目的地`) : t('目的地') }}</span>
+            <span>{{ roundTrip && order.journey ? t(`${legName(order.journey.kind, order.journey.legIndex)}目的地`) : order.charter ? t('結束地點') : t('目的地') }}</span>
             <input v-model="tripForm.destination" class="line-input" maxlength="120" required />
           </label>
           <div class="detail__trip-load">

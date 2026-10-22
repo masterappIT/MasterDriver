@@ -22,6 +22,9 @@ import { loadLine, money, pickup, plateKind, shortTime } from '../format';
 import PageBack from '../components/PageBack.vue';
 import { t } from '../i18n';
 import { journeyRoute, journeyTag, legLabel, legName, plateRequirement, roundTripTotal, type Journey, type PlateRegion } from '../journey';
+import { charterHours } from '@masterdriver/shared/charter';
+import CharterRules from '../components/CharterRules.vue';
+import type { OrderCharter } from '../charter';
 import { toast } from '../toast';
 import LinkProblem from '../components/LinkProblem.vue';
 
@@ -46,6 +49,8 @@ interface ClaimView {
   favoritesOnlyUntil: string | null;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
+  /** 包車 (按小時計費): its hours and rules; null for any other order. */
+  charter: OrderCharter | null;
   /** 拼車: the parties on board; before claiming, only where they get on and off. */
   carpool?: CarpoolOnOrder | null;
   dispatcherName: string | null;
@@ -243,6 +248,7 @@ onBeforeUnmount(() => {
           <span v-if="!offering && order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
           <span v-if="offering" class="leg-tag">{{ t(journeyTag(trip!)) }}</span>
           <span v-else-if="trip" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(trip)}`) }}</span>
+          <span v-if="order.charter" class="leg-tag">{{ t(`包車 ${charterHours(order.charter.minutes)}`) }}</span>
         </div>
 
         <div class="claim-page__when">
@@ -268,6 +274,17 @@ onBeforeUnmount(() => {
           <span class="claim-page__load">{{ t(loadText) }}</span>
           <span v-if="order.driverPrice && !canClaim && !offering" class="claim-page__price">{{ money(order.driverPrice) }}</span>
         </div>
+        <CharterRules
+          v-if="order.charter"
+          :minutes="order.charter.minutes"
+          :start="order.immediate ? null : order.pickupAt"
+          :hourly="order.charter.driverHourly"
+          :total="order.driverPrice"
+          :overtime-hourly="order.charter.overtimeDriverHourly"
+          :overtime-unit-minutes="order.charter.overtimeUnitMinutes"
+          :overtime-grace-minutes="order.charter.overtimeGraceMinutes"
+          :extras="order.charter.extras"
+        />
 
         <!-- 往返 from the group: each leg below shows its own flight. -->
         <p v-if="order.flightNo && !(offering && roundTrip)" class="claim-page__notes"><strong>{{ t('航班') }}</strong>{{ order.flightNo }}</p>
@@ -408,7 +425,7 @@ onBeforeUnmount(() => {
       <!-- Price on the left and the button on the right, within reach of one thumb. -->
       <div v-if="canClaim" class="action-bar claim-page__bar">
         <div v-if="order.driverPrice" class="claim-page__bar-price">
-          <span>{{ t('出單價') }}</span>
+          <span>{{ order.charter ? t(`出單價（${charterHours(order.charter.minutes)}）`) : t('出單價') }}</span>
           <strong>{{ money(order.driverPrice) }}</strong>
         </div>
         <button class="button large claim-page__claim" type="button" :disabled="busy" @click="claim()">
