@@ -130,7 +130,7 @@ const requiredPlatesSchema = z
   .default([])
   .transform((plates) => PLATE_REGIONS.filter((plate) => plates.includes(plate)));
 
-/** 包車: the hours booked, in minutes, by half hours up to one day. */
+/** 包鐘: the hours booked, in minutes, by half hours up to one day. */
 export const charterMinutesSchema = z
   .number()
   .int()
@@ -223,7 +223,7 @@ export const createOrderSchema = z.object({
     })
     .optional(),
   /**
-   * 包車 (按小時計費) instead of 直達: the car is the passenger's from `pickupAt` for `minutes`, from
+   * 包鐘 (按小時計費) instead of 直達: the car is the passenger's from `pickupAt` for `minutes`, from
    * `origin` (上車地點) to `destination` (結束地點) by the `waypoints` (行程安排). The prices are an
    * hour; the API keeps them times the hours as the order's driver and passenger prices, so
    * `driverPrice` and `passengerPrice` are not given. Overtime and 另計 are only stated. Not
@@ -287,7 +287,7 @@ export const updateOrderPricesSchema = z
   .object({
     driverPrice: priceSchema.nullable().optional(),
     passengerPrice: priceSchema.nullable().optional(),
-    /** 包車: its prices change by the hour, and the totals follow (instead of driverPrice and passengerPrice). */
+    /** 包鐘: its prices change by the hour, and the totals follow (instead of driverPrice and passengerPrice). */
     driverHourly: priceSchema.nullable().optional(),
     passengerHourly: priceSchema.nullable().optional(),
     showPassengerPrice: z.boolean().optional(),
@@ -382,7 +382,7 @@ export const updateTripSchema = z
     vehicleType: z.string().trim().min(1).max(30).optional(),
     notes: z.string().trim().max(500).nullable().optional(),
     flightNo: z.string().trim().max(20).nullable().optional(),
-    /** 包車: the hours booked; the totals follow the hourly prices. */
+    /** 包鐘: the hours booked; the totals follow the hourly prices. */
     charterMinutes: charterMinutesSchema.optional(),
   })
   .refine((value) => Object.values(value).some((field) => field !== undefined), { message: 'NOTHING_TO_UPDATE' });

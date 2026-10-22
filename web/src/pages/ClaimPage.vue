@@ -49,7 +49,7 @@ interface ClaimView {
   favoritesOnlyUntil: string | null;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
-  /** 包車 (按小時計費): its hours and rules; null for any other order. */
+  /** 包鐘 (按小時計費): its hours and rules; null for any other order. */
   charter: OrderCharter | null;
   /** 拼車: the parties on board; before claiming, only where they get on and off. */
   carpool?: CarpoolOnOrder | null;
@@ -232,7 +232,7 @@ onBeforeUnmount(() => {
           <span>
             {{
               order.charter
-                ? t(`${pickup(order.pickupAt)} 起包車 ${charterHours(order.charter.minutes)} · ${order.origin}上車`)
+                ? t(`${pickup(order.pickupAt)} 起包鐘 ${charterHours(order.charter.minutes)} · ${order.origin}上車`)
                 : t(`${pickup(order.pickupAt)} · ${order.origin} 至 ${order.destination}`)
             }}
           </span>
@@ -254,7 +254,7 @@ onBeforeUnmount(() => {
           <span v-if="!offering && order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
           <span v-if="offering" class="leg-tag">{{ t(journeyTag(trip!)) }}</span>
           <span v-else-if="trip" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(trip)}`) }}</span>
-          <span v-if="order.charter" class="leg-tag">{{ t(`包車 ${charterHours(order.charter.minutes)}`) }}</span>
+          <span v-if="order.charter" class="leg-tag">{{ t(`包鐘 ${charterHours(order.charter.minutes)}`) }}</span>
         </div>
 
         <div class="claim-page__when">

@@ -5,7 +5,7 @@ import { money, pickup, type Money } from '../format';
 import { t } from '../i18n';
 
 /**
- * 包車 (按小時計費): the hours booked, the price an hour this viewer may see with what the hours come
+ * 包鐘 (按小時計費): the hours booked, the price an hour this viewer may see with what the hours come
  * to, and the dispatcher's 超時 and 另計 rules, as the group text states them. Nothing here is worked
  * out by the platform beyond the hours times the price an hour.
  */
@@ -37,7 +37,7 @@ const extras = computed(() =>
 <template>
   <dl class="charter-rules">
     <div>
-      <dt>{{ t('包車') }}</dt>
+      <dt>{{ t('包鐘') }}</dt>
       <dd>{{ end ? t(`${charterHours(minutes)}，到 ${end}`) : t(charterHours(minutes)) }}</dd>
     </div>
     <div v-if="hourly">

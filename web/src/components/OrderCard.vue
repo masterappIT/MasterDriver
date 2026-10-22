@@ -34,7 +34,7 @@ export interface OrderSummary {
   journey?: Journey | null;
   /** 接單池: the viewer put this order out; it opens their own page and cannot be claimed. */
   mine?: boolean;
-  /** 包車 (按小時計費): the hours booked, said on the card. */
+  /** 包鐘 (按小時計費): the hours booked, said on the card. */
   charter?: { minutes: number } | null;
 }
 
@@ -79,7 +79,7 @@ function legState(leg: Journey['legs'][number]) {
       <span v-if="mineInPool" class="leg-tag">{{ t('你出的') }}</span>
       <span v-if="whole" class="leg-tag">{{ t(journeyTag(whole)) }}</span>
       <span v-else-if="order.journey" class="leg-tag">{{ t(order.journey.kind === 'ROUND_TRIP' ? `往返 ${legLabel(order.journey)}` : `接駁 ${legLabel(order.journey)}`) }}</span>
-      <span v-if="order.charter" class="leg-tag">{{ t(`包車 ${charterHours(order.charter.minutes)}`) }}</span>
+      <span v-if="order.charter" class="leg-tag">{{ t(`包鐘 ${charterHours(order.charter.minutes)}`) }}</span>
       <span v-if="role === 'dispatched' && status === 'COMPLETED' && !order.paidAt" class="gold-tag">{{ t('未收款') }}</span>
       <span v-if="!whole && order.status === 'COMPLETED' && !order.settledAt && !order.selfDrive && !order.driverDeleted" class="gold-tag">{{ t('未結清') }}</span>
     </div>

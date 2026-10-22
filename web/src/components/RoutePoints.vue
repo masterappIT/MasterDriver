@@ -3,7 +3,7 @@ import { t } from '../i18n';
 
 /**
  * 上車 → 途經 → 目的地 as dots on a line: green for 上車 and yellow for 目的地,
- * the colours of Master Travel's passenger order pages. 包車 reads 上車 → 行程 → 結束.
+ * the colours of Master Travel's passenger order pages. 包鐘 reads 上車 → 行程 → 結束.
  */
 defineProps<{ origin: string; destination: string; waypoints?: string[]; charter?: boolean }>();
 </script>

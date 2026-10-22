@@ -208,7 +208,7 @@ test('a 名片頁 booking takes a phone with its country code, and a WeChat ID o
   }
 });
 
-test('a 包車 order holds its hours and prices an hour, never with 接駁 or 往返 or a total of its own', () => {
+test('a 包鐘 order holds its hours and prices an hour, never with 接駁 or 往返 or a total of its own', () => {
   const order = { pickupAt: '2026-10-25T09:00:00+08:00', origin: '深圳灣口岸', destination: '深圳灣口岸', passengers: 3, passengerContact: '+852 91234567' };
   const charter = { minutes: 480, driverHourly: { amount: 250, currency: 'HKD' } };
   const parsed = createOrderSchema.parse({ ...order, charter: { ...charter, extras: ['PARKING', 'TOLLS', 'PARKING'] } });

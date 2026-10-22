@@ -22,7 +22,8 @@ export interface QuickOrder {
   /** 往返: "往返", "來回" and the like; the order goes there and back. */
   roundTrip?: boolean;
   /**
-   * 包車 (按小時計費): "包車 8 小時", "包8個鐘", "包一日". `minutes` only when the hours are said
+   * 包鐘 (按小時計費): "包鐘 8 小時", "包8個鐘", "包車8小時", "包一日". A bare 包車 is not 包鐘: it
+   * may mean the whole car at one price (特價車), so it stays a note. `minutes` only when the hours are said
    * (never guessed from 一日); `hourly` only for a price said to be an hour's ("每小時 250",
    * "250/小時"). Any other price stays in `price`, for the dispatcher to read: it may be a total.
    */
@@ -67,9 +68,9 @@ const SERVICE_WORDS = /(直車|直车|接駁|接驳|包車|包车|拼車|拼车|
 
 const ROUND_TRIP_WORDS = /(往返|來回|来回)/;
 
-/** 包車: the word itself, or 包 straight before the hours or a day. */
-const CHARTER_WORDS = /(包車|包车|包\s*(?=\d{1,2}(?:\.5)?\s*(?:個|个)?\s*(?:小時|小时|鐘|钟))|包(?:一|全|成)\s*(?:日|天))/;
-/** 包車 hours: "8小時", "8.5 小时", "8個鐘", "8个钟头". */
+/** 包鐘: the word itself, or 包 (包車) straight before the hours or a day. */
+const CHARTER_WORDS = /(包鐘|包钟|包[車车]?\s*(?=\d{1,2}(?:\.5)?\s*(?:個|个)?\s*(?:小時|小时|鐘|钟))|包[車车]?\s*(?:一|全|成)\s*(?:日|天))/;
+/** 包鐘 hours: "8小時", "8.5 小时", "8個鐘", "8个钟头". */
 const CHARTER_HOURS = /(\d{1,2}(?:\.5)?)\s*(?:個|个)?\s*(?:小時|小时|鐘頭|钟头|鐘|钟)/;
 const CURRENCY_MARKS: { pattern: RegExp; currency: 'HKD' | 'CNY' | 'MOP' }[] = [
   { pattern: /HK\$|HKD|港幣|港币|港元|蚊/i, currency: 'HKD' },
@@ -80,7 +81,7 @@ const MONEY_MARK = '(?:HK\\$|HKD|MOP\\$?|RMB|CNY|￥|¥)?';
 const MONEY_UNIT = '(?:港幣|港币|港元|蚊|澳門幣|澳门币|人民幣|人民币|元|块|塊|HKD|RMB|CNY|MOP)?';
 const PER_HOUR = '(?:每小時|每小时|每個鐘|每个钟|時租|时租)';
 const AN_HOUR = '(?:\\/|每|一)\\s*(?:小時|小时|個鐘|个钟|鐘|钟|h(?:r|our)?)';
-/** 包車 price an hour: "每小時250", "每小时 HK$250", "250蚊一個鐘", "RMB300/小時". */
+/** 包鐘 price an hour: "每小時250", "每小时 HK$250", "250蚊一個鐘", "RMB300/小時". */
 const HOURLY_PRICE = new RegExp(
   `${PER_HOUR}\\s*(${MONEY_MARK}\\s*\\d+(?:\\.\\d+)?\\s*${MONEY_UNIT})|(${MONEY_MARK}\\s*\\d+(?:\\.\\d+)?\\s*${MONEY_UNIT})\\s*${AN_HOUR}`,
   'i',
@@ -176,16 +177,17 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
   const state = { text: normalize(input) };
   const result: QuickOrder = { missing: [] };
 
-  // 包車 first: its hours ("8小時") would otherwise read as a clock or as children ("8小").
+  // 包鐘 first: its hours ("8小時") would otherwise read as a clock or as children ("8小").
   if (CHARTER_WORDS.test(state.text)) {
     result.charter = {};
+    take(state, /包[鐘钟]/);
     const hours = take(state, CHARTER_HOURS);
     const minutes = hours ? Math.round(Number(hours[1]) * 60) : 0;
     if (minutes >= 60 && minutes <= 24 * 60) result.charter.minutes = minutes;
     const hourly = take(state, HOURLY_PRICE);
     if (hourly) result.charter.hourly = readHourly(hourly[1] ?? hourly[2]);
     // "包8個鐘" leaves a lone 包 once the hours are taken; "包一日" says nothing more.
-    take(state, /包(?:一|全|成)\s*(?:日|天)/);
+    take(state, /包[車车]?\s*(?:一|全|成)\s*(?:日|天)/);
     state.text = state.text.replace(/包(?=\s|$)/g, ' ');
   }
 
@@ -220,7 +222,7 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
     state.text = `${state.text.slice(0, between.index + 1)} → ${state.text.slice(between.index + between[0].length)} ${between[2]}`;
   }
 
-  // Whatever service words remain are notes ("直車", "接駁"); 包車 is the order's type, not a note.
+  // Whatever service words remain are notes ("直車", "接駁"); with 包鐘, 包車 is the order's type, not a note.
   const services = (state.text.match(SERVICE_WORDS) ?? []).filter((word) => !(result.charter && /包[車车]/.test(word)));
   state.text = state.text.replace(SERVICE_WORDS, ' ');
 
@@ -234,7 +236,7 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
     const notes = [...services, ...extra].join(' ').trim();
     if (notes) result.notes = notes;
   } else if (result.charter) {
-    // 包車 often names only where the car is taken ("深圳灣口岸包車", "福田出發"): the 上車地點.
+    // 包鐘 often names only where the car is taken ("深圳灣口岸包車", "福田出發"): the 上車地點.
     const [place, ...rest] = state.text.split(/[,，。;；]|\s+/).map(trimPlace).filter(Boolean);
     const origin = place?.replace(/(上車|上车|出發|出发)$/, '');
     if (origin) result.origin = origin;
@@ -247,7 +249,7 @@ export function parseQuickOrder(input: string, now: Date = new Date()): QuickOrd
 
   if (!result.pickupAt && !result.immediate) result.missing.push('pickupAt');
   if (!result.origin) result.missing.push('origin');
-  // 包車 may end where it started: no 結束地點 is not missing.
+  // 包鐘 may end where it started: no 結束地點 is not missing.
   if (!result.destination && !result.charter) result.missing.push('destination');
   return result;
 }

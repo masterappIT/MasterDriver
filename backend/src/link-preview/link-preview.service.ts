@@ -347,7 +347,7 @@ export class LinkPreviewService {
     const total =
       roundTrip && order.sameDriver ? roundTripTotal(legs.map((leg) => ({ ...leg, selfDriven: leg.claimedById === order.dispatcherId }))) : null;
     const badge = first.immediate ? '即時' : '有單';
-    // 包車: from when and for how long, and what an hour pays (the hours' total is in the text).
+    // 包鐘: from when and for how long, and what an hour pays (the hours' total is in the text).
     const charter = order.charterMinutes;
     const name = order.dispatcher.profile?.name;
     // 往返 back the way it went reads A⇄B; back from or to somewhere else, both legs' places.
@@ -356,7 +356,7 @@ export class LinkPreviewService {
         ? `【${badge}・往返】${first.origin}⇄${first.destination}`
         : `【${badge}・往返】${first.origin}→${first.destination}・回程 ${legs[1].origin}→${legs[1].destination}`
       : charter
-        ? `【${badge}・包車】${first.origin}${first.destination === first.origin ? '' : `→${first.destination}`}・${charterHours(charter)}`
+        ? `【${badge}・包鐘】${first.origin}${first.destination === first.origin ? '' : `→${first.destination}`}・${charterHours(charter)}`
         : `【${badge}${transfer ? '・接駁' : ''}】${first.origin}→${legs[legs.length - 1].destination}`;
     const facts = [
       first.immediate ? '現在出發' : charter ? `${formatPickup(first.pickupAt)} 起` : formatPickup(first.pickupAt),

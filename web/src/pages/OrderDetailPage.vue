@@ -64,7 +64,7 @@ interface Detail {
   immediate?: boolean;
   requiredPlates: PlateRegion[];
   journey: Journey | null;
-  /** 包車 (按小時計費): its hours, prices an hour and rules; null for any other order. */
+  /** 包鐘 (按小時計費): its hours, prices an hour and rules; null for any other order. */
   charter?: OrderCharter | null;
   /** 拼車: the order's parties of passengers, each with its own progress (and, for the dispatcher, fare). */
   carpool?: CarpoolOnOrder | null;
@@ -348,8 +348,8 @@ const foldDetails = computed(() => isDispatcher.value && !ownTrip.value);
 const tripSummary = computed(() => {
   const o = order.value;
   if (!o) return '';
-  // 包車: from when and for how long, and where the car is taken.
-  if (o.charter) return `${o.immediate ? '即時 ' : ''}${pickup(o.pickupAt)} 起包車 ${charterHours(o.charter.minutes)} · ${o.origin}上車`;
+  // 包鐘: from when and for how long, and where the car is taken.
+  if (o.charter) return `${o.immediate ? '即時 ' : ''}${pickup(o.pickupAt)} 起包鐘 ${charterHours(o.charter.minutes)} · ${o.origin}上車`;
   return `${o.immediate ? '即時 ' : ''}${pickup(o.pickupAt)} · ${o.origin} → ${o.destination}`;
 });
 const passengerSummary = computed(() => {
@@ -385,7 +385,7 @@ const tripForm = reactive({
   vehicleType: '',
   flightNo: '',
   notes: '',
-  /** 包車: the hours booked; the totals follow the prices an hour. */
+  /** 包鐘: the hours booked; the totals follow the prices an hour. */
   charterHours: '',
 });
 let tripBefore = { ...tripForm };
@@ -659,7 +659,7 @@ async function copy(text: string | undefined | null, done: string) {
 function editPrices() {
   const o = order.value;
   if (!o) return;
-  // 包車 is priced by the hour: its prices an hour are edited, and the totals follow.
+  // 包鐘 is priced by the hour: its prices an hour are edited, and the totals follow.
   const driverPrice = o.charter ? o.charter.driverHourly : o.driverPrice;
   const passengerPrice = o.charter ? o.charter.passengerHourly : o.passengerPrice;
   prices.currency = driverPrice?.currency ?? passengerPrice?.currency ?? 'HKD';
@@ -688,7 +688,7 @@ async function patchPrices(body: Record<string, unknown>, done: string) {
 function savePrices() {
   const money = (value: string, currency: string) => (value ? { amount: Number(value), currency } : null);
   // 接駁: the second leg has no passenger price of its own.
-  // 包車: its prices an hour, the totals worked out by the API.
+  // 包鐘: its prices an hour, the totals worked out by the API.
   const charter = Boolean(order.value?.charter);
   const body: Record<string, unknown> = tripPriceHere.value
     ? { [charter ? 'passengerHourly' : 'passengerPrice']: money(prices.passenger, prices.passengerCurrency) }
@@ -864,14 +864,14 @@ watch(id, () => {
           <span>{{ t(loadLine(order.passengers, order.luggage, order.vehicleType)) }}</span>
           <span v-if="order.journey" class="leg-tag">{{ t(`${roundTrip ? '往返' : '接駁'} ${legLabel(order.journey)}`) }}</span>
           <span v-if="together" class="leg-tag">{{ t('同一位司機來回') }}</span>
-          <span v-if="order.charter" class="leg-tag">{{ t(`包車 ${charterHours(order.charter.minutes)}`) }}</span>
+          <span v-if="order.charter" class="leg-tag">{{ t(`包鐘 ${charterHours(order.charter.minutes)}`) }}</span>
           <span v-if="order.requiredPlates.length" class="gold-tag">{{ t(plateRequirement(order.requiredPlates)) }}</span>
           <!-- The driver's price sits with the trip, as on the claim page; once it is over, 這趟的帳 says it. -->
           <strong v-if="!isDispatcher && !endedForDriver" class="detail__trip-price">{{ money(order.driverPrice) || t('出單價未填') }}</strong>
         </div>
         <p v-if="order.journey && !roundTrip" class="detail__line">{{ t(`在 ${order.journey.transferPlaces.join('、')} 換車`) }}</p>
         <p v-if="order.flightNo" class="detail__line">{{ t(`航班：${order.flightNo}`) }}</p>
-        <!-- 包車: until when, and the 超時 and 另計 rules; the prices an hour the driver's, as the group text says. -->
+        <!-- 包鐘: until when, and the 超時 and 另計 rules; the prices an hour the driver's, as the group text says. -->
         <CharterRules
           v-if="order.charter"
           :minutes="order.charter.minutes"
@@ -1370,9 +1370,9 @@ watch(id, () => {
             </span>
             <input v-model="tripForm.pickupAt" class="line-input" type="datetime-local" required />
           </label>
-          <!-- 包車: other hours; the totals follow the prices an hour. -->
+          <!-- 包鐘: other hours; the totals follow the prices an hour. -->
           <label v-if="order.charter" class="line-field">
-            <span>{{ t('包車時數（1 到 24 小時，以半小時為單位）') }}</span>
+            <span>{{ t('包鐘時數（1 到 24 小時，以半小時為單位）') }}</span>
             <input v-model="tripForm.charterHours" class="line-input" type="number" min="1" max="24" step="0.5" inputmode="decimal" required />
           </label>
           <label class="line-field">

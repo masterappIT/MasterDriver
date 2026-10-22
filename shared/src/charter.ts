@@ -1,5 +1,5 @@
 /**
- * 包車 (按小時計費, 2026-10-23): the passenger has the car and driver for a number of hours, at
+ * 包鐘 (按小時計費, 2026-10-23): the passenger has the car and driver for a number of hours, at
  * prices an hour the dispatcher sets. The totals are only those prices times the hours; overtime
  * and costs on the way are rules the dispatcher states, never worked out or collected by the
  * platform (docs/DECISIONS.md). No dependencies, so the web app can use it without zod.

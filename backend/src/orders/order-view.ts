@@ -250,7 +250,7 @@ type CharterOrder = Pick<
   | 'charterExtras'
 >;
 
-/** 包車: the hours, what an hour and an hour of 超時 cost, and how 超時 is counted, as stated. */
+/** 包鐘: the hours, what an hour and an hour of 超時 cost, and how 超時 is counted, as stated. */
 function charterRules(order: CharterOrder, minutes: number) {
   return {
     minutes,
@@ -261,7 +261,7 @@ function charterRules(order: CharterOrder, minutes: number) {
 }
 
 /**
- * 包車 (按小時計費): the hours booked and the dispatcher's rules. Anyone sees what the driver is paid
+ * 包鐘 (按小時計費): the hours booked and the dispatcher's rules. Anyone sees what the driver is paid
  * an hour, as with the driver price; only the dispatcher sees the passenger's. 超時 with no price of
  * its own costs the hourly price.
  */
@@ -280,7 +280,7 @@ function charterOf(order: CharterOrder, viewer: Viewer) {
   };
 }
 
-/** 包車 on the passenger's link: their prices an hour only when the dispatcher shows their price. */
+/** 包鐘 on the passenger's link: their prices an hour only when the dispatcher shows their price. */
 function passengerCharterOf(order: CharterOrder & Pick<OrderWithPeople, 'showPassengerPrice'>) {
   if (!order.charterMinutes) return null;
   const shown = order.showPassengerPrice;
@@ -505,7 +505,7 @@ export function toPassengerView(order: OrderWithPeople, now = new Date()) {
     vehicleType: lead.vehicleType,
     passengerName: order.passengerName,
     price: lead.price,
-    // 包車: the hours and how 超時 is counted; never part of a 接駁 or 往返.
+    // 包鐘: the hours and how 超時 is counted; never part of a 接駁 or 往返.
     charter: passengerCharterOf(order),
     dispatcherName: order.dispatcher.profile?.name ?? null,
     // Who arranged the trip, for questions and changes. The passenger got this link from them,

@@ -191,7 +191,7 @@ test('a 往返 is A to B and back: no 接駁位置, and the passenger sees both 
   );
 });
 
-test('包車: anyone sees the hours and what the driver is paid an hour; the passenger\'s hourly price only the dispatcher, or the passenger when shown', () => {
+test('包鐘: anyone sees the hours and what the driver is paid an hour; the passenger\'s hourly price only the dispatcher, or the passenger when shown', () => {
   const charter = {
     ...order,
     destination: '深圳灣口岸',
@@ -220,5 +220,5 @@ test('包車: anyone sees the hours and what the driver is paid an hour; the pas
   assert.deepEqual(mine.overtimePassengerHourly, { amount: 350, currency: 'HKD' });
   assert.equal(toPassengerView(charter).charter?.hourly, null, 'the passenger price is hidden');
   assert.deepEqual(toPassengerView({ ...charter, showPassengerPrice: true }).charter?.hourly, { amount: 300, currency: 'HKD' });
-  assert.equal(toOrderView(order, 'other', 'https://x.test').charter, null, 'any other order has no 包車');
+  assert.equal(toOrderView(order, 'other', 'https://x.test').charter, null, 'any other order has no 包鐘');
 });

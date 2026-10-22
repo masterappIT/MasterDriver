@@ -38,7 +38,7 @@ interface PastOrder {
   showPassengerPrice?: boolean;
   /** 接駁: the whole order's end, where its first leg ends at the 接駁位置. */
   journey?: { destination: string } | null;
-  /** 包車: its hours and prices an hour, copied as they are. */
+  /** 包鐘: its hours and prices an hour, copied as they are. */
   charter?: {
     minutes: number;
     driverHourly: { amount: number; currency: string } | null;
@@ -142,7 +142,7 @@ const form = reactive({
   /** 即時單: leaves now; no time to pick, the API takes the moment it is put out. */
   immediate: false,
   /**
-   * 包車 (按小時計費): the car is the passenger's for some hours from the time above, from 上車地點
+   * 包鐘 (按小時計費): the car is the passenger's for some hours from the time above, from 上車地點
    * to 結束地點 (back where it started when left blank) by the 行程 stops. The driver and passenger
    * prices above are then an hour's. Never together with 接駁 or 往返.
    */
@@ -178,7 +178,7 @@ function setMode(mode: 'direct' | 'roundTrip' | 'transfer' | 'charter') {
   form.selfDriveLeg = null;
 }
 
-/** 包車: the hours as typed, in minutes; null when not a whole or half hour from 1 to 24. */
+/** 包鐘: the hours as typed, in minutes; null when not a whole or half hour from 1 to 24. */
 const charterMinutes = computed(() => {
   const minutes = Math.round(Number(form.charterHours) * 60);
   const valid =
@@ -189,7 +189,7 @@ const charterMinutes = computed(() => {
     minutes % CHARTER_STEP_MINUTES === 0;
   return valid ? minutes : null;
 });
-/** 包車: an hourly price times the hours, as the API keeps it; null without both. */
+/** 包鐘: an hourly price times the hours, as the API keeps it; null without both. */
 function charterTotal(hourly: string, currency: string) {
   if (!hourly || charterMinutes.value === null) return null;
   return { amount: Math.round(Number(hourly) * charterMinutes.value * 100 / 60) / 100, currency };
@@ -298,11 +298,11 @@ function fillFromLine() {
     form.vehicleType = parsed.vehicleType;
     filled.push(parsed.vehicleType);
   }
-  // 包車: only a price said to be an hour's is taken; a total is left for the dispatcher to work out.
+  // 包鐘: only a price said to be an hour's is taken; a total is left for the dispatcher to work out.
   if (parsed.charter) {
     setMode('charter');
     if (parsed.charter.minutes) form.charterHours = String(parsed.charter.minutes / 60);
-    filled.push(parsed.charter.minutes ? `包車 ${charterHours(parsed.charter.minutes)}` : '類型 包車');
+    filled.push(parsed.charter.minutes ? `包鐘 ${charterHours(parsed.charter.minutes)}` : '類型 包鐘');
     if (parsed.charter.hourly) {
       if (parsed.charter.hourly.currency) form.currency = parsed.charter.hourly.currency;
       form.driverPrice = String(parsed.charter.hourly.amount);
@@ -340,7 +340,7 @@ watch(
 /** The spread, only when every price is in the same currency (the API counts it the same way). */
 const margin = computed(() => {
   if (!form.passengerPrice) return null;
-  // 包車: what the hours come to at both prices an hour.
+  // 包鐘: what the hours come to at both prices an hour.
   if (form.charter) {
     const driver = driverTotal.value;
     const passenger = passengerTotal.value;
@@ -394,7 +394,7 @@ watch(
 function copyLast() {
   const last = past.value[0];
   if (!last) return;
-  // A 包車 copies as one, with its prices an hour; a form on 包車 goes back to 直達 for any other order.
+  // A 包鐘 copies as one, with its prices an hour; a form on 包鐘 goes back to 直達 for any other order.
   if (last.charter) {
     const charter = last.charter;
     setMode('charter');
@@ -476,7 +476,7 @@ async function submit() {
   // 即時單 leaves now: the API takes the moment it is put out; this is only for the check below.
   const firstAt = form.immediate ? toLocalInput(new Date()) : form.pickupAt;
   if (form.charter && charterMinutes.value === null) {
-    void showError(t('包車時數請填 1 到 24 小時，以半小時為單位'));
+    void showError(t('包鐘時數請填 1 到 24 小時，以半小時為單位'));
     return;
   }
   if (form.roundTrip && !form.secondPickupAt) {
@@ -493,13 +493,13 @@ async function submit() {
       pickupAt: fromLocalInput(firstAt),
       immediate: form.immediate,
       origin: form.origin,
-      // 包車 with no 結束地點 ends where it started.
+      // 包鐘 with no 結束地點 ends where it started.
       destination: form.charter ? form.destination.trim() || form.origin : form.destination,
       waypoints: form.waypoints.filter((stop) => stop.trim()),
       passengers: Number(form.passengers),
       luggage: Number(form.luggage),
       vehicleType: form.vehicleType,
-      // 包車: the prices are an hour's, sent with its hours; the API keeps the totals.
+      // 包鐘: the prices are an hour's, sent with its hours; the API keeps the totals.
       driverPrice: form.charter ? undefined : price(form.driverPrice, form.currency),
       passengerPrice: form.charter ? undefined : price(form.passengerPrice, form.passengerCurrency),
       charter: form.charter
@@ -763,11 +763,11 @@ onMounted(async () => {
 
     <!-- The trip: when, from where to where, and the flight when an airport is at either end. -->
     <section class="card">
-      <div class="segment segment--block new-order__mode" role="group" :aria-label="t('直達、往返、接駁或包車')">
+      <div class="segment segment--block new-order__mode" role="group" :aria-label="t('直達、往返、接駁或包鐘')">
         <button type="button" :aria-pressed="!twoLegs && !form.charter" @click="setMode('direct')">{{ t('直達') }}</button>
         <button type="button" :aria-pressed="form.roundTrip" @click="setMode('roundTrip')">{{ t('往返') }}</button>
         <button type="button" :aria-pressed="form.transfer" @click="setMode('transfer')">{{ t('接駁') }}</button>
-        <button type="button" :aria-pressed="form.charter" @click="setMode('charter')">{{ t('包車') }}</button>
+        <button type="button" :aria-pressed="form.charter" @click="setMode('charter')">{{ t('包鐘') }}</button>
       </div>
       <p v-if="form.charter" class="hint new-order__explain">
         {{ t('按小時計費：乘客由開始時間起用車，司機照行程安排開。群裡寫明時數、每小時價錢和超時規則。') }}
@@ -843,9 +843,9 @@ onMounted(async () => {
           />
         </li>
       </ol>
-      <!-- 包車: how long the car is the passenger's, by half hours, one day at most. -->
+      <!-- 包鐘: how long the car is the passenger's, by half hours, one day at most. -->
       <label v-if="form.charter" class="line-field new-order__hours">
-        <span>{{ t('包車時數（1 到 24 小時，以半小時為單位）') }}</span>
+        <span>{{ t('包鐘時數（1 到 24 小時，以半小時為單位）') }}</span>
         <span class="new-order__hours-input">
           <input v-model="form.charterHours" class="line-input" type="number" min="1" max="24" step="0.5" inputmode="decimal" required />
           <span>{{ t('小時') }}</span>
@@ -935,7 +935,7 @@ onMounted(async () => {
           :placeholder="form.charter ? t('每小時出單價') : t('出單價')"
         />
       </div>
-      <!-- 包車: what the hours come to, and the dispatcher's 超時 and 另計 rules. -->
+      <!-- 包鐘: what the hours come to, and the dispatcher's 超時 and 另計 rules. -->
       <template v-if="form.charter">
         <p v-if="driverTotal" class="hint new-order__total">{{ t(`${charterHours(charterMinutes!)}共 ${money(driverTotal)}`) }}</p>
         <span class="section-label new-order__overtime-label">{{ t('超時') }}</span>

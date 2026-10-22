@@ -31,7 +31,7 @@ export interface ShareOrder {
   /** 往返: one driver takes both legs (同一位司機來回). */
   sameDriver?: boolean;
   requiredPlates?: PlateRegion[];
-  /** 包車 (按小時計費): the hours booked in minutes, absent or null for any other order. */
+  /** 包鐘 (按小時計費): the hours booked in minutes, absent or null for any other order. */
   charterMinutes?: number | null;
   driverHourlyMinor?: number | null;
   overtimeDriverHourlyMinor?: number | null;
@@ -93,16 +93,16 @@ export function plateRequirement(plates: PlateRegion[] | undefined): string | nu
   return names.length === 1 ? `需${names[0]}車` : `需${names.join('＋')}車牌`;
 }
 
-/** 包車: the order's hours, e.g. "包車 8 小時"; null for any other order. */
+/** 包鐘: the order's hours, e.g. "包鐘 8 小時"; null for any other order. */
 const charterOf = (order: ShareOrder) => (order.charterMinutes ? order.charterMinutes : null);
 
-/** 包車: where the car is taken and left, saying so when it ends where it started. */
+/** 包鐘: where the car is taken and left, saying so when it ends where it started. */
 function charterRoute(order: ShareOrder) {
   return order.destination === order.origin ? `${order.origin} 上車，原地結束` : `${order.origin} 上車 → ${order.destination} 結束`;
 }
 
 /**
- * 包車: the group text's lines. The plan of the day reads as 行程, and the driver price as what an
+ * 包鐘: the group text's lines. The plan of the day reads as 行程, and the driver price as what an
  * hour pays and what the hours come to; 超時 and 另計 are the dispatcher's rules, stated as such.
  */
 function charterLines(order: ShareOrder, minutes: number): string[] {
@@ -152,11 +152,11 @@ function dispatchLines(order: ShareOrder): string[] {
  */
 export function dispatchShareText(order: ShareOrder, dispatchUrl: string) {
   const minutes = charterOf(order);
-  // 包車: the heading says from when and for how long.
+  // 包鐘: the heading says from when and for how long.
   const heading = minutes
     ? order.immediate
-      ? `【即時・包車】現在出發，${charterHours(minutes)}`
-      : `【有單・包車】${formatPickup(order.pickupAt)} 起 ${charterHours(minutes)}`
+      ? `【即時・包鐘】現在出發，${charterHours(minutes)}`
+      : `【有單・包鐘】${formatPickup(order.pickupAt)} 起 ${charterHours(minutes)}`
     : order.immediate
       ? '【即時】現在出發'
       : `【有單】${formatPickup(order.pickupAt)}`;
@@ -267,7 +267,7 @@ export function claimedShareText(order: ShareOrder, driver: ShareDriver, legs?: 
   const together = isRoundTrip(order) && order.sameDriver && legs && legs.length > 1 ? legs : null;
   const minutes = charterOf(order);
   const heading = minutes
-    ? `【已派出】${formatPickup(order.pickupAt)} 起包車 ${charterHours(minutes)}（${order.origin}上車）`
+    ? `【已派出】${formatPickup(order.pickupAt)} 起包鐘 ${charterHours(minutes)}（${order.origin}上車）`
     : together
       ? `【已派出】${formatPickup(together[0].pickupAt)} ${route(together[0])}（來回，回程 ${formatPickup(together[together.length - 1].pickupAt)}）`
       : `【已派出】${formatPickup(order.pickupAt)} ${route(order)}${legNote(order)}`;
@@ -309,9 +309,10 @@ export function passengerShareText(order: ShareOrder, confirmUrl: string, legs?:
   }
   const minutes = charterOf(order);
   if (minutes) {
-    // 包車: from when, for how long, and where the car is taken and left.
+    // 包鐘: from when, for how long, and where the car is taken and left. 「按小時計」 says what 包鐘
+    // is to a passenger who does not know the word.
     const where = order.destination === order.origin ? `${order.origin}上車` : `${order.origin}上車，${order.destination}結束`;
-    return `您好，您的包車 ${formatPickup(order.pickupAt)} 起 ${charterHours(minutes)}（${where}）已安排${shownPassengerPrice([order])}，請按連結查看並確認：${confirmUrl}`;
+    return `您好，您的包鐘行程（按小時計）${formatPickup(order.pickupAt)} 起 ${charterHours(minutes)}（${where}）已安排${shownPassengerPrice([order])}，請按連結查看並確認：${confirmUrl}`;
   }
   return `您好，您的行程 ${formatPickup(order.pickupAt)} ${route(order)} 已安排${shownPassengerPrice([order])}，請按連結查看並確認：${confirmUrl}`;
 }

@@ -997,7 +997,7 @@ test('出單者代確認 on 往返 and 接駁 covers the whole order from either
   }
 });
 
-test('包車: the prices an hour make the totals; hours and prices change by the hour, and the driver confirms new hours', async () => {
+test('包鐘: the prices an hour make the totals; hours and prices change by the hour, and the driver confirms new hours', async () => {
   const dispatcher = await createDriver(ctx);
   const driver = await createDriver(ctx, '李師傅');
   const created = await ctx.orders.create(dispatcher, {
@@ -1020,7 +1020,7 @@ test('包車: the prices an hour make the totals; hours and prices change by the
   assert.deepEqual(created.passengerPrice, { amount: 2400, currency: 'HKD' });
   assert.deepEqual(created.margin, { amount: 400, currency: 'HKD' });
   assert.equal(created.charter?.minutes, 480);
-  assert.match(created.share.dispatch.wechat, /^【有單・包車】.+ 起 8 小時\n/);
+  assert.match(created.share.dispatch.wechat, /^【有單・包鐘】.+ 起 8 小時\n/);
   assert.match(created.share.dispatch.wechat, /\n每小時 HK\$250，8 小時共 HK\$2,000\n/);
   assert.doesNotMatch(created.share.dispatch.wechat, /2,400|HK\$300/, 'never the passenger price');
 
@@ -1041,7 +1041,7 @@ test('包車: the prices an hour make the totals; hours and prices change by the
   const stored = await ctx.prisma.order.findUniqueOrThrow({ where: { id: created.id } });
   assert.equal(stored.changeSummary, '時數');
 
-  // Hours only on a 包車; prices by the hour only on a 包車.
+  // Hours only on a 包鐘; prices by the hour only on a 包鐘.
   const plain = await ctx.orders.create(dispatcher, sampleOrder);
   await rejectsWith(ctx.orders.updateTrip(dispatcher, plain.id, { charterMinutes: 480 }), 'NOT_A_CHARTER');
   await rejectsWith(ctx.orders.updatePrices(dispatcher, plain.id, { driverHourly: { amount: 250, currency: 'HKD' } }), 'NOT_A_CHARTER');
