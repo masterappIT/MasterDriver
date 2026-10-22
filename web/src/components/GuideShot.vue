@@ -125,6 +125,139 @@ defineProps<{ name: GuideShotName }>();
       <span class="shot__button">{{ t('這單我自己做') }}</span>
       <span class="shot__button shot__button--secondary">{{ t('派給其他司機') }}</span>
     </div>
+
+    <div v-else-if="name === 'orders-list'" class="shot__mock">
+      <div class="shot__segments">
+        <span>{{ t('我接的') }}</span>
+        <span class="on">{{ t('我出的') }}</span>
+      </div>
+      <div class="shot__chips">
+        <span>{{ t('進行中') }}</span>
+        <span>{{ t('未收款') }}</span>
+        <span>{{ t('未結清') }}</span>
+      </div>
+      <div class="shot__line"><strong>15:40</strong><span>{{ t('澳門 至 香港') }}</span></div>
+      <div class="shot__line"><strong>18:00</strong><span>{{ t('深圳灣 至 香港機場') }}</span></div>
+    </div>
+
+    <div v-else-if="name === 'pay-confirm'" class="shot__mock">
+      <strong>{{ t('付款給 陳師傅') }}</strong>
+      <div class="shot__row"><span>{{ t('微信收款') }}</span><strong>RMB¥500</strong></div>
+      <div class="shot__row"><span>{{ t('轉數快 FPS') }}</span><strong>{{ t('複製') }}</strong></div>
+      <span class="shot__muted">{{ t('車費付給陳師傅，平台不經手。') }}</span>
+      <span class="shot__button">{{ t('確認行程') }}</span>
+    </div>
+
+    <div v-else-if="name === 'settle'" class="shot__mock">
+      <span class="shot__tag shot__tag--done">{{ t('已完成') }}</span>
+      <strong>{{ t('乘客付款了嗎？') }}</strong>
+      <span class="shot__button">{{ t('已收款') }}</span>
+      <strong>{{ t('和李師傅結清了嗎？') }}</strong>
+      <span class="shot__button shot__button--secondary">{{ t('已結清') }}</span>
+    </div>
+
+    <div v-else-if="name === 'card-page'" class="shot__mock">
+      <div class="shot__head">
+        <span class="shot__avatar"></span>
+        <div>
+          <strong>{{ t('陳師傅') }}</strong>
+          <span class="shot__muted">{{ t('7座商務車・黑') }}</span>
+        </div>
+      </div>
+      <div class="shot__chips">
+        <span>{{ t('粵語') }}</span>
+        <span>{{ t('普通話') }}</span>
+      </div>
+      <span class="shot__button">{{ t('預約這位師傅') }}</span>
+    </div>
+
+    <div v-else-if="name === 'card-share'" class="shot__bubble">
+      <strong>{{ t('【跨境接送】陳師傅') }}</strong>
+      <span>{{ t('7座商務車｜7座｜兩地牌') }}</span>
+      <span>{{ t('要用車直接在這裡約我，不用註冊：') }}</span>
+      <span class="shot__link">masterdriverapp…/p/…</span>
+    </div>
+
+    <div v-else-if="name === 'quote'" class="shot__mock">
+      <span class="shot__tag shot__tag--wait">{{ t('待回覆') }}</span>
+      <strong class="shot__time">{{ t('10/25（日）10:00') }}</strong>
+      <span class="shot__route">{{ t('深圳灣口岸 至 香港機場') }}</span>
+      <div class="shot__price">
+        <span>{{ t('車費') }}</span>
+        <strong>HK$500</strong>
+      </div>
+      <span class="shot__button">{{ t('送出報價') }}</span>
+    </div>
+
+    <div v-else-if="name === 'quote-agreed'" class="shot__mock">
+      <span class="shot__tag shot__tag--done">{{ t('乘客已同意') }}</span>
+      <span class="shot__button">{{ t('這單我自己做') }}</span>
+      <span class="shot__button shot__button--secondary">{{ t('派給其他司機') }}</span>
+    </div>
+
+    <div v-else-if="name === 'carpool-form'" class="shot__mock">
+      <span class="shot__route">{{ t('深圳灣口岸 → 香港國際機場') }}</span>
+      <div class="shot__row"><span>{{ t('給乘客的座位') }}</span><strong>6</strong></div>
+      <div class="shot__row"><span>{{ t('最少成行人數') }}</span><strong>4</strong></div>
+      <div class="shot__row"><span>{{ t('每位價錢') }}</span><strong>HK$150</strong></div>
+      <span class="shot__button">{{ t('開拼車，取得連結') }}</span>
+    </div>
+
+    <div v-else-if="name === 'carpool-share'" class="shot__bubble">
+      <strong>{{ t('【拼車】10/25（日）09:00 深圳灣口岸 → 香港國際機場') }}</strong>
+      <span>{{ t('每位 HK$150｜每位 1 件行李') }}</span>
+      <span>{{ t('還差 2 位成行，剩 4 位') }}</span>
+      <span class="shot__link">{{ t('報位：') }}masterdriverapp…/r/…</span>
+    </div>
+
+    <div v-else-if="name === 'carpool-seats'" class="shot__mock">
+      <div class="shot__counts">
+        <span><strong>2</strong>{{ t('已確認') }}</span>
+        <span><strong>4</strong>{{ t('剩餘座位') }}</span>
+        <span><strong>6</strong>{{ t('座位') }}</span>
+      </div>
+      <strong>{{ t('王小姐｜2人｜1件行李') }}</strong>
+      <div class="shot__pair">
+        <span class="shot__button shot__button--secondary">{{ t('婉拒') }}</span>
+        <span class="shot__button">{{ t('確認') }}</span>
+      </div>
+    </div>
+
+    <div v-else-if="name === 'carpool-close'" class="shot__mock">
+      <span class="shot__tag shot__tag--done">{{ t('已截止') }}</span>
+      <strong>{{ t('6 位乘客，3 組') }}</strong>
+      <span class="shot__button">{{ t('我自己開') }}</span>
+      <span class="shot__button shot__button--secondary">{{ t('派出去') }}</span>
+    </div>
+
+    <div v-else-if="name === 'passengers'" class="shot__mock">
+      <div class="shot__row"><strong>{{ t('王小姐') }}</strong><span>{{ t('搭過 3 次') }}</span></div>
+      <span class="shot__muted">{{ t('最近：10/18 深圳灣 → 香港機場') }}</span>
+      <div class="shot__pair">
+        <span class="shot__button shot__button--secondary">{{ t('致電') }}</span>
+        <span class="shot__button">{{ t('出單') }}</span>
+      </div>
+    </div>
+
+    <div v-else-if="name === 'drivers'" class="shot__mock">
+      <div class="shot__head">
+        <strong>{{ t('李師傅') }}</strong>
+        <span class="shot__tag shot__tag--done">{{ t('常用司機') }}</span>
+      </div>
+      <span class="shot__muted">{{ t('7座商務車・兩地牌') }}</span>
+      <span>{{ t('接過你 8 張單，完成 8 張') }}</span>
+      <span class="shot__button shot__button--secondary">{{ t('寫備註') }}</span>
+    </div>
+
+    <div v-else-if="name === 'favorites-first'" class="shot__mock">
+      <div class="shot__row"><strong>{{ t('先給常用司機 30 分鐘') }}</strong><span class="shot__switch"></span></div>
+      <span class="shot__muted">{{ t('你的 3 位常用司機先搶，30 分鐘後所有人都可以搶') }}</span>
+    </div>
+
+    <div v-else-if="name === 'support'" class="shot__chat">
+      <span class="shot__bubble">{{ t('乘客確認頁看不到我的收款碼？') }}</span>
+      <span class="shot__bubble shot__bubble--them">{{ t('出單時打開「乘客確認頁顯示收款方式」就看得到了。') }}</span>
+    </div>
   </div>
 </template>
 
@@ -309,6 +442,79 @@ defineProps<{ name: GuideShotName }>();
 .shot__link {
   color: #1f5fd6;
   text-decoration: underline;
+}
+.shot__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.shot__head div {
+  display: flex;
+  flex-direction: column;
+}
+.shot__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-teal));
+}
+/* 已確認 / 剩餘座位 / 座位, as on the 拼車 page. */
+.shot__counts {
+  display: flex;
+  align-self: stretch;
+  justify-content: space-around;
+  padding: var(--space-xs) 0;
+  border-bottom: 1px solid var(--color-divider);
+}
+.shot__counts span {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--color-text-secondary);
+}
+.shot__counts strong {
+  color: var(--color-text);
+  font-size: var(--font-body);
+}
+.shot__pair {
+  display: flex;
+  align-self: stretch;
+  gap: var(--space-xs);
+}
+.shot__pair .shot__button {
+  flex: 1;
+}
+.shot__switch {
+  flex: none;
+  width: 30px;
+  height: 18px;
+  border-radius: var(--radius-pill);
+  background: var(--color-primary);
+  position: relative;
+}
+.shot__switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+/* 客服: the driver's message on the right, the reply on the left. */
+.shot__chat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  width: 100%;
+  max-width: 280px;
+}
+.shot__bubble--them {
+  margin-left: 0;
+  margin-right: auto;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--color-surface);
 }
 /* A phone's home screen: four app icons, ours among them. */
 .shot__screen {

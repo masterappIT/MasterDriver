@@ -7,7 +7,7 @@
  */
 export const GUIDE_INDEX = {
   title: '跨境師傅幫使用教學',
-  description: '每個功能怎樣用、幫你做多少生意：出單派到群、搶單接單、特價車，一頁一個功能。',
+  description: '每個功能怎樣用、幫你做多少生意：出單、搶單、訂單收款、名片頁、特價車、拼車，一頁一個功能。',
 } as const;
 
 /** In reading order: the 目錄 lists them this way. */
@@ -31,6 +31,31 @@ export const GUIDES = [
     slug: 'deal',
     title: '特價車',
     description: '開你自己的專屬路線，乘客用專屬連結直接向你下單，不經任何中介。',
+  },
+  {
+    slug: 'orders',
+    title: '訂單與收款',
+    description: '接的單、出的單都在「訂單」：行程一步一步按，收款、結清記在單上，車費不經平台。',
+  },
+  {
+    slug: 'profile-page',
+    title: '名片頁找客人',
+    description: '一條屬於你的連結，放到朋友圈和小紅書，客人不用註冊就直接向你詢價、約車。',
+  },
+  {
+    slug: 'carpool',
+    title: '拼車',
+    description: '一部車載幾組乘客：開一趟拼車發出連結，乘客自己報位，湊夠了自己開或派出去。',
+  },
+  {
+    slug: 'contacts',
+    title: '客人與司機',
+    description: '出過單的乘客、接過你單的司機自動記下：熟客一按出單，常用司機先搶你的單。',
+  },
+  {
+    slug: 'faq',
+    title: '常見問題',
+    description: '收費、通知、登入、乘客資料和聯絡客服，常被問到的一次看清楚。',
   },
 ] as const;
 

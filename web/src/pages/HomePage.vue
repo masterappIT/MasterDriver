@@ -151,7 +151,7 @@ onBeforeUnmount(() => clearInterval(clock));
       <strong>{{ t('想有自己的客人？用名片頁') }}</strong>
       <p>{{ t('一條屬於你的連結，放到朋友圈或傳給熟客，客人就能直接向你詢價、約車。') }}</p>
       <div class="home__guide-actions">
-        <RouterLink class="button" to="/app/guide/customers" @click="closeGuide">{{ t('看怎麼用') }}</RouterLink>
+        <RouterLink class="button" to="/guide/profile-page" @click="closeGuide">{{ t('看怎麼用') }}</RouterLink>
         <button class="home__guide-later" type="button" @click="closeGuide">{{ t('知道了') }}</button>
       </div>
     </section>

@@ -49,7 +49,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/app/notifications', component: () => import('./pages/NotificationsPage.vue'), meta: { app: true } },
   { path: '/app/notification-settings', component: () => import('./pages/NotificationSettingsPage.vue'), meta: { app: true } },
   { path: '/app/profile', component: () => import('./pages/ProfileEditPage.vue'), meta: { app: true } },
-  { path: '/app/guide/customers', component: () => import('./pages/CustomerGuidePage.vue'), meta: { app: true } },
+  // The 名片頁 guide that came before 使用教學 (2026-10-22): its address opens the guide that replaced it.
+  { path: '/app/guide/customers', redirect: '/guide/profile-page' },
   { path: '/app/profile-page', component: () => import('./pages/MyProfilePagePage.vue'), meta: { app: true } },
   { path: '/app/passengers', component: () => import('./pages/PassengersPage.vue'), meta: { app: true } },
   { path: '/app/drivers', component: () => import('./pages/MyDriversPage.vue'), meta: { app: true } },

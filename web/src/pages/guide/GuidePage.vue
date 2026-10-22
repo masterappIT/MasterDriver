@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watchEffect } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { GUIDES, findGuide, guidePageTitle, guidePath, type GuideSlug } from '@masterdriver/shared/guides';
 import GuideLanguage from '../../components/GuideLanguage.vue';
 import GuideShot from '../../components/GuideShot.vue';
@@ -14,6 +14,7 @@ import { t } from '../../i18n';
  * Public; the router sends an unknown slug to the 目錄.
  */
 const route = useRoute();
+const router = useRouter();
 const slug = computed(() => String(route.params.slug) as GuideSlug);
 const guide = computed(() => findGuide(slug.value));
 const content = computed(() => GUIDE_CONTENT[slug.value]);
@@ -21,6 +22,14 @@ const next = computed(() => {
   const at = GUIDES.findIndex((one) => one.slug === slug.value);
   return at >= 0 ? (GUIDES[at + 1] ?? null) : null;
 });
+
+/** Read from the page its button opens (我的名片頁 → its guide): go back to it rather than stack a second one. */
+function toAction(event: MouseEvent, navigate: (event: MouseEvent) => unknown) {
+  // Vue Router records the previous in-app page; empty when the guide was opened on its own.
+  if ((window.history.state as { back?: unknown } | null)?.back !== content.value.action.to) return navigate(event);
+  event.preventDefault();
+  router.back();
+}
 
 // The browser tab says which guide this is; index.html's own title comes back on leaving.
 const originalTitle = document.title;
@@ -87,7 +96,9 @@ onBeforeUnmount(() => {
       </dl>
     </section>
 
-    <RouterLink class="button block large" :to="content.action.to">{{ t(content.action.label) }}</RouterLink>
+    <RouterLink v-slot="{ href, navigate }" :to="content.action.to" custom>
+      <a class="button block large" :href="href" @click="toAction($event, navigate)">{{ t(content.action.label) }}</a>
+    </RouterLink>
     <nav class="guide__more">
       <RouterLink v-if="next" :to="guidePath(next.slug)">{{ t(`下一篇：${next.title}`) }}</RouterLink>
       <RouterLink :to="guidePath()">{{ t('所有教學') }}</RouterLink>
