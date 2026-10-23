@@ -96,7 +96,8 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 
 `web.conf`、`admin.conf` 不用改：
 - 在伺服器上，`API_ORIGIN` 設為 `http://masterdriver_api`。
-- 另外掛一個檔案進 nginx 的 `conf.d/`，定義 `masterdriver_api` 指向 `api-a`、`api-b`。用 Docker 的 DNS 動態解析，容器換了 IP 也不用重啟 nginx。
+- 另外掛一個檔案進 nginx 的 `conf.d/`，定義 `masterdriver_api` 指向兩個 API 槽共用的名稱 `masterdriver-api`（部署腳本把新槽接進內部網絡時加上這個別名），兩個槽各自的名稱留作備援（給加別名以前啟動的 API）。用 Docker 的 DNS 每 5 秒重新解析，容器換了 IP 也不用重啟 nginx。
+  - 2026-10-23 以前是分別指向 `api-a`、`api-b`。沒在跑的那個槽解析失敗，nginx 對解析失敗的名稱要 30 秒才再查一次，所以新槽可能 30 秒內不被看到；2026-10-22 19:05 UTC 的部署，舊槽停止後約 20 秒後台回 502（`docs/DECISIONS.md`）。
 - Cloud Run 不掛這個檔案，行為不變。
 
 ### 4.2 伺服器上的檔案（放在本倉庫 `deploy/hostkvm/`）
@@ -159,7 +160,8 @@ workflow 在切換時才改，因為改了之後推送 `main` 就不再部署 Cl
 4. （`api`）檢查方式和現在的 `deploy/cloud-run/smoke-test.sh` 相同。
 5. （`api`）在另一個槽啟動新的 API：
    - 先**不接流量**，在容器內檢查 `/api/health/live` 和 `/api/health/ready`。
-   - 通過才把它接進內部網絡讓 nginx 找到，之後停掉舊的 API。
+   - 通過才把它以共用名稱 `masterdriver-api` 接進內部網絡讓 nginx 找到，等 8 秒（nginx 每 5 秒重查）再停掉舊的 API。舊的停止時拒絕的請求，nginx 會改送新的。
+   - 前端還是 2026-10-23 以前的設定（分別查 `api-a`、`api-b`）時，改等 35 秒，蓋過 nginx 對解析失敗名稱 30 秒才重查的間隔。
    - 舊的停止時先不再接新連線，進行中的請求做完才結束；站內通知的連線由網頁自動重連。
 6. （`frontends`）前端同樣做法：
    - 新的 web、admin 在另一個槽啟動，只在內部網絡檢查 `/healthz` 和經它轉發的 `/api`。

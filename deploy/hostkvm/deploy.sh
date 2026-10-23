@@ -20,6 +20,8 @@ RELEASE="$APP/release.env"
 KEYS=(API_SLOT API_A_IMAGE API_B_IMAGE API_COMMIT FRONTEND_SLOT WEB_A_IMAGE WEB_B_IMAGE ADMIN_A_IMAGE ADMIN_B_IMAGE FRONTEND_COMMIT)
 PREDEPLOY_KEEP=5
 LOG_DAYS=30
+# The name both API slots answer to on the `masterdriver` network; the front ends' nginx asks for it (api-upstream.conf).
+API_NAME=masterdriver-api
 
 usage() {
   printf 'Usage: masterdriver-deploy backup <commit> | api <commit> <api digest> | frontends <commit> <web digest> <admin digest> | status\n' >&2
@@ -91,6 +93,20 @@ wait_until() {
   return 1
 }
 
+# Seconds between a new API slot taking traffic and the old one stopping. nginx looks the shared name up
+# every 5 seconds. A front end started before 2026-10-23 still asks for each slot's own name, and tries
+# a name it could not find only every 30 seconds, so it is given longer. Its configuration is the file
+# it was started with: setup.sh installs a new file, and a running container keeps the one it mounted.
+api_switch_wait() {
+  local web="masterdriver-web-${R[FRONTEND_SLOT]}"
+  if [[ -n "${R[FRONTEND_SLOT]}" ]] && running "$web" \
+    && ! docker exec "$web" grep -qF "server $API_NAME:8080" /etc/nginx/conf.d/api-upstream.conf 2>/dev/null; then
+    printf 35
+  else
+    printf 8
+  fi
+}
+
 cmd_backup() {
   local sha="$1" dump
   install -d -m 700 "$APP/predeploy"
@@ -132,9 +148,10 @@ cmd_api() {
   fi
   log "Candidate ready: container=$container image=$image"
 
-  # Traffic: the front ends' nginx finds the new slot within 5 seconds (api-upstream.conf).
-  docker network connect masterdriver "$container"
-  sleep 6
+  # Traffic: the new slot joins under the shared name and the front ends' nginx finds it (api-upstream.conf).
+  # While the old one stops, nginx sends what it refuses to the new one; it leaves the name once it has stopped.
+  docker network connect --alias "$API_NAME" masterdriver "$container"
+  sleep "$(api_switch_wait)"
   if [[ -n "$old" ]]; then docker stop --time 30 "masterdriver-api-$old" >/dev/null; fi
 
   # Check through a running front end, as a user's request goes. If that fails, go back to the old slot.
