@@ -105,10 +105,10 @@ async function follow(userId: string | null): Promise<'ok' | 'none' | 'failed'> 
 }
 
 /**
- * Called by the 客服 page: loads the widget if it is not yet, and puts the chat over `place`, the page's room for it,
- * where it scrolls with the page. Returns what takes it off.
+ * Called by the 客服 page: loads the widget if it is not yet, and puts the chat on screen below `header`, the page's
+ * own header, down to the bottom of the screen; the page stays still meanwhile (base.css). Returns what takes it off.
  */
-export function showSupportChat(place: HTMLElement): () => void {
+export function showSupportChat(header: HTMLElement): () => void {
   const block = document.getElementById(BLOCK_ID);
   if (!block) {
     supportChat.state = 'failed';
@@ -122,22 +122,21 @@ export function showSupportChat(place: HTMLElement): () => void {
       else if (!loaded) load(null);
     });
   }
-  // Wherever the room moves or however tall it gets (the header's notices, the address bar coming and going), the
-  // chat follows. The block is not inside the page, so it is told in page coordinates.
-  const putOver = () => {
-    const room = place.getBoundingClientRect();
-    block.style.setProperty('--support-chat-top', `${Math.round(room.top + window.scrollY)}px`);
-    block.style.setProperty('--support-chat-height', `${Math.round(room.height)}px`);
-  };
-  const watcher = new ResizeObserver(putOver);
-  watcher.observe(place);
-  watcher.observe(document.body);
-  putOver();
+  window.scrollTo(0, 0);
+  document.documentElement.classList.add('support-chat-open');
+  // However tall the header gets (a notice coming or going), the chat starts right below it.
+  const below = () => block.style.setProperty('--support-chat-top', `${Math.round(header.getBoundingClientRect().bottom)}px`);
+  const watcher = new ResizeObserver(below);
+  watcher.observe(header);
+  window.addEventListener('resize', below);
+  below();
   block.classList.add('is-shown');
   block.removeAttribute('aria-hidden');
   tellWidget();
   return () => {
     watcher.disconnect();
+    window.removeEventListener('resize', below);
+    document.documentElement.classList.remove('support-chat-open');
     block.classList.remove('is-shown');
     block.setAttribute('aria-hidden', 'true');
     tellWidget();
