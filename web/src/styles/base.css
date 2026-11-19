@@ -629,3 +629,14 @@ input[type='checkbox'].switch:checked::after {
   visibility: visible;
   pointer-events: auto;
 }
+/* While 客服 is open the page itself never moves: on a phone #app's 100vh is taller than what shows under the address
+   bar, and iOS bounces the page, so the header slid while the chat (fixed) stayed put. Only the chat scrolls. */
+html.support-chat-open,
+html.support-chat-open body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.support-chat-open #app {
+  min-height: 0;
+}

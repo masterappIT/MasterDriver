@@ -43,6 +43,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .support-chat__top {
   padding-bottom: var(--space-sm);
+  /* Dragging the header does not move anything: the page is still while 客服 is open (masterbox.ts). Taps still work. */
+  touch-action: none;
 }
 .support-chat__top :deep(.page-back) {
   margin-bottom: var(--space-sm);

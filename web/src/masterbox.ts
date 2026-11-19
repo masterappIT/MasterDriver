@@ -119,11 +119,15 @@ export function showSupportChat(top: number): () => void {
       else if (!loaded) load(null);
     });
   }
+  // The page under the header stays still while the chat is on screen (base.css, html.support-chat-open).
+  window.scrollTo(0, 0);
+  document.documentElement.classList.add('support-chat-open');
   block.style.setProperty('--support-chat-top', `${top}px`);
   block.classList.add('is-shown');
   block.removeAttribute('aria-hidden');
   tellWidget();
   return () => {
+    document.documentElement.classList.remove('support-chat-open');
     block.classList.remove('is-shown');
     block.setAttribute('aria-hidden', 'true');
     tellWidget();
