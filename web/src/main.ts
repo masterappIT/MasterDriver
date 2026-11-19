@@ -1,11 +1,13 @@
 import { createApp } from 'vue';
 import App from './App.vue';
 import { reportLoad } from './load-report';
+import { startSupportChat } from './masterbox';
 import { router } from './router';
 import { reloadOnStaleBuild } from './stale-build';
 import './styles/base.css';
 
 reloadOnStaleBuild(router);
+startSupportChat();
 const app = createApp(App).use(router);
 // The loading screen in index.html stays until the first page is ready to show, not just the code.
 router.isReady().then(

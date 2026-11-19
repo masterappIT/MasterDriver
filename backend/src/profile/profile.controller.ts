@@ -4,13 +4,17 @@ import { AuthGuard, CurrentUser } from '../auth/auth.guard';
 import type { SessionUser } from '../auth/auth.service';
 import { apiError } from '../common/errors';
 import { ZodPipe } from '../common/zod-pipe';
+import { MasterBoxCustomers } from '../masterbox/masterbox-customers';
 import { PrismaService } from '../prisma.service';
 
 /** The driver details asked for once, the first time a driver claims an order. */
 @Controller('me/profile')
 @UseGuards(AuthGuard)
 export class ProfileController {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(MasterBoxCustomers) private readonly masterbox: MasterBoxCustomers,
+  ) {}
 
   @Get()
   async get(@CurrentUser() user: SessionUser) {
@@ -18,7 +22,7 @@ export class ProfileController {
   }
 
   @Put()
-  save(@CurrentUser() user: SessionUser, @Body(new ZodPipe(driverProfileSchema)) body: DriverProfileInput) {
+  async save(@CurrentUser() user: SessionUser, @Body(new ZodPipe(driverProfileSchema)) body: DriverProfileInput) {
     // A cross-border driver is reached on both sides. One of the two numbers is always the one
     // they sign in with, whatever was sent for that side; the driver gives the other.
     // Asked for when the driver saves their own details; details saved before this stay as they are.
@@ -41,7 +45,10 @@ export class ProfileController {
       mainlandPhone,
       hidePlates: body.hidePlates,
     };
-    return this.prisma.driverProfile.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
+    const saved = await this.prisma.driverProfile.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
+    // 客服: MasterBox staff see the new name, plates and numbers.
+    this.masterbox.sync(user.id);
+    return saved;
   }
 }
 

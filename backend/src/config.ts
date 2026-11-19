@@ -16,6 +16,22 @@ export interface AppConfig {
    */
   supportMediaBucket: string | null;
   supportMediaDir: string | null;
+  /**
+   * 客服 is MasterBox Chat Box's website widget (2026-11-18). Its App ID and signing secret let the
+   * API sign a signed-in driver's credential, so MasterBox knows who they are. Without them every
+   * driver chats as an anonymous visitor. The secret never leaves this server.
+   */
+  masterboxAppId: string | null;
+  masterboxSigningSecret: string | null;
+  /**
+   * The same key's API key (2026-11-20): drivers' details are kept up to date in MasterBox, and a deleted
+   * account's MasterBox data goes with it. Without it nothing is sent to MasterBox.
+   */
+  masterboxApiKey: string | null;
+  /** The webhook's signing secret (whsec_...): 客服 replies become notifications. Without it the webhook is closed. */
+  masterboxWebhookSecret: string | null;
+  /** The platform admin's address, for the link to a driver's page shown to MasterBox staff. Optional. */
+  adminBaseUrl: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -38,6 +54,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dataEncryptionKey: dataEncryptionKey || 'local-development-only-key',
     supportMediaBucket: env.SUPPORT_MEDIA_BUCKET?.trim() || null,
     supportMediaDir: env.SUPPORT_MEDIA_DIR?.trim() || null,
+    masterboxAppId: env.MASTERBOX_APP_ID?.trim() || null,
+    masterboxSigningSecret: env.MASTERBOX_SIGNING_SECRET?.trim() || null,
+    masterboxApiKey: env.MASTERBOX_API_KEY?.trim() || null,
+    masterboxWebhookSecret: env.MASTERBOX_WEBHOOK_SECRET?.trim() || null,
+    adminBaseUrl: env.ADMIN_BASE_URL?.trim().replace(/\/+$/, '') || null,
   };
 }
 

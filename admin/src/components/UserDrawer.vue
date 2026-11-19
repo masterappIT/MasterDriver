@@ -211,14 +211,15 @@ async function removeUser() {
   const kept = preview.claimedOrdersKept > 0 ? `他接過的 ${preview.claimedOrdersKept} 張別人的單會留給出單者，單上顯示「司機已刪除」。` : '';
   const reason = await ask({
     title: '刪除這個用戶',
-    text: `帳號、他出的 ${preview.dispatchedOrders} 張單（連同搶單紀錄和相關通知）、名片頁與預約、開過的拼車、照片、客服對話、點數紀錄、收款方式和派單群都會刪除。${kept}刪除後無法復原。`,
+    text: `帳號、他出的 ${preview.dispatchedOrders} 張單（連同搶單紀錄和相關通知）、名片頁與預約、開過的拼車、照片、客服對話（包括 MasterBox 裡他的客戶資料和對話）、點數紀錄、收款方式和派單群都會刪除。${kept}刪除後無法復原。`,
     reason: '原因（會記在操作紀錄）',
     confirm: '刪除用戶',
     danger: true,
   });
   if (!reason) return;
+  let result: { masterbox?: 'removed' | 'skipped' | 'failed' };
   try {
-    await api('DELETE', base.value, { reason });
+    result = await api('DELETE', base.value, { reason });
   } catch (e) {
     notify((e as Error).message, true);
     // Someone took one of the user's orders meanwhile: show what stops it now.
@@ -227,7 +228,9 @@ async function removeUser() {
     }
     return;
   }
-  notify('用戶已刪除');
+  // The account is gone either way; MasterBox's copy is staff's to delete there when it could not be.
+  if (result.masterbox === 'failed') notify('用戶已刪除，但 MasterBox 裡他的客戶資料沒刪成功，請到 MasterBox 後台刪除', true);
+  else notify('用戶已刪除');
   emit('changed');
   emit('close');
 }

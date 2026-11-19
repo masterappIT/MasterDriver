@@ -16,6 +16,8 @@ import { CreditsService } from '../billing/credits.service';
 import { DevelopmentLoginService } from '../auth/development-login.service';
 import type { SmsProvider } from '../auth/sms';
 import { loadConfig } from '../config';
+import { MasterBoxCustomers } from '../masterbox/masterbox-customers';
+import { MasterBoxWebhook } from '../masterbox/masterbox-webhook';
 import { EntitlementsService } from '../entitlements/entitlements.service';
 import { NotificationStreams } from '../notifications/notification-streams';
 import { ObservabilityService } from '../observability/observability.service';
@@ -139,13 +141,15 @@ export async function setupDatabase() {
   const paymentMethods = new PaymentMethodsService(prisma);
   const carpools = new CarpoolsService(prisma, orders, notifications, paymentMethods, mediaStorage, config);
   const deals = new DealsService(prisma, profilePages, notifications, mediaStorage, config);
+  // No MasterBox key here: nothing is sent; masterbox.db-test.ts makes its own with a key and a fake fetch.
+  const masterbox = new MasterBoxCustomers(prisma, config);
   return {
     prisma,
     sms,
     carpools,
     deals,
     developmentLogin,
-    auth: new AuthService(prisma, config, sms, developmentLogin),
+    auth: new AuthService(prisma, config, sms, developmentLogin, masterbox),
     entitlements,
     commission,
     credits,
@@ -154,7 +158,7 @@ export async function setupDatabase() {
     orders,
     audit,
     adminAuth: new AdminAuthService(prisma, audit),
-    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders, profilePages, deals, new GroupInvitesService(prisma), mediaStorage),
+    adminData: new AdminDataService(prisma, audit, credits, commission, entitlements, orders, profilePages, deals, new GroupInvitesService(prisma), mediaStorage, masterbox),
     profilePages,
     site: new SiteService(prisma),
     mediaStorage,
@@ -162,6 +166,8 @@ export async function setupDatabase() {
     streams,
     observability,
     notifications,
+    masterbox,
+    masterboxWebhook: new MasterBoxWebhook(prisma, notifications),
     box,
     paymentChannels: new PaymentChannelsService(prisma, box),
     smsChannels: new SmsChannelsService(prisma, box, { ...config, devLogOtp: false }),

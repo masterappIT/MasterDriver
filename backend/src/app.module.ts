@@ -13,13 +13,14 @@ import { OrdersModule } from './orders/orders.module';
 import { PrismaModule } from './prisma.module';
 import { PreferencesController, ProfileController } from './profile/profile.controller';
 import { LinkPreviewModule } from './link-preview/link-preview.module';
+import { MasterBoxModule } from './masterbox/masterbox.module';
 import { ProfilePagesModule } from './profile-pages/profile-pages.module';
 import { SiteModule } from './site/site.module';
 import { StorageModule } from './storage/storage.module';
 import { SupportModule } from './support/support.module';
 
 @Module({
-  imports: [PrismaModule, StorageModule, ObservabilityModule, NotificationsModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule, PaymentMethodsModule, SupportModule, ProfilePagesModule, LinkPreviewModule, CarpoolsModule, DealsModule],
+  imports: [PrismaModule, StorageModule, ObservabilityModule, NotificationsModule, MasterBoxModule, AuthModule, OrdersModule, BillingModule, AdminModule, SiteModule, GroupsModule, PaymentMethodsModule, SupportModule, ProfilePagesModule, LinkPreviewModule, CarpoolsModule, DealsModule],
   controllers: [HealthController, ProfileController, PreferencesController],
 })
 export class AppModule {}

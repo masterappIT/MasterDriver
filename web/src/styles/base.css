@@ -607,3 +607,25 @@ input[type='checkbox'].switch:checked::after {
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* 客服 (src/masterbox.ts): the block MasterBox's chat goes into. Always on the page with its full size, so the chat
+   keeps its height; off screen (and not counted as read) except while the 客服 page shows it below its header. */
+#support-chat {
+  position: fixed;
+  top: var(--support-chat-top, 0px);
+  bottom: 0;
+  left: 50%;
+  width: 100%;
+  max-width: var(--max-width);
+  padding-bottom: var(--safe-bottom);
+  background: #fff;
+  transform: translate(-50%, 200vh);
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 5;
+}
+#support-chat.is-shown {
+  transform: translate(-50%, 0);
+  visibility: visible;
+  pointer-events: auto;
+}

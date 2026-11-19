@@ -4,6 +4,7 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { readLimits } from '../common/limits';
 import { apiError } from '../common/errors';
 import { hmac, randomSixDigits, randomToken, safeEqualHex, sha256 } from '../common/crypto';
+import { MasterBoxCustomers } from '../masterbox/masterbox-customers';
 import { PrismaService } from '../prisma.service';
 import { DevelopmentLoginService, developmentCodeHash } from './development-login.service';
 import { SMS_PROVIDER, type SmsProvider } from './sms';
@@ -30,6 +31,7 @@ export class AuthService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(SMS_PROVIDER) private readonly sms: SmsProvider,
     @Inject(DevelopmentLoginService) private readonly developmentLogin: DevelopmentLoginService,
+    @Inject(MasterBoxCustomers) private readonly masterbox: MasterBoxCustomers,
   ) {}
 
   private codeHash(countryCode: string, phone: string, code: string) {
@@ -151,6 +153,8 @@ export class AuthService {
     });
     // 停用: the code was right, but the platform has stopped this account. The same in development mode.
     if (user.suspendedAt) throw apiError(HttpStatus.FORBIDDEN, 'ACCOUNT_SUSPENDED', 'This account has been suspended');
+    // 客服: MasterBox knows the driver (and their number) before they ever open the chat.
+    this.masterbox.sync(user.id);
     const token = randomToken();
     await this.prisma.session.create({
       data: {

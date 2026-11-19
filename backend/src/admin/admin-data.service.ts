@@ -21,6 +21,7 @@ import { GroupInvitesService } from '../groups/group-invites.service';
 import { OrdersService } from '../orders/orders.service';
 import { DealsService } from '../deals/deals.service';
 import { ProfilePagesService } from '../profile-pages/profile-pages.service';
+import { MasterBoxCustomers } from '../masterbox/masterbox-customers';
 import { PrismaService } from '../prisma.service';
 import { MEDIA_STORAGE, type MediaStorage } from '../storage/media-storage';
 import type { AdminUser } from './admin-auth.service';
@@ -52,6 +53,7 @@ export class AdminDataService {
     @Inject(DealsService) private readonly deals: DealsService,
     @Inject(GroupInvitesService) private readonly groupInvites: GroupInvitesService,
     @Inject(MEDIA_STORAGE) private readonly storage: MediaStorage,
+    @Inject(MasterBoxCustomers) private readonly masterbox: MasterBoxCustomers,
   ) {}
 
   // -------------------------------------------------------------- dashboard
@@ -439,7 +441,10 @@ export class AdminDataService {
       await this.audit.log({ adminId: admin.id, action: 'user.delete', targetType: 'user', targetId: id, detail, ip }, tx);
       return { dispatchedOrders: removed.count, claimedOrdersKept: kept.count };
     }, { timeout: 30_000 });
-    return { deleted: true, ...counts };
+    // 客服: their MasterBox customer, conversations and files go too (2026-11-20). Gone here whatever MasterBox
+    // answers; a failure is logged (MasterBoxCustomers) and said in the answer, for staff to delete it there.
+    const masterbox = await this.masterbox.remove(id);
+    return { deleted: true, ...counts, masterbox };
   }
 
   private async deletionOf(db: Prisma.TransactionClient, id: string, now = new Date()) {
@@ -612,6 +617,7 @@ export class AdminDataService {
       await tx.driverProfile.upsert({ where: { userId: id }, create: { userId: id, ...data }, update: data });
       await this.audit.log({ adminId: admin.id, action: 'user.profile.update', targetType: 'user', targetId: id, detail: { changed }, ip }, tx);
     });
+    this.masterbox.sync(id);
     return this.getUser(id, now);
   }
 

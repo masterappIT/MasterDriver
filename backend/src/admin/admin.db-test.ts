@@ -320,6 +320,7 @@ test('刪除用戶: refused while a trip with someone else is under way, then ev
     deleted: true,
     dispatchedOrders: 3,
     claimedOrdersKept: 1,
+    masterbox: 'skipped',
   });
 
   assert.equal(await ctx.prisma.user.findUnique({ where: { id: gone } }), null);

@@ -16,7 +16,8 @@ async function bootstrap() {
   const { noStoreByDefault } = await import('./common/no-store');
   const config = loadConfig();
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: MasterBox's webhook is checked against the exact bytes it signed (masterbox/masterbox-webhook.controller.ts).
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
   // Cloud Run sits behind Google's front end; trust it for the client IP used in rate limits.
   app.set('trust proxy', true);
   app.disable('x-powered-by');

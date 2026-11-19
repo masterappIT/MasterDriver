@@ -16,7 +16,8 @@
     "dev-login": "tsx src/cli/development-login.ts",
     "billing": "tsx src/cli/billing.ts",
     "admin": "tsx src/cli/admin.ts",
-    "support-media": "tsx src/cli/support-media.ts"
+    "support-media": "tsx src/cli/support-media.ts",
+    "masterbox": "tsx src/cli/masterbox.ts"
   },
   "dependencies": {
     "@masterdriver/shared": "0.1.0",
