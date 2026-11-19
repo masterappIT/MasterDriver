@@ -609,14 +609,16 @@ input[type='checkbox'].switch:checked::after {
 }
 
 /* 客服 (src/masterbox.ts): the block MasterBox's chat goes into. Always on the page with its full size, so the chat
-   keeps its height; off screen (and not counted as read) except while the 客服 page shows it below its header. */
+   keeps its height; off screen (and not counted as read) except while the 客服 page shows it. Then it lies over the
+   page's room for it (SupportChatPage.vue), below the header, and scrolls with the page. */
 #support-chat {
   position: fixed;
-  top: var(--support-chat-top, 0px);
-  bottom: 0;
+  top: 0;
   left: 50%;
   width: 100%;
   max-width: var(--max-width);
+  height: 100vh;
+  height: 100dvh;
   padding-bottom: var(--safe-bottom);
   background: #fff;
   transform: translate(-50%, 200vh);
@@ -625,18 +627,10 @@ input[type='checkbox'].switch:checked::after {
   z-index: 5;
 }
 #support-chat.is-shown {
+  position: absolute;
+  top: var(--support-chat-top, 0px);
+  height: var(--support-chat-height, 100dvh);
   transform: translate(-50%, 0);
   visibility: visible;
   pointer-events: auto;
-}
-/* While 客服 is open the page itself never moves: on a phone #app's 100vh is taller than what shows under the address
-   bar, and iOS bounces the page, so the header slid while the chat (fixed) stayed put. Only the chat scrolls. */
-html.support-chat-open,
-html.support-chat-open body {
-  height: 100%;
-  overflow: hidden;
-  overscroll-behavior: none;
-}
-html.support-chat-open #app {
-  min-height: 0;
 }

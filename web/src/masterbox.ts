@@ -104,8 +104,11 @@ async function follow(userId: string | null): Promise<'ok' | 'none' | 'failed'> 
   }
 }
 
-/** Called by the 客服 page: loads the widget if it is not yet, and puts the chat on screen. Returns what takes it off. */
-export function showSupportChat(top: number): () => void {
+/**
+ * Called by the 客服 page: loads the widget if it is not yet, and puts the chat over `place`, the page's room for it,
+ * where it scrolls with the page. Returns what takes it off.
+ */
+export function showSupportChat(place: HTMLElement): () => void {
   const block = document.getElementById(BLOCK_ID);
   if (!block) {
     supportChat.state = 'failed';
@@ -119,15 +122,22 @@ export function showSupportChat(top: number): () => void {
       else if (!loaded) load(null);
     });
   }
-  // The page under the header stays still while the chat is on screen (base.css, html.support-chat-open).
-  window.scrollTo(0, 0);
-  document.documentElement.classList.add('support-chat-open');
-  block.style.setProperty('--support-chat-top', `${top}px`);
+  // Wherever the room moves or however tall it gets (the header's notices, the address bar coming and going), the
+  // chat follows. The block is not inside the page, so it is told in page coordinates.
+  const putOver = () => {
+    const room = place.getBoundingClientRect();
+    block.style.setProperty('--support-chat-top', `${Math.round(room.top + window.scrollY)}px`);
+    block.style.setProperty('--support-chat-height', `${Math.round(room.height)}px`);
+  };
+  const watcher = new ResizeObserver(putOver);
+  watcher.observe(place);
+  watcher.observe(document.body);
+  putOver();
   block.classList.add('is-shown');
   block.removeAttribute('aria-hidden');
   tellWidget();
   return () => {
-    document.documentElement.classList.remove('support-chat-open');
+    watcher.disconnect();
     block.classList.remove('is-shown');
     block.setAttribute('aria-hidden', 'true');
     tellWidget();
