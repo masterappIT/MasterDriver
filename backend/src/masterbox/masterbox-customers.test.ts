@@ -18,10 +18,12 @@ const driver: DriverForMasterBox = {
     hkMacauPhone: '+852 91234567',
     mainlandPhone: null,
   },
+  profilePage: { code: 'abcd1234', published: true, blockedAt: null },
 };
+const WEB = 'https://web.test';
 
 test('a driver is sent with their name, sign-in number, 司機, language and the 客戶欄位; empty fields as null', () => {
-  assert.deepEqual(customerBody(driver, 'https://admin.test'), {
+  assert.deepEqual(customerBody(driver, WEB), {
     name: '陳大文',
     phone: '+85291234567',
     type: '司機',
@@ -33,21 +35,28 @@ test('a driver is sent with their name, sign-in number, 司機, language and the
       vehicle_type: '埃爾法',
       hk_macau_phone: '+852 91234567',
       mainland_phone: null,
-      admin_url: 'https://admin.test/users/user1',
+      card_url: 'https://web.test/p/abcd1234',
     },
   });
 });
 
 test('every 客戶欄位 sent is one MasterBox is told to define', () => {
-  assert.deepEqual(Object.keys(customerBody(driver, null).attributes).sort(), Object.keys(MASTERBOX_CUSTOMER_FIELDS).sort());
+  assert.deepEqual(Object.keys(customerBody(driver, WEB).attributes).sort(), Object.keys(MASTERBOX_CUSTOMER_FIELDS).sort());
 });
 
-test('before the profile is filled there is no name, and no admin link without the admin address', () => {
-  const body = customerBody({ ...driver, profile: null, locale: 'xx' }, null);
+test('before the profile is filled there is no name, and no 名片連結 without a 名片頁', () => {
+  const body = customerBody({ ...driver, profile: null, locale: 'xx', profilePage: null }, WEB);
   assert.equal('name' in body, false);
   assert.equal('locale' in body, false);
-  assert.equal(body.attributes.admin_url, null);
+  assert.equal(body.attributes.card_url, null);
   assert.equal(body.attributes.hk_plate, null);
+});
+
+test('the 名片連結 is sent only while passengers can open the page: not unpublished, not taken down', () => {
+  const unpublished = customerBody({ ...driver, profilePage: { code: 'abcd1234', published: false, blockedAt: null } }, WEB);
+  assert.equal(unpublished.attributes.card_url, null);
+  const blocked = customerBody({ ...driver, profilePage: { code: 'abcd1234', published: true, blockedAt: new Date() } }, WEB);
+  assert.equal(blocked.attributes.card_url, null);
 });
 
 interface Sent {
@@ -92,7 +101,7 @@ test('a driver is put to /customers/{id} with the key', async () => {
   assert.equal(sent[0].method, 'PUT');
   assert.equal(sent[0].headers['X-App-Id'], 'app_1');
   assert.equal(sent[0].headers['X-Api-Key'], 'key_1');
-  assert.deepEqual(sent[0].body, customerBody(driver, null));
+  assert.deepEqual(sent[0].body, customerBody(driver, loadConfig(keys).publicBaseUrl));
 });
 
 test('a refused update is a failure, not an error; a driver gone meanwhile is skipped', async () => {

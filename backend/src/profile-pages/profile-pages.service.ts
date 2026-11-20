@@ -5,6 +5,7 @@ import { APP_CONFIG, type AppConfig } from '../config';
 import { randomCode } from '../common/crypto';
 import { apiError } from '../common/errors';
 import { readLimits } from '../common/limits';
+import { MasterBoxCustomers } from '../masterbox/masterbox-customers';
 import { NotificationsService } from '../notifications/notifications.service';
 import { telemetry } from '../observability/telemetry';
 import { phonesOf } from '../orders/order-view';
@@ -55,6 +56,7 @@ export class ProfilePagesService {
     @Inject(MEDIA_STORAGE) private readonly storage: MediaStorage,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(MasterBoxCustomers) private readonly masterbox: MasterBoxCustomers,
   ) {}
 
   // ------------------------------------------------------------ the owner
@@ -72,7 +74,10 @@ export class ProfilePagesService {
     if (input.published && page.blockedAt) {
       throw apiError(HttpStatus.CONFLICT, 'PROFILE_PAGE_BLOCKED', 'The platform took this page down; contact support');
     }
-    return this.ownerView(await this.prisma.profilePage.update({ where: { id: page.id }, data: input, include: pageInclude }));
+    const updated = await this.prisma.profilePage.update({ where: { id: page.id }, data: input, include: pageInclude });
+    // 名片連結 in MasterBox follows whether passengers can open the page.
+    if (updated.published !== page.published) this.masterbox.sync(userId);
+    return this.ownerView(updated);
   }
 
   /** A vehicle photo: a real picture, within the size limit, at most a few per page. */
@@ -157,6 +162,7 @@ export class ProfilePagesService {
       data: { published: false, blockedAt: now, blockedReason: reason },
     });
     if (blocked.count === 0) throw apiError(HttpStatus.CONFLICT, 'PROFILE_PAGE_NOT_BLOCKABLE', 'No page, or it is already taken down');
+    this.masterbox.sync(userId);
   }
 
   async staffRestore(userId: string) {

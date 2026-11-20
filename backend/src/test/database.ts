@@ -136,13 +136,13 @@ export async function setupDatabase() {
   const observability = new ObservabilityService(prisma, mediaStorage);
   const streams = new NotificationStreams(prisma, observability);
   const notifications = new NotificationsService(prisma, streams);
-  const profilePages = new ProfilePagesService(prisma, mediaStorage, config, notifications);
+  // No MasterBox key here: nothing is sent; masterbox.db-test.ts makes its own with a key and a fake fetch.
+  const masterbox = new MasterBoxCustomers(prisma, config);
+  const profilePages = new ProfilePagesService(prisma, mediaStorage, config, notifications, masterbox);
   const orders = new OrdersService(prisma, entitlements, commission, credits, new GroupInvitesService(prisma), new PaymentMethodsService(prisma), config, notifications);
   const paymentMethods = new PaymentMethodsService(prisma);
   const carpools = new CarpoolsService(prisma, orders, notifications, paymentMethods, mediaStorage, config);
   const deals = new DealsService(prisma, profilePages, notifications, mediaStorage, config);
-  // No MasterBox key here: nothing is sent; masterbox.db-test.ts makes its own with a key and a fake fetch.
-  const masterbox = new MasterBoxCustomers(prisma, config);
   return {
     prisma,
     sms,

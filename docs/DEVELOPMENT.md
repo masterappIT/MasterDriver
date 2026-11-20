@@ -156,10 +156,10 @@ npm run dev:admin
 - 何時載入：登入的司機一登入就帶憑證載入（`data-token`，對話直接以司機身分建立）；訪客進「客服」頁才載入。登出時 `setToken(null)`。語言在載入時決定，切換繁簡要重新整理才會換。
 - 客服紅點（底部導航、首頁、「我的」）用小視窗的 `unread` 事件，不再讀 `GET /api/support/unread`。
 - 憑證：`GET /api/support/masterbox-credential`（要登入）回傳後端用 `MASTERBOX_APP_ID`、`MASTERBOX_SIGNING_SECRET` 簽的憑證（HS256，`kid` 為 App ID，`sub` 為用戶 id，帶司機資料的姓名，1 小時到期），只在本機計算。沒有設定時回 `{ "token": null }`（不是錯誤，前端不重試），司機以匿名訪客身分聊天。
-- 司機同步（`backend/src/masterbox/masterbox-customers.ts`）：設了 `MASTERBOX_API_KEY` 時，登入、司機存資料、後台改司機資料後，在背景 `PUT https://api.masterbox.masterappinc.com/api/v1/customers/{用戶 id}`：姓名、登入手機、類型「司機」、語言，自訂欄位 `hk_plate`、`macau_plate`、`mainland_plate`、`vehicle_type`、`hk_macau_phone`、`mainland_phone`、`admin_url`（`ADMIN_BASE_URL` 加 `/users/<id>`，沒設就是空的）。這 7 個鍵要先在 MasterBox「API 與 Webhook」→ 客戶欄位定義，否則 MasterBox 會拒收。失敗只記在日誌。遇到 429 照 `Retry-After` 再送一次。後台刪除用戶時 `DELETE /customers/{id}`（金鑰的代表同事要是 MasterBox 管理員），失敗時後台提示到 MasterBox 刪。
+- 司機同步（`backend/src/masterbox/masterbox-customers.ts`）：設了 `MASTERBOX_API_KEY` 時，登入、司機存資料、後台改司機資料、名片頁公開／取消公開／被下架後，在背景 `PUT https://api.masterbox.masterappinc.com/api/v1/customers/{用戶 id}`：姓名、登入手機、類型「司機」、語言，自訂欄位 `hk_plate`、`macau_plate`、`mainland_plate`、`vehicle_type`、`hk_macau_phone`、`mainland_phone`、`card_url`（名片連結：`PUBLIC_BASE_URL` 加 `/p/<名片頁代碼>`，只在名片頁已公開且沒被下架時送，否則送 null 拿掉；2026-11-20 取代原本的 `admin_url` 後台資料）。這 7 個鍵要先在 MasterBox「API 與 Webhook」→ 客戶欄位定義，否則 MasterBox 會拒收。失敗只記在日誌。遇到 429 照 `Retry-After` 再送一次。後台刪除用戶時 `DELETE /customers/{id}`（金鑰的代表同事要是 MasterBox 管理員），失敗時後台提示到 MasterBox 刪。
 - 補齊現有司機：`npm run masterbox -- --sync-all`（每分鐘最多 200 位，可重跑）；伺服器上 `docker exec masterdriver-api-<槽> node dist/cli/masterbox.js --sync-all`。
 - 回覆通知（`backend/src/masterbox/masterbox-webhook*.ts`）：`POST /api/support/masterbox-webhook`，正式環境網址 `https://masterdriverapp.masterappinc.com/api/support/masterbox-webhook`，在 MasterBox 只選 `message.created`、`message.read`、只收這把金鑰。用 `MASTERBOX_WEBHOOK_SECRET`（`whsec_`）對原始內容驗簽章（格式同 Stripe，`main.ts` 開了 `rawBody`），5 分鐘以外的拒收；沒設時回 404。同事、API 或系統傳給司機的訊息發「客服回覆了你」（`SUPPORT_REPLY`，一段對話一行，照通知設定），`message.read` 把它標成已讀；司機在訊息之後已讀過的不再發，重送的事件不重複。
-- 正式環境的四個 MasterBox 值和 `ADMIN_BASE_URL` 放在伺服器的 `/srv/apps/masterdriver/app.env`。
+- 正式環境的四個 MasterBox 值放在伺服器的 `/srv/apps/masterdriver/app.env`。
 - 以下是原本自建客服的說明。用戶端不再呼叫這些接口；內置客服已決定放棄，後台客服頁、舊對話與檔案先保留不動。
 
 - 司機端 `/support`（登入與否都能用）；後台 `/support`。兩邊都每 5 秒讀取新訊息，頁面在背景時暫停。

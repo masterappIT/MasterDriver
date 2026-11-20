@@ -19,7 +19,7 @@ export const MASTERBOX_CUSTOMER_FIELDS = {
   vehicle_type: '車型',
   hk_macau_phone: '港澳電話',
   mainland_phone: '內地電話',
-  admin_url: '後台資料',
+  card_url: '名片連結',
 } as const;
 
 type FieldKey = keyof typeof MASTERBOX_CUSTOMER_FIELDS;
@@ -38,6 +38,8 @@ export interface DriverForMasterBox {
     hkMacauPhone: string | null;
     mainlandPhone: string | null;
   } | null;
+  /** 名片頁: its link goes to MasterBox only while passengers can open it (published, not taken down). */
+  profilePage: { code: string; published: boolean; blockedAt: Date | null } | null;
 }
 
 const LOCALES = new Set(['zh-Hant', 'zh-Hans', 'en']);
@@ -46,9 +48,11 @@ const orNull = (value: string | null | undefined) => value?.trim() || null;
 /**
  * What PUT /customers/{id} is sent for a driver: their name, the number they sign in with, 司機, their language, and
  * the 客戶欄位 above. An empty field is sent as null, which takes it off MasterBox. No name before the profile is filled.
+ * The 名片頁's link only while it is published and not taken down: an unpublished page's link opens nothing.
  */
-export function customerBody(user: DriverForMasterBox, adminBaseUrl: string | null) {
+export function customerBody(user: DriverForMasterBox, publicBaseUrl: string) {
   const profile = user.profile;
+  const page = user.profilePage;
   const name = orNull(profile?.name)?.slice(0, 100);
   const attributes: Record<FieldKey, string | null> = {
     hk_plate: orNull(profile?.hkPlate),
@@ -57,7 +61,7 @@ export function customerBody(user: DriverForMasterBox, adminBaseUrl: string | nu
     vehicle_type: orNull(profile?.vehicleType),
     hk_macau_phone: orNull(profile?.hkMacauPhone),
     mainland_phone: orNull(profile?.mainlandPhone),
-    admin_url: adminBaseUrl ? `${adminBaseUrl}/users/${encodeURIComponent(user.id)}` : null,
+    card_url: page?.published && !page.blockedAt ? `${publicBaseUrl}/p/${page.code}` : null,
   };
   return {
     ...(name ? { name } : {}),
@@ -76,7 +80,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**
  * 客服 is MasterBox Chat Box (2026-11-18). Drivers are kept as MasterBox customers (2026-11-20), so staff there see
  * who they talk to and can find a driver who has never opened 客服: sent when a driver signs in, when they or the
- * platform's staff save their details, and for everyone at once with `npm run masterbox -- --sync-all`. A deleted
+ * platform's staff save their details, when their 名片頁 is published, unpublished or taken down, and for everyone at once with `npm run masterbox -- --sync-all`. A deleted
  * account's customer, conversations and files go too. Nothing is sent without MASTERBOX_API_KEY. A failure is
  * logged and never fails what the driver or staff did.
  */
@@ -111,10 +115,11 @@ export class MasterBoxCustomers {
           phone: true,
           locale: true,
           profile: { select: { name: true, hkPlate: true, macauPlate: true, mainlandPlate: true, vehicleType: true, hkMacauPhone: true, mainlandPhone: true } },
+          profilePage: { select: { code: true, published: true, blockedAt: true } },
         },
       });
       if (!user) return 'skipped';
-      const response = await this.call('PUT', userId, customerBody(user, this.config.adminBaseUrl));
+      const response = await this.call('PUT', userId, customerBody(user, this.config.publicBaseUrl));
       if (response.ok) return 'ok';
       this.logger.warn(`MasterBox customer ${userId} not updated: ${await describe(response)}`);
       return 'failed';

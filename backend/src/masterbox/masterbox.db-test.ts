@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
+import { loadConfig } from '../config';
 import { createDriver, setupDatabase, type TestContext } from '../test/database';
+import { MasterBoxCustomers } from './masterbox-customers';
 import type { MasterBoxEvent } from './masterbox-webhook';
 
 let ctx: TestContext;
@@ -75,4 +77,26 @@ test('what the driver sends brings no line', async () => {
     start,
   );
   assert.equal((await lines(driver)).length, 0);
+});
+
+test('a published 名片頁 goes to MasterBox as the 名片連結; unpublished or taken down, it is taken off', async () => {
+  const driver = await createDriver(ctx);
+  const sent: Array<{ attributes: Record<string, string | null> }> = [];
+  const masterbox = new MasterBoxCustomers(ctx.prisma, loadConfig({ MASTERBOX_APP_ID: 'app_1', MASTERBOX_API_KEY: 'key_1' }));
+  masterbox.fetcher = async (_input, init) => {
+    sent.push(JSON.parse(String(init?.body)));
+    return new Response(null, { status: 200 });
+  };
+  const { code } = await ctx.profilePages.ensurePage(driver);
+
+  assert.equal(await masterbox.syncNow(driver), 'ok');
+  assert.equal(sent.at(-1)?.attributes.card_url, null, 'not published yet');
+
+  await ctx.prisma.profilePage.update({ where: { code }, data: { published: true } });
+  await masterbox.syncNow(driver);
+  assert.equal(sent.at(-1)?.attributes.card_url, `${loadConfig({}).publicBaseUrl}/p/${code}`);
+
+  await ctx.profilePages.staffBlock(driver, 'complaint');
+  await masterbox.syncNow(driver);
+  assert.equal(sent.at(-1)?.attributes.card_url, null, 'taken down');
 });

@@ -30,8 +30,6 @@ export interface AppConfig {
   masterboxApiKey: string | null;
   /** The webhook's signing secret (whsec_...): 客服 replies become notifications. Without it the webhook is closed. */
   masterboxWebhookSecret: string | null;
-  /** The platform admin's address, for the link to a driver's page shown to MasterBox staff. Optional. */
-  adminBaseUrl: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -58,7 +56,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     masterboxSigningSecret: env.MASTERBOX_SIGNING_SECRET?.trim() || null,
     masterboxApiKey: env.MASTERBOX_API_KEY?.trim() || null,
     masterboxWebhookSecret: env.MASTERBOX_WEBHOOK_SECRET?.trim() || null,
-    adminBaseUrl: env.ADMIN_BASE_URL?.trim().replace(/\/+$/, '') || null,
   };
 }
 
